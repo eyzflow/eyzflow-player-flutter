@@ -1,0 +1,22 @@
+name: eyzflow_player_example
+description: "Loader app for eyzflow_player: plays a stream with the key check, playback session and beats, and logs them."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.12.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  eyzflow_player:
+    path: ../
+  http: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

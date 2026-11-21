@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest package="com.eyzmedia.eyzflow_player_example" version="1.0.0" api-version="8.0" xmlns="http://tizen.org/ns/packages">
+    <profile name="common"/>
+    <ui-application appid="com.eyzmedia.eyzflow_player_example" exec="Runner.dll" type="dotnet" multiple="false" nodisplay="false" taskmanage="true">
+        <label>EYZFlow Player</label>
+        <icon>ic_launcher.png</icon>
+        <metadata key="http://tizen.org/metadata/prefer_dotnet_aot" value="false"/>
+        <metadata key="http://tizen.org/metadata/prefer_nuget_cache" value="true"/>
+    </ui-application>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <privileges>
+        <privilege>http://tizen.org/privilege/internet</privilege>
+        <privilege>http://developer.samsung.com/privilege/drmplay</privilege>
+    </privileges>
+</manifest>

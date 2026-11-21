@@ -1,0 +1,12 @@
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.DS_Store
+*.iml
+.idea/
+# Editor extensions write machine paths here (e.g. the Tizen extension).
+.vscode/settings.json
+# A library: apps resolve their own versions.
+/pubspec.lock

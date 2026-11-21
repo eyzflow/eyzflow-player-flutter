@@ -1,0 +1,763 @@
+import 'dart:async';
+
+import '../native/native_video_player.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kDebugMode;
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../core/source.dart';
+
+import '../bloc/player_controls_bloc.dart';
+import '../bloc/videoplayer_feature_bloc.dart';
+import 'hls_renditions.dart';
+import 'playback_event.dart';
+import 'playback_event_emitter.dart';
+import 'playback_target.dart';
+import 'player_controls.dart';
+import 'player_log.dart';
+import 'player_options.dart';
+import 'player_policy.dart';
+import 'system_drm_config.dart';
+import 'subtitle_preference_store.dart';
+import 'system_player_tracks.dart';
+import 'watch_progress_recorder.dart';
+import '../l10n/streaming_l10n.dart';
+import 'player_loading_indicator.dart';
+
+var _nextSystemPlayerId = 0;
+
+typedef _ListenerBinding = ({
+  StreamSubscription<Duration> position,
+  void Function(PlayerActivityEvent) activity,
+});
+
+/// Android and iOS play through this widget: a DRM-capable native player
+/// with its own system controls. There is no custom overlay here — unlike
+/// Tizen, the plugin's native UI already covers play/pause/scrub/track
+/// selection, so nothing is extracted from or adapted out of
+/// `PlayerControls`, which is deliberately remote/focus-shaped.
+class SystemVideoPlayer extends StatefulWidget {
+  const SystemVideoPlayer({
+    super.key,
+    required this.target,
+    this.createController,
+    this.watchProgressRecorder,
+    this.onPlaybackEvent,
+    this.useSharedOverlay = false,
+    this.castAvailable = false,
+    this.onCastRequested,
+    this.options = const PlayerOptions(),
+  });
+
+  final VideoplayerTarget target;
+  final VideoplaybackControllerFactory? createController;
+
+  /// Records what the viewer watched. Absent in previews and tests, and for
+  /// a trailer, which is not something a viewer resumes.
+  final WatchProgressRecorder? watchProgressRecorder;
+
+  /// Hears what playback does, for the host's analytics. Absent, nothing is
+  /// observed and the player behaves exactly as it did without it.
+  ///
+  /// With the native controls (phones and tablets) a seek is inferred from
+  /// the position jumping, and an audio or subtitle switch is not reported at
+  /// all: the plugin's native UI makes both without telling Dart. With the
+  /// shared overlay (Android TV) both come from the overlay itself.
+  final PlaybackEventCallback? onPlaybackEvent;
+
+  /// Renders the shared [PlayerControls] overlay instead of the plugin's
+  /// native UI. True on Android TV, where the native controls are touch-shaped
+  /// and unreachable by D-pad; false on phones and tablets, where the native
+  /// UI is the better one.
+  final bool useSharedOverlay;
+
+  /// Shows a Cast button with the native controls: inside Media3's controls
+  /// on Android (it fades with them), top right over the player on iOS. The
+  /// host sets it once it found a Cast device. Never with [useSharedOverlay].
+  final bool castAvailable;
+
+  /// A tap on the Cast button, with the playback position. Playback goes on;
+  /// the host decides what casting means.
+  final void Function(Duration position)? onCastRequested;
+
+  /// A player config's features (and, with [useSharedOverlay], its theme).
+  /// Read when the native player is created.
+  final PlayerOptions options;
+
+  bool get _showsCast => castAvailable && !useSharedOverlay;
+
+  @override
+  State<SystemVideoPlayer> createState() => _SystemVideoPlayerState();
+}
+
+class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
+  VideoplaybackSession? _session;
+  WatchProgressRecorder? _sessionRecorder;
+
+  /// One per session, so a replaced target closes its own sequence and the
+  /// next one starts clean.
+  PlaybackEventEmitter? _events;
+  NativeVideoPlayerController? _nativeController;
+  var _request = 0;
+  StreamSubscription<AndroidPlaybackEvent>? _androidEvents;
+  StreamSubscription<bool>? _pipEvents;
+  StreamSubscription<Duration>? _castRequests;
+
+  void _checkpoint([Duration? position]) {
+    final recorder = _sessionRecorder;
+    final latest =
+        position ??
+        _nativeController?.currentPosition ??
+        _playback?.value.position;
+    if (latest != null && (_session?.canRecordPosition(latest) ?? false)) {
+      recorder?.checkpoint(latest);
+    }
+    if (recorder != null) unawaited(recorder.flush());
+  }
+
+  void _retireNative() {
+    _checkpoint();
+    unawaited(_androidEvents?.cancel());
+    unawaited(_pipEvents?.cancel());
+    unawaited(_castRequests?.cancel());
+    _androidEvents = null;
+    _pipEvents = null;
+    _castRequests = null;
+    final native = _nativeController;
+    _nativeController = null;
+    if (native != null) {
+      unawaited(native.setAndroidPlayerRouteActive(false));
+      // Unblock a pending platform mount before awaiting session disposal.
+      final playback = _playback;
+      if (playback is _SystemPlayerController) unawaited(playback.dispose());
+      unawaited(native.dispose());
+    }
+  }
+
+  /// The controller the session created, captured generically so the overlay
+  /// works on both the real Android path and the test-injected path.
+  VideoplaybackController? _playback;
+  VideoplaybackTracks? _playbackTracks;
+  PlayerControlsBloc? _controlsBloc;
+  var _tickBridged = false;
+  var _tracksRequested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_start());
+  }
+
+  @override
+  void didUpdateWidget(SystemVideoPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _events?.onEvent = widget.onPlaybackEvent;
+    if (oldWidget._showsCast != widget._showsCast) {
+      unawaited(
+        _nativeController?.setAndroidCastButtonVisible(widget._showsCast),
+      );
+    }
+    // useSharedOverlay is captured in the controller's `showNativeControls`
+    // when it is built, so a flip needs a new controller: reusing the old one
+    // would leave the plugin's native controls live underneath the shared
+    // overlay, or strip them with nothing in their place.
+    if (oldWidget.target != widget.target ||
+        oldWidget.useSharedOverlay != widget.useSharedOverlay) {
+      unawaited(_replace(++_request));
+    }
+  }
+
+  /// Ends the current session's event sequence.
+  ///
+  /// A microtask later, not now: this runs from `dispose` and
+  /// `didUpdateWidget`, where the widget tree is locked, and a host callback
+  /// that rebuilds anything — the example's on-screen log does — would
+  /// assert. The session being retired may still tick in between; those
+  /// ticks belong to the same sequence and still precede the close.
+  void _closeEvents() {
+    final PlaybackEventEmitter? events = _events;
+    _events = null;
+    if (events != null) scheduleMicrotask(events.close);
+  }
+
+  Future<void> _replace(int request) async {
+    _closeEvents();
+    _retireNative();
+    final VideoplaybackSession? retiredSession = _session;
+    await retiredSession?.dispose();
+    if (!mounted ||
+        request != _request ||
+        !identical(_session, retiredSession)) {
+      return;
+    }
+    _session = null;
+    _nativeController = null;
+    unawaited(_controlsBloc?.close() ?? Future<void>.value());
+    _controlsBloc = null;
+    _playback = null;
+    _playbackTracks = null;
+    _tickBridged = false;
+    _tracksRequested = false;
+    await _start();
+  }
+
+  Future<void> _start() async {
+    final WatchProgressRecorder? recorder = widget.watchProgressRecorder;
+    _sessionRecorder = recorder;
+    final PlaybackEventEmitter events = PlaybackEventEmitter(
+      sourceId: switch (widget.target) {
+        VideoplayerTrailerTarget(:final source) => source.id,
+        VideoplayerSourceTarget(:final source) => source.id,
+      },
+      onEvent: widget.onPlaybackEvent,
+    );
+    _events = events;
+    final VideoplaybackSession session = VideoplaybackSession(
+      target: widget.target,
+      createController: _createAndCaptureController,
+      onFinished: _finished,
+      onFailure: _fail,
+      onProgress: recorder == null
+          ? null
+          : (Duration position, Duration _) => recorder.report(position),
+      onInitialized: (VideoplaybackValue value) =>
+          events.ready(position: value.position, duration: value.duration),
+      onValue: events.tick,
+    );
+    _session = session;
+    await session.start();
+    // Overlay mode needs a rebuild once the controller exists: unlike the
+    // native-controls path, nothing else calls setState on the injected-
+    // controller path, so the overlay would never be built.
+    if (widget.useSharedOverlay && mounted && identical(_session, session)) {
+      setState(() {});
+    }
+  }
+
+  Future<VideoplaybackController> _createAndCaptureController(
+    VideoplayerTarget target,
+  ) async {
+    final VideoplaybackController controller =
+        await (widget.createController ?? _createSystemController)(target);
+    _playback = controller;
+    // The cast is not redundant: the ternary's static type is the LUB of the
+    // promoted type and Null, which drops back to VideoplaybackController?.
+    _playbackTracks = controller is VideoplaybackTracks
+        ? controller as VideoplaybackTracks
+        : null;
+    return controller;
+  }
+
+  Future<VideoplaybackController> _createSystemController(
+    VideoplayerTarget target,
+  ) async {
+    final EyzflowSource source = switch (target) {
+      VideoplayerTrailerTarget(:final source) => source,
+      VideoplayerSourceTarget(:final source) => source,
+    };
+    final bool isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+    final PlayerOptions options = widget.options;
+    final Map<String, dynamic>? drmConfig = systemDrmConfigForTarget(
+      target,
+      isIOS: isIOS,
+    );
+    if (kDebugMode) {
+      logPlayback(
+        'source.prepare url=${source.hlsStreamUrl} (hls, '
+        'drm ${drmConfig?['type'] ?? 'none'})',
+      );
+    }
+    final NativeVideoPlayerController nativeController =
+        NativeVideoPlayerController(
+          id: _nextSystemPlayerId++,
+          showNativeControls: !widget.useSharedOverlay,
+          androidFullscreenRoute: !isIOS && !widget.useSharedOverlay,
+          androidCloseLabel: streamingL10n.closePlayer,
+          androidCastLabel: streamingL10n.castTo,
+          allowsPictureInPicture:
+              !isIOS && !widget.useSharedOverlay && options.pictureInPicture,
+          canStartPictureInPictureAutomatically:
+              !isIOS && !widget.useSharedOverlay && options.pictureInPicture,
+          enableLooping: options.loop,
+          allowsExternalPlayback: options.airPlay,
+          mediaInfo: NativeVideoPlayerMediaInfo(
+            title: source.title,
+            artworkUrl: source.poster?.toString(),
+          ),
+        );
+    // Load-bearing: NativeVideoPlayerController.initialize() (below, in
+    // _SystemPlayerController.initialize) blocks on a platform-view-creation
+    // callback that only fires once NativeVideoPlayer is mounted. This
+    // setState mounts it before VideoplaybackSession goes on to await
+    // initialize() -- do not move this into _start()/gate it behind a
+    // "ready" flag, that reintroduces the deadlock fixed in a9c4adeb (no
+    // test catches it: the fake controllers used in tests have no
+    // platform-view dependency).
+    if (mounted) {
+      setState(() => _nativeController = nativeController);
+    } else {
+      _nativeController = nativeController;
+    }
+    _androidEvents = nativeController.androidPlaybackEvents.listen((event) {
+      if (!mounted || !identical(_nativeController, nativeController)) return;
+      _checkpoint(event.position);
+      if (event.closed) {
+        context.read<VideoplayerFeatureBloc>().add(
+          const VideoplayerFeaturePlaybackFinished(),
+        );
+      }
+    });
+    _castRequests = nativeController.androidCastRequests.listen((position) {
+      if (!mounted || !identical(_nativeController, nativeController)) return;
+      widget.onCastRequested?.call(position);
+    });
+    if (widget._showsCast) {
+      unawaited(nativeController.setAndroidCastButtonVisible(true));
+    }
+    _pipEvents = nativeController.isPipEnabledStream.listen((enabled) {
+      if (!mounted || !identical(_nativeController, nativeController)) return;
+      context.read<VideoplayerFeatureBloc>().add(
+        VideoplayerFeaturePictureInPictureChanged(enabled),
+      );
+    });
+    return _SystemPlayerController(
+      nativeController,
+      url: source.hlsStreamUrl.toString(),
+      drmConfig: drmConfig,
+    );
+  }
+
+  void _finished() {
+    // Recorded before the bloc tears the session down, so the completion is
+    // written even though the view is about to go away.
+    _sessionRecorder?.finish();
+    if (mounted) {
+      context.read<VideoplayerFeatureBloc>().add(
+        const VideoplayerFeaturePlaybackFinished(),
+      );
+    }
+  }
+
+  void _fail(String message) {
+    // A startup timeout or a load that threw never reaches a tick, so the
+    // failure is reported from here; one a tick already reported is not
+    // repeated.
+    _events?.error(message);
+    unawaited(_nativeController?.setAndroidPlayerRouteActive(false));
+    _checkpoint();
+    if (mounted) {
+      context.read<VideoplayerFeatureBloc>().add(
+        VideoplayerFeatureSourceFailed(message),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _request++;
+    _closeEvents();
+    _retireNative();
+    unawaited(_session?.dispose() ?? Future<void>.value());
+    unawaited(_controlsBloc?.close() ?? Future<void>.value());
+    // Independently of the session's disposal chain above: if we're torn
+    // down before the native side's first activity event arrives,
+    // VideoplaybackSession awaits a startup future that never resolves, so
+    // its own call to controller.dispose() (and therefore
+    // nativeController.dispose()) is never reached. Disposing the raw
+    // controller here guarantees the native player, its event-channel
+    // subscription, and its WidgetsBinding observer are cleaned up either
+    // way. NativeVideoPlayerController.dispose() is _isDisposed-guarded and
+    // idempotent, so this is safe even when the session's own path succeeds.
+    unawaited(_nativeController?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final NativeVideoPlayerController? controller = _nativeController;
+    // Keyed by controller id: NativeVideoPlayer caches its platform view for
+    // the life of its State and ignores a controller change in its own
+    // didUpdateWidget, so without this key a target-change swap (see
+    // _replace) would reuse the old platform view and the new controller's
+    // initialize() would hang waiting for onPlatformViewCreated.
+    final Widget surface = controller == null
+        // In overlay mode a test-injected controller has no platform view, so
+        // a black fill stands in — the same shape as the Tizen path.
+        ? (widget.useSharedOverlay
+              ? const ColoredBox(color: Colors.black)
+              : const Center(child: PlayerLoadingIndicator()))
+        : SizedBox.expand(
+            child: NativeVideoPlayer(
+              key: ValueKey<int>(controller.id),
+              controller: controller,
+            ),
+          );
+
+    if (!widget.useSharedOverlay) {
+      if (defaultTargetPlatform != TargetPlatform.iOS) return surface;
+      // iOS: the Cast button sits over the native controls (AVKit has no slot
+      // for it). One Stack from the first frame, surface at index 0, so the
+      // button appearing never re-parents the platform view.
+      return Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          surface,
+          if (widget._showsCast && controller != null)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () =>
+                    widget.onCastRequested?.call(controller.currentPosition),
+                icon: const Icon(Icons.cast, color: Colors.white),
+                tooltip: streamingL10n.castTo,
+              ),
+            ),
+        ],
+      );
+    }
+
+    // One Stack from the first frame, surface always at index 0: moving the
+    // NativeVideoPlayer under a new parent once the controls became ready
+    // disposed its platform view and created another, while the plugin
+    // controller kept addressing the first view id — every view-routed call
+    // after that (subtitle tracks, track selection, dispose) failed NO_VIEW.
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[surface, ?_buildControls(context)],
+    );
+  }
+
+  Widget? _buildControls(BuildContext context) {
+    final VideoplaybackController? playback = _playback;
+    final VideoplaybackTracks? tracks = _playbackTracks;
+    if (playback == null || tracks == null) return null;
+
+    final PlayerControlsBloc bloc = _ensureControlsBloc(playback, tracks);
+    _bridgeTick(playback, bloc);
+    unawaited(_loadTracksOnce(tracks, bloc));
+
+    final EyzflowSource source = switch (widget.target) {
+      VideoplayerTrailerTarget(:final source) => source,
+      VideoplayerSourceTarget(:final source) => source,
+    };
+    final String title = source.title;
+
+    return BlocProvider<PlayerControlsBloc>.value(
+      value: bloc,
+      child: PlayerControls(
+        title: title,
+        thumbnailsUrl: source.thumbnailsUrl,
+        // The same exit Tizen takes: the feature Bloc owns closing the
+        // player, so both TV paths leave through one door.
+        onBack: () => _closeFromControls(context),
+        theme: widget.options.controlsTheme,
+        showControls: widget.options.controls,
+      ),
+    );
+  }
+
+  void _closeFromControls(BuildContext context) {
+    context.read<VideoplayerFeatureBloc>().add(
+      const VideoplayerFeaturePlaybackFinished(),
+    );
+  }
+
+  PlayerControlsBloc _ensureControlsBloc(
+    VideoplaybackController playback,
+    VideoplaybackTracks tracks,
+  ) => _controlsBloc ??= PlayerControlsBloc(
+    controller: playback,
+    tracks: tracks,
+    subtitlePreferenceStore: getSubtitlePreferenceStoreOrNull(),
+    hidesWhenIdle: widget.options.autoHideControls,
+    captions: widget.options.captions,
+    onSeeked: _events?.seeked,
+    onAudioTrackChanged: _events?.audioTrackChanged,
+    onSubtitleTrackChanged: _events?.subtitleTrackChanged,
+  );
+
+  /// Bridges the controller's ticks into the Bloc through the package's own
+  /// contract — no plugin type reaches this widget, so a test fake drives it
+  /// exactly as the real adapter does. Separate from the
+  /// [VideoplaybackSession] listener that records watch progress, so neither
+  /// disturbs the other.
+  void _bridgeTick(VideoplaybackController playback, PlayerControlsBloc bloc) {
+    if (_tickBridged) return;
+    _tickBridged = true;
+    playback.addListener((VideoplaybackValue value) {
+      if (bloc.isClosed) return;
+      final Duration? position = value.position;
+      final Duration? duration = value.duration;
+      if (position == null || duration == null) return;
+      bloc.add(
+        PlayerControlsValueTicked(
+          position: position,
+          duration: duration,
+          isPlaying: value.isPlaying,
+        ),
+      );
+      bloc.add(PlayerControlsBufferingChanged(value.isBuffering));
+    });
+  }
+
+  Future<void> _loadTracksOnce(
+    VideoplaybackTracks tracks,
+    PlayerControlsBloc bloc,
+  ) async {
+    if (_tracksRequested) return;
+    _tracksRequested = true;
+    final annotated = await annotateHlsTracks(
+      _masterPlaylist(widget.target),
+      await tracks.audioTracks(),
+      await tracks.textTracks(),
+    );
+    if (!mounted || bloc.isClosed) return;
+    bloc.add(
+      PlayerControlsTracksLoaded(
+        audioTracks: annotated.audio,
+        textTracks: annotated.text,
+      ),
+    );
+  }
+}
+
+Uri _masterPlaylist(VideoplayerTarget target) => switch (target) {
+  VideoplayerTrailerTarget(:final source) => source.hlsStreamUrl,
+  VideoplayerSourceTarget(:final source) => source.hlsStreamUrl,
+};
+
+/// Adapts [NativeVideoPlayerController] to the package's plugin-agnostic
+/// playback contract, including track discovery and selection so the shared
+/// controls overlay can drive it on Android TV. On phones and tablets the
+/// plugin's own native UI is shown instead and these members go unused — they
+/// cost nothing when idle.
+final class _SystemPlayerController
+    implements VideoplaybackController, VideoplaybackTracks {
+  _SystemPlayerController(
+    this.controller, {
+    required this.url,
+    required this.drmConfig,
+  }) {
+    if (_isAndroid) {
+      _startupObserver = _AndroidStartupIntent();
+    }
+  }
+
+  bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
+  _AndroidStartupIntent? _startupObserver;
+  int? _startupRevision;
+  bool _startupCancelled = false;
+  bool _firstPlay = true;
+  bool _disposed = false;
+  final _disposal = Completer<void>();
+
+  final NativeVideoPlayerController controller;
+  final String url;
+  final Map<String, dynamic>? drmConfig;
+
+  /// Last activity-event error, if any. The plugin exposes no synchronous
+  /// "last error" getter, unlike `video_player_avplay`'s
+  /// `VideoPlayerValue.errorDescription`, so this caches it from the
+  /// activity listener instead.
+  String? _lastErrorMessage;
+
+  final Map<void Function(VideoplaybackValue), _ListenerBinding> _listeners =
+      <void Function(VideoplaybackValue), _ListenerBinding>{};
+
+  @override
+  VideoplaybackValue get value => VideoplaybackValue(
+    isCompleted: controller.activityState == PlayerActivityState.completed,
+    errorMessage: _lastErrorMessage,
+    position: controller.currentPosition,
+    duration: controller.duration > Duration.zero ? controller.duration : null,
+    isPlaying: controller.activityState == PlayerActivityState.playing,
+    isBuffering: controller.activityState == PlayerActivityState.buffering,
+    isPaused: controller.activityState == PlayerActivityState.paused,
+  );
+
+  @override
+  Future<void> initialize() async {
+    await Future.any([controller.initialize(), _disposal.future]);
+    if (_disposed) return;
+    if (_isAndroid) {
+      _startupRevision = await controller.getAndroidPlaybackIntentRevision();
+      _startupCancelled = _startupObserver?.cancelled ?? false;
+      _startupObserver?.dispose();
+      _startupObserver = null;
+      if (_disposed) return;
+      await controller.setAndroidPlayerRouteActive(true);
+    }
+    if (_disposed) return;
+    await Future.any([
+      controller.load(url: url, drmConfig: drmConfig),
+      _disposal.future,
+    ]);
+  }
+
+  /// Fetched once per load. Cached because selection addresses the plugin's
+  /// own track object, and re-fetching the whole list on every selection is a
+  /// needless native round trip. Safe here, unlike on the AVPlay adapter:
+  /// these are read only after initialize() and load() have completed.
+  List<NativeVideoPlayerAudioTrack>? _nativeAudioTracks;
+  List<NativeVideoPlayerSubtitleTrack>? _nativeTextTracks;
+
+  @override
+  int? selectedAudioTrackId;
+
+  @override
+  int? selectedTextTrackId;
+
+  @override
+  Future<List<PlayerAudioTrack>> audioTracks() async {
+    final List<NativeVideoPlayerAudioTrack> tracks = _nativeAudioTracks ??=
+        await controller.getAvailableAudioTracks();
+    selectedAudioTrackId ??= systemSelectedIndex(
+      tracks,
+      (NativeVideoPlayerAudioTrack t) => t.isSelected,
+      (NativeVideoPlayerAudioTrack t) => t.index,
+    );
+    return systemAudioTracks(tracks);
+  }
+
+  @override
+  Future<List<PlayerTextTrack>> textTracks() async {
+    final List<NativeVideoPlayerSubtitleTrack> tracks = _nativeTextTracks ??=
+        await controller.getAvailableSubtitleTracks();
+    selectedTextTrackId ??= systemSelectedIndex(
+      tracks,
+      (NativeVideoPlayerSubtitleTrack t) => t.isSelected,
+      (NativeVideoPlayerSubtitleTrack t) => t.index,
+    );
+    return systemTextTracks(tracks);
+  }
+
+  @override
+  Future<bool> selectAudioTrack(int trackId) async {
+    final NativeVideoPlayerAudioTrack? track = _nativeAudioTracks
+        ?.cast<NativeVideoPlayerAudioTrack?>()
+        .firstWhere(
+          (NativeVideoPlayerAudioTrack? t) => t?.index == trackId,
+          orElse: () => null,
+        );
+    if (track == null) return false;
+    await controller.setAudioTrack(track);
+    selectedAudioTrackId = trackId;
+    return true;
+  }
+
+  @override
+  Future<bool> selectTextTrack(int? trackId) async {
+    if (trackId == null) {
+      // Unlike the AVPlay adapter, this plugin has a real "off".
+      await controller.setSubtitleTrack(NativeVideoPlayerSubtitleTrack.off());
+      selectedTextTrackId = null;
+      return true;
+    }
+    final NativeVideoPlayerSubtitleTrack? track = _nativeTextTracks
+        ?.cast<NativeVideoPlayerSubtitleTrack?>()
+        .firstWhere(
+          (NativeVideoPlayerSubtitleTrack? t) => t?.index == trackId,
+          orElse: () => null,
+        );
+    if (track == null) return false;
+    await controller.setSubtitleTrack(track);
+    selectedTextTrackId = trackId;
+    return true;
+  }
+
+  @override
+  Future<void> play() async {
+    if (_disposed) return;
+    if (_isAndroid && _firstPlay) {
+      _firstPlay = false;
+      if (!_startupCancelled && _startupRevision != null) {
+        await controller.playIfAndroidIntentUnchanged(_startupRevision!);
+      }
+      return;
+    }
+    await controller.play();
+  }
+
+  @override
+  Future<void> pause() => controller.pause();
+
+  @override
+  Future<void> seekTo(Duration position) => controller.seekTo(position);
+
+  @override
+  void addListener(void Function(VideoplaybackValue) listener) {
+    // Registering the same listener twice without an intervening
+    // removeListener would otherwise silently overwrite its binding below,
+    // orphaning the first StreamSubscription and its native activity
+    // listener (leaked). Not currently reachable via VideoplaybackSession
+    // (registers once, removes before disposing), but keep the adapter safe
+    // standalone.
+    if (_listeners.containsKey(listener)) return;
+
+    void onActivity(PlayerActivityEvent event) {
+      if (event.state == PlayerActivityState.error) {
+        final String message =
+            (event.data?['message'] as String?) ??
+            streamingL10n.nativePlayerErrorNoDescription;
+        if (message != _lastErrorMessage) {
+          _lastErrorMessage = message;
+          logPlayback('native_player failed', error: message);
+        }
+      }
+      listener(value);
+    }
+
+    final StreamSubscription<Duration> position = controller.positionStream
+        .listen((Duration _) => listener(value));
+    controller.addActivityListener(onActivity);
+    _listeners[listener] = (position: position, activity: onActivity);
+  }
+
+  @override
+  void removeListener(void Function(VideoplaybackValue) listener) {
+    final _ListenerBinding? binding = _listeners.remove(listener);
+    if (binding == null) return;
+    unawaited(binding.position.cancel());
+    controller.removeActivityListener(binding.activity);
+  }
+
+  @override
+  Future<void> dispose() {
+    if (_disposed) return Future<void>.value();
+    _disposed = true;
+    _disposal.complete();
+    _startupObserver?.dispose();
+    _startupObserver = null;
+    unawaited(controller.setAndroidPlayerRouteActive(false));
+    // Defense in depth: clean up any binding still registered in case
+    // removeListener was never called for it.
+    for (final _ListenerBinding binding in _listeners.values) {
+      unawaited(binding.position.cancel());
+      controller.removeActivityListener(binding.activity);
+    }
+    _listeners.clear();
+    return controller.dispose();
+  }
+}
+
+/// Cancels startup intent only while the native owner has not initialized.
+/// It never resumes playback or drives the native visibility policy.
+class _AndroidStartupIntent with WidgetsBindingObserver {
+  _AndroidStartupIntent() {
+    WidgetsBinding.instance.addObserver(this);
+    final state = WidgetsBinding.instance.lifecycleState;
+    if (state != null && state != AppLifecycleState.resumed) {
+      cancelled = true;
+    }
+  }
+  bool cancelled = false;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      cancelled = true;
+      dispose();
+    }
+  }
+
+  void dispose() => WidgetsBinding.instance.removeObserver(this);
+}

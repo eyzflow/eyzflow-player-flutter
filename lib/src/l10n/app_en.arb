@@ -1,0 +1,67 @@
+{
+  "@@locale": "en",
+  "back": "Back",
+  "@back": {
+    "description": "Back button label for main screen"
+  },
+  "rewind15Seconds": "Rewind 15 seconds",
+  "forward15Seconds": "Forward 15 seconds",
+  "audio": "Audio",
+  "@audio": {
+    "description": "Audio languages label"
+  },
+  "subtitles": "Subtitles",
+  "@subtitles": {
+    "description": "Subtitle languages label"
+  },
+  "subtitlesOff": "Off",
+  "@subtitlesOff": {
+    "description": "Subtitle panel row that turns subtitles off"
+  },
+  "playbackUnavailable": "Playback unavailable",
+  "unableToLoadVideo": "Unable to load video.",
+  "ok": "OK",
+  "@ok": {
+    "description": "Dismiss the alert"
+  },
+  "closePlayer": "Close player",
+  "playbackNotAvailableOnPlatform": "Playback is not available on this platform yet.",
+  "play": "Play",
+  "pause": "Pause",
+  "playbackTookTooLong": "Playback took too long to start.",
+  "licenceRequestTimedOut": "Licence request timed out.",
+  "licenceRequestNotSent": "Licence request could not be sent.",
+  "nativePlayerErrorNoDescription": "The player stopped without an error description.",
+  "retryPlayback": "Retry",
+  "castTo": "Cast",
+  "@castTo": {
+    "description": "Cast button and device picker title"
+  },
+  "castSearching": "Looking for devices…",
+  "castNoDevices": "No Cast devices found. Your phone and your TV need to be on the same Wi-Fi.",
+  "castConnecting": "Connecting to {device}…",
+  "@castConnecting": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "castPlayingOn": "Playing on {device}",
+  "@castPlayingOn": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "castStop": "Stop casting",
+  "castFailed": "Could not play on {device}.",
+  "@castFailed": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  }
+}

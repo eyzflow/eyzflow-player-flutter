@@ -1,0 +1,752 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../core/source.dart';
+import 'package:video_player_avplay/video_player.dart';
+import 'package:video_player_avplay/video_player_platform_interface.dart'
+    as avplay;
+
+import '../bloc/player_controls_bloc.dart';
+import '../bloc/videoplayer_feature_bloc.dart';
+import 'hls_renditions.dart';
+import 'playback_event.dart';
+import 'playback_event_emitter.dart';
+import 'playback_target.dart';
+import 'subtitle_preference_store.dart';
+import 'player_controls.dart';
+import 'player_options.dart';
+import 'watch_progress_recorder.dart';
+import 'player_log.dart';
+import 'player_policy.dart';
+import 'tizen_device_diagnostics.dart';
+import 'widevine_license_client.dart';
+import '../l10n/streaming_l10n.dart';
+import 'player_loading_indicator.dart';
+
+/// Widevine configuration for a source-backed target, and nothing for a
+/// trailer.
+///
+/// PlayReady is never selected. `licenseServerUrl` stays null on purpose:
+/// the native path hardcodes its own headers and cannot carry the
+/// `access-token` credential, so the licence is fetched from Dart through
+/// [licenseCallback] instead.
+///
+/// A trailer target is never DRM-protected — that's what its type already
+/// says — so this never has to inspect `source.sourceType` to decide.
+DrmConfigs? drmConfigsForTarget(
+  VideoplayerTarget target,
+  WidevineLicenseClient client,
+) => switch (target) {
+  VideoplayerTrailerTarget() => null,
+  VideoplayerSourceTarget(:final source) =>
+    source.drmAccessHeader == null
+        ? null
+        : DrmConfigs(
+            type: DrmType.widevine,
+            licenseCallback: (Uint8List challenge) => client.fetchLicense(
+              challenge,
+              licenseUri: source.widevineLicenseUrl,
+              drmAccessHeader: source.drmAccessHeader!,
+            ),
+          ),
+};
+
+/// Selects the first text track accepted by the native AVPlay controller.
+///
+/// Returns the selected track, or `null` when there are no text tracks or the
+/// native controller rejects the selection.
+Future<TextTrack?> selectFirstTextTrack(
+  List<TextTrack>? tracks,
+  Future<bool> Function(TextTrack track) selectTrack,
+) async {
+  if (tracks == null || tracks.isEmpty) return null;
+
+  final TextTrack firstTrack = tracks.first;
+  return await selectTrack(firstTrack) ? firstTrack : null;
+}
+
+/// The audio track AVPlay is actually playing, from `getActiveTrackInfo`.
+///
+/// The plugin's `audioTracks` list carries no "is selected" flag — unlike the
+/// Android plugin's — so without this the audio panel opened with no row
+/// checked even though a language was plainly playing. `trackId` here is the
+/// same `plusplayer::Track.index` the track list reports, so the id addresses
+/// the same track.
+///
+/// Returns `null` when the native list holds no audio track, which is what
+/// AVPlay answers before the track source is ready.
+AudioTrack? activeAudioTrack(List<Track> tracks) {
+  for (final Track track in tracks) {
+    if (track is AudioTrack) return track;
+  }
+  return null;
+}
+
+/// Displays caption events emitted by the AVPlay controller.
+///
+/// AVPlay paints no subtitles of its own — the plugin pushes caption text up
+/// to Dart and this widget draws it — so [isEnabled] is what "Off" means on
+/// Tizen. There is no native call to make instead: the plugin's only lever is
+/// `setTrackSelection`, which needs a track to select.
+final class AvplaySubtitleOverlay extends StatelessWidget {
+  const AvplaySubtitleOverlay({
+    super.key,
+    required this.controller,
+    required this.isEnabled,
+  });
+
+  final VideoPlayerController controller;
+
+  /// Whether the viewer has a subtitle track selected. The native track goes
+  /// on decoding when they do not, and this is the only thing standing
+  /// between its text and the screen.
+  final bool isEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isEnabled) return const SizedBox.shrink();
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: controller,
+      builder: (BuildContext context, VideoPlayerValue value, Widget? child) {
+        return ClosedCaption(captions: value.captions);
+      },
+    );
+  }
+}
+
+/// The single Tizen player. Owns one native controller per target.
+class TizenAvplayPlayer extends StatefulWidget {
+  const TizenAvplayPlayer({
+    super.key,
+    required this.target,
+    this.createController,
+    this.diagnostics,
+    this.licenseClient,
+    this.watchProgressRecorder,
+    this.onPlaybackEvent,
+    this.options = const PlayerOptions(),
+  });
+
+  final VideoplayerTarget target;
+  final VideoplaybackControllerFactory? createController;
+  final TizenDeviceDiagnostics? diagnostics;
+  final WidevineLicenseClient? licenseClient;
+
+  /// Records what the viewer watched. Absent in previews and tests, and for a
+  /// trailer, which is not something a viewer resumes.
+  final WatchProgressRecorder? watchProgressRecorder;
+
+  /// Hears what playback does, for the host's analytics. Absent, nothing is
+  /// observed and the player behaves exactly as it did without it. Every
+  /// seek and track switch on Tizen goes through the controls overlay, so
+  /// all of them are reported.
+  final PlaybackEventCallback? onPlaybackEvent;
+
+  /// A player config's theme and features for the overlay. `loop` does not
+  /// apply: Tizen's player (PlusPlayer) cannot loop.
+  final PlayerOptions options;
+
+  @override
+  State<TizenAvplayPlayer> createState() => _TizenAvplayPlayerState();
+}
+
+class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
+  VideoplaybackSession? _session;
+  _AvplayController? _controller;
+
+  /// One per session, so a replaced target closes its own sequence and the
+  /// next one starts clean.
+  PlaybackEventEmitter? _events;
+  WidevineLicenseClient? _ownedLicenseClient;
+  var _request = 0;
+
+  /// The controller the session created, captured generically so the overlay
+  /// works on both the real Tizen path and the test-injected path.
+  VideoplaybackController? _playback;
+  VideoplaybackTracks? _playbackTracks;
+  PlayerControlsBloc? _controlsBloc;
+
+  /// True once `session.start()` has returned (initialize + play settled or
+  /// timed out). Gates the overlay so it does not flash before playback.
+  bool _ready = false;
+  bool _tickBridged = false;
+  bool _tracksRequested = false;
+
+  WidevineLicenseClient get _licenseClient =>
+      widget.licenseClient ?? (_ownedLicenseClient ??= WidevineLicenseClient());
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_start());
+  }
+
+  @override
+  void didUpdateWidget(TizenAvplayPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _events?.onEvent = widget.onPlaybackEvent;
+    if (oldWidget.target != widget.target) {
+      unawaited(_replace(++_request));
+    }
+  }
+
+  /// Ends the current session's event sequence.
+  ///
+  /// A microtask later, not now: this runs from `dispose` and
+  /// `didUpdateWidget`, where the widget tree is locked, and a host callback
+  /// that rebuilds anything — the example's on-screen log does — would
+  /// assert. The session being retired may still tick in between; those
+  /// ticks belong to the same sequence and still precede the close.
+  void _closeEvents() {
+    final PlaybackEventEmitter? events = _events;
+    _events = null;
+    if (events != null) scheduleMicrotask(events.close);
+  }
+
+  Future<void> _replace(int request) async {
+    _closeEvents();
+    final VideoplaybackSession? retiredSession = _session;
+    await retiredSession?.dispose();
+    if (!mounted ||
+        request != _request ||
+        !identical(_session, retiredSession)) {
+      return;
+    }
+    _session = null;
+    _controller = null;
+    unawaited(_controlsBloc?.close() ?? Future<void>.value());
+    _controlsBloc = null;
+    _playback = null;
+    _playbackTracks = null;
+    _ready = false;
+    _tickBridged = false;
+    _tracksRequested = false;
+    await _start();
+  }
+
+  Future<void> _start() async {
+    final WatchProgressRecorder? recorder = widget.watchProgressRecorder;
+    final TizenDeviceDiagnostics? diagnostics =
+        widget.diagnostics ?? getTizenDeviceDiagnosticsOrNull();
+    if (diagnostics != null) unawaited(diagnostics.logDeviceOnce());
+    final PlaybackEventEmitter events = PlaybackEventEmitter(
+      sourceId: switch (widget.target) {
+        VideoplayerTrailerTarget(:final source) => source.id,
+        VideoplayerSourceTarget(:final source) => source.id,
+      },
+      onEvent: widget.onPlaybackEvent,
+    );
+    _events = events;
+    final VideoplaybackSession session = VideoplaybackSession(
+      target: widget.target,
+      createController: _createAndCaptureController,
+      onFinished: _finished,
+      onFailure: _fail,
+      onProgress: recorder == null
+          ? null
+          : (Duration position, Duration _) => recorder.report(position),
+      onInitialized: (VideoplaybackValue value) =>
+          events.ready(position: value.position, duration: value.duration),
+      onValue: events.tick,
+      // The controller opens at the resume position itself; see
+      // [_createAvplayController].
+      seeksToResumePosition: false,
+    );
+    _session = session;
+    await session.start();
+    if (mounted && identical(_session, session)) {
+      setState(() => _ready = true);
+    }
+  }
+
+  Future<VideoplaybackController> _createAndCaptureController(
+    VideoplayerTarget target,
+  ) async {
+    final VideoplaybackController controller =
+        await (widget.createController ?? _createAvplayController)(target);
+    _playback = controller;
+    // The cast is not redundant: the ternary's static type is the LUB of the
+    // promoted type and Null, which drops back to VideoplaybackController?.
+    _playbackTracks = controller is VideoplaybackTracks
+        ? controller as VideoplaybackTracks
+        : null;
+    return controller;
+  }
+
+  Future<VideoplaybackController> _createAvplayController(
+    VideoplayerTarget target,
+  ) async {
+    // HLS, always, proven on hardware 2026-08-26. Both manifests address the
+    // same encrypted segment files with the same `KEYID`s, and the HLS
+    // playlists carry an inline Widevine `pssh`, so the same licence unlocks
+    // either — but only HLS signals a clear lead-in
+    // (`EXT-X-DISCONTINUITY` + a late `EXT-X-KEY`), which the DASH path could
+    // not follow. DASH played no film; HLS plays them. FairPlay never enters
+    // it: `DrmType` offers only none/playready/widevine.
+    //
+    // See docs/superpowers/specs/
+    // 2026-08-19-flutter-tizen-avplay-widevine-findings.md.
+    final EyzflowSource source = switch (target) {
+      VideoplayerTrailerTarget(:final source) => source,
+      VideoplayerSourceTarget(:final source) => source,
+    };
+    final String url = source.hlsStreamUrl.toString();
+
+    final DrmConfigs? drmConfigs = drmConfigsForTarget(target, _licenseClient);
+    if (kDebugMode) {
+      logPlayback(
+        'source.prepare url=$url (hls, '
+        'drm ${drmConfigs?.type.name ?? 'none'})',
+      );
+    }
+    // PlusPlayer seeks to `startPosition` before PrepareAsync, so the decoder
+    // and the licence come up at the resume point. Seeking the paused player
+    // after initialize instead failed the hardware decoder mid-seek
+    // (OpenMAX "not data output") on resumed films.
+    final Duration? resumeAt = resumePositionFor(target);
+    if (resumeAt != null) logPlayback('opening at $resumeAt');
+    final _AvplayController controller = _AvplayController(
+      VideoPlayerController.network(
+        url,
+        formatHint: avplay.VideoFormat.hls,
+        drmConfigs: drmConfigs,
+        playerOptions: <String, dynamic>{
+          if (resumeAt != null) 'startPosition': resumeAt.inMilliseconds,
+        },
+      ),
+    );
+    _controller = controller;
+    return controller;
+  }
+
+  void _finished() {
+    // Recorded before the bloc tears the session down, so the completion is
+    // written even though the view is about to go away.
+    widget.watchProgressRecorder?.finish();
+    if (mounted) {
+      context.read<VideoplayerFeatureBloc>().add(
+        const VideoplayerFeaturePlaybackFinished(),
+      );
+    }
+  }
+
+  void _fail(String message) {
+    // A startup timeout or a load that threw never reaches a tick, so the
+    // failure is reported from here; one a tick already reported is not
+    // repeated.
+    _events?.error(message);
+    if (mounted) {
+      context.read<VideoplayerFeatureBloc>().add(
+        VideoplayerFeatureSourceFailed(message),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _request++;
+    _closeEvents();
+    unawaited(_session?.dispose() ?? Future<void>.value());
+    unawaited(_controlsBloc?.close() ?? Future<void>.value());
+    _ownedLicenseClient?.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final VideoplaybackController? playback = _playback;
+    final VideoplaybackTracks? tracks = _playbackTracks;
+    if (!_ready || playback == null || tracks == null) {
+      return const Center(child: PlayerLoadingIndicator(isTv: true));
+    }
+
+    final PlayerControlsBloc bloc = _ensureControlsBloc(playback, tracks);
+    _loadTracksOnce(tracks, bloc);
+
+    final EyzflowSource source = switch (widget.target) {
+      VideoplayerTrailerTarget(:final source) => source,
+      VideoplayerSourceTarget(:final source) => source,
+    };
+    final String title = source.title;
+
+    return BlocProvider<PlayerControlsBloc>.value(
+      value: bloc,
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          _buildVideoSurface(bloc),
+          PlayerControls(
+            title: title,
+            thumbnailsUrl: source.thumbnailsUrl,
+            onBack: () => _closeFromControls(context),
+            theme: widget.options.controlsTheme,
+            showControls: widget.options.controls,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The real video only exists on the Tizen path, where `_controller` holds
+  /// the plugin controller. In host tests there is none, so this is a black
+  /// fill under the overlay.
+  Widget _buildVideoSurface(PlayerControlsBloc bloc) {
+    final VideoPlayerController? controller = _controller?.controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return const ColoredBox(color: Colors.black);
+    }
+    _bridgeTick(controller, bloc);
+    return Center(
+      child: AspectRatio(
+        aspectRatio: controller.value.aspectRatio,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            VideoPlayer(controller),
+            // AVPlay paints no subtitles of its own — the plugin pushes
+            // caption text up to Dart and this overlay draws it — so not
+            // drawing it is what "Off" means here. There is no native
+            // "disable text" call to make instead: the plugin's only lever is
+            // `setTrackSelection`, which needs a track to select.
+            BlocSelector<PlayerControlsBloc, PlayerControlsState, bool>(
+              selector: (PlayerControlsState state) =>
+                  state.selectedTextTrackId != null,
+              builder: (BuildContext context, bool isEnabled) =>
+                  AvplaySubtitleOverlay(
+                    controller: controller,
+                    isEnabled: isEnabled,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  PlayerControlsBloc _ensureControlsBloc(
+    VideoplaybackController playback,
+    VideoplaybackTracks tracks,
+  ) {
+    return _controlsBloc ??= PlayerControlsBloc(
+      controller: playback,
+      tracks: tracks,
+      subtitlePreferenceStore: getSubtitlePreferenceStoreOrNull(),
+      hidesWhenIdle: widget.options.autoHideControls,
+      captions: widget.options.captions,
+      onSeeked: _events?.seeked,
+      onAudioTrackChanged: _events?.audioTrackChanged,
+      onSubtitleTrackChanged: _events?.subtitleTrackChanged,
+    );
+  }
+
+  /// Bridges the plugin controller's ticks into the Bloc. `isPlaying` and
+  /// `isBuffering` come only from the plugin's `VideoPlayerValue`, so this runs
+  /// on the real path only. Separate from the `VideoplaybackSession` listener
+  /// that records watch progress, so neither disturbs the other.
+  void _bridgeTick(VideoPlayerController controller, PlayerControlsBloc bloc) {
+    if (_tickBridged) return;
+    _tickBridged = true;
+    void listener() {
+      if (bloc.isClosed) return;
+      final VideoPlayerValue value = controller.value;
+      if (!value.isInitialized) return;
+      bloc.add(
+        PlayerControlsValueTicked(
+          position: value.position,
+          duration: value.duration.end,
+          isPlaying: value.isPlaying,
+        ),
+      );
+      bloc.add(PlayerControlsBufferingChanged(value.isBuffering));
+    }
+
+    controller.addListener(listener);
+  }
+
+  Future<void> _loadTracksOnce(
+    VideoplaybackTracks tracks,
+    PlayerControlsBloc bloc,
+  ) async {
+    if (_tracksRequested) return;
+    _tracksRequested = true;
+    final annotated = await annotateHlsTracks(
+      switch (widget.target) {
+        VideoplayerTrailerTarget(:final source) => source.hlsStreamUrl,
+        VideoplayerSourceTarget(:final source) => source.hlsStreamUrl,
+      },
+      await tracks.audioTracks(),
+      await tracks.textTracks(),
+    );
+    if (!mounted || bloc.isClosed) return;
+    bloc.add(
+      PlayerControlsTracksLoaded(
+        audioTracks: annotated.audio,
+        textTracks: annotated.text,
+      ),
+    );
+  }
+
+  void _closeFromControls(BuildContext context) {
+    context.read<VideoplayerFeatureBloc>().add(
+      const VideoplayerFeaturePlaybackFinished(),
+    );
+  }
+}
+
+final class _AvplayController
+    implements VideoplaybackController, VideoplaybackTracks {
+  _AvplayController(this.controller);
+
+  final VideoPlayerController controller;
+  final Map<void Function(VideoplaybackValue), void Function()> _listeners =
+      <void Function(VideoplaybackValue), void Function()>{};
+
+  int? _selectedAudioTrackId;
+  int? _selectedTextTrackId;
+
+  /// The text track the native player is decoding, which is not the same as
+  /// the one the overlay draws: `Off` leaves the native selection alone,
+  /// because there is nothing to deselect it with. Turning that same language
+  /// back on is then a display change only, and must not re-issue a selection
+  /// the player is already running.
+  int? _nativeTextTrackId;
+
+  @override
+  VideoplaybackValue get value => _value(controller.value);
+
+  @override
+  Future<void> seekTo(Duration position) => controller.seekTo(position);
+
+  @override
+  Future<void> initialize() async {
+    await controller.initialize();
+    // What the streaming engine actually resolved. A missing video track is
+    // the difference between "black screen with sound" and "nothing at all",
+    // and the GStreamer criticals do not say which happened.
+    final VideoPlayerValue value = controller.value;
+    logPlayback(
+      'after initialize: isInitialized ${value.isInitialized}, '
+      'size ${value.size}, duration ${value.duration}, '
+      'has_error ${value.errorDescription != null}',
+    );
+    // Each getter answers null before initialization; awaited separately so one
+    // native failure does not hide the other two.
+    for (final (String label, Future<List<Object?>?> tracks)
+        in <(String, Future<List<Object?>?>)>[
+          ('video', controller.videoTracks),
+          ('audio', controller.audioTracks),
+        ]) {
+      try {
+        logPlayback('$label tracks count=${(await tracks)?.length ?? 0}');
+      } on Object catch (error) {
+        logPlayback('$label tracks unavailable', error: error);
+      }
+    }
+    try {
+      final AudioTrack? active = activeAudioTrack(
+        await controller.getActiveTrackInfo(),
+      );
+      if (active != null) {
+        _selectedAudioTrackId = active.trackId;
+        logPlayback(
+          'active audio track: id ${active.trackId}, '
+          'language ${active.language}',
+        );
+      } else {
+        logPlayback('no active audio track reported');
+      }
+    } on Object catch (error) {
+      logPlayback('active track info unavailable', error: error);
+    }
+    try {
+      final List<TextTrack>? textTracks = await controller.textTracks;
+      logPlayback('text tracks count=${textTracks?.length ?? 0}');
+      final TextTrack? selectedTrack = await selectFirstTextTrack(
+        textTracks,
+        controller.setTrackSelection,
+      );
+      if (selectedTrack != null) {
+        _selectedTextTrackId = selectedTrack.trackId;
+        _nativeTextTrackId = selectedTrack.trackId;
+        logPlayback(
+          'selected first text track: id ${selectedTrack.trackId}, '
+          'language ${selectedTrack.language}',
+        );
+      } else if (textTracks?.isNotEmpty ?? false) {
+        logPlayback('first text track selection failed');
+      }
+    } on Object catch (error) {
+      logPlayback('text tracks unavailable', error: error);
+    }
+  }
+
+  @override
+  Future<void> play() => controller.play();
+
+  @override
+  Future<void> pause() => controller.pause();
+
+  @override
+  int? get selectedAudioTrackId => _selectedAudioTrackId;
+
+  @override
+  int? get selectedTextTrackId => _selectedTextTrackId;
+
+  // ponytail: each selection re-fetches the native track list, so a selection
+  // is two plugin calls instead of one. Deliberate: the plugin answers `null`
+  // for both lists until the streaming engine resolves them, so memoising the
+  // first answer would cache an empty list and blank the panels. Cache only
+  // once there is a hardware-verified signal for "tracks are final" — see
+  // PR #107 issue 6. The Android adapter caches safely because it reads only
+  // after initialize() and load() have completed.
+  @override
+  Future<List<PlayerAudioTrack>> audioTracks() async {
+    try {
+      final List<AudioTrack>? tracks = await controller.audioTracks;
+      return tracks == null
+          ? const <PlayerAudioTrack>[]
+          : <PlayerAudioTrack>[
+              for (final AudioTrack track in tracks)
+                PlayerAudioTrack(
+                  trackId: track.trackId,
+                  language: track.language,
+                  channel: track.channel,
+                ),
+            ];
+    } on Object catch (error) {
+      logPlayback('audio tracks unavailable', error: error);
+      return const <PlayerAudioTrack>[];
+    }
+  }
+
+  @override
+  Future<List<PlayerTextTrack>> textTracks() async {
+    try {
+      final List<TextTrack>? tracks = await controller.textTracks;
+      return tracks == null
+          ? const <PlayerTextTrack>[]
+          : <PlayerTextTrack>[
+              for (final TextTrack track in tracks)
+                PlayerTextTrack(
+                  trackId: track.trackId,
+                  language: track.language,
+                ),
+            ];
+    } on Object catch (error) {
+      logPlayback('text tracks unavailable', error: error);
+      return const <PlayerTextTrack>[];
+    }
+  }
+
+  @override
+  Future<bool> selectAudioTrack(int trackId) async {
+    try {
+      final List<AudioTrack>? tracks = await controller.audioTracks;
+      final AudioTrack? track = tracks?.cast<AudioTrack?>().firstWhere(
+        (AudioTrack? t) => t?.trackId == trackId,
+        orElse: () => null,
+      );
+      if (track == null) return false;
+      final bool ok = await controller.setTrackSelection(track);
+      if (ok) _selectedAudioTrackId = trackId;
+      return ok;
+    } on Object catch (error) {
+      logPlayback('audio track selection failed', error: error);
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> selectTextTrack(int? trackId) async {
+    try {
+      if (trackId == null) {
+        // Off is a display state, and the caption overlay is what reads it:
+        // the native track keeps decoding because the plugin offers no way to
+        // turn it off, and nothing draws its text.
+        _selectedTextTrackId = null;
+        return true;
+      }
+      if (trackId == _nativeTextTrackId) {
+        // Already the decoding track — this is Off being lifted, so only the
+        // overlay changes.
+        _selectedTextTrackId = trackId;
+        return true;
+      }
+      final List<TextTrack>? tracks = await controller.textTracks;
+      final TextTrack? track = tracks?.cast<TextTrack?>().firstWhere(
+        (TextTrack? t) => t?.trackId == trackId,
+        orElse: () => null,
+      );
+      if (track == null) return false;
+      final bool ok = await controller.setTrackSelection(track);
+      if (ok) {
+        _selectedTextTrackId = trackId;
+        _nativeTextTrackId = trackId;
+      }
+      return ok;
+    } on Object catch (error) {
+      logPlayback('text track selection failed', error: error);
+      return false;
+    }
+  }
+
+  /// Last native error already logged, so a per-tick notification logs once.
+  String? _loggedError;
+
+  @override
+  void addListener(void Function(VideoplaybackValue) listener) {
+    void nativeListener() {
+      final VideoPlayerValue value = controller.value;
+      final String? description = value.hasError
+          ? value.errorDescription ??
+                streamingL10n.nativePlayerErrorNoDescription
+          : null;
+      if (description != null && description != _loggedError) {
+        _loggedError = description;
+        logPlayback('native playback failed', error: description);
+        logPlayback(
+          'native failure position_ms=${value.position.inMilliseconds} initialized=${value.isInitialized}',
+        );
+      }
+      listener(_value(value, errorMessage: description));
+    }
+
+    _listeners[listener] = nativeListener;
+    controller.addListener(nativeListener);
+  }
+
+  @override
+  void removeListener(void Function(VideoplaybackValue) listener) {
+    final void Function()? nativeListener = _listeners.remove(listener);
+    if (nativeListener != null) controller.removeListener(nativeListener);
+  }
+
+  @override
+  Future<void> dispose() => controller.dispose();
+
+  /// Bridges the plugin's value into the package-owned one, so nothing outside
+  /// this adapter depends on a plugin type.
+  VideoplaybackValue _value(VideoPlayerValue value, {String? errorMessage}) {
+    return VideoplaybackValue(
+      isCompleted: value.isCompleted,
+      errorMessage: errorMessage,
+      position: value.isInitialized ? value.position : null,
+      // The plugin reports a range; playback length is its end.
+      duration: value.isInitialized ? value.duration.end : null,
+      // Carried for playback events; nothing else reads them off this value
+      // (the overlay takes its own from the plugin in [_bridgeTick]).
+      // `isPlaying` here is the request to play, and stays true through a
+      // stall, so not playing is paused unless playback is over.
+      isPlaying: value.isPlaying,
+      isBuffering: value.isBuffering,
+      isPaused:
+          value.isInitialized &&
+          !value.isPlaying &&
+          !value.isCompleted &&
+          !value.hasError,
+    );
+  }
+}

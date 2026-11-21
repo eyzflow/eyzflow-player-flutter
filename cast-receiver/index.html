@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+  The EYZFlow Cast receiver: the page a Chromecast (or Google TV) loads when an
+  EYZFlow player casts to it. It plays the stream the sender names and adds the
+  DRM access-token header to every Widevine licence request, which Google's
+  standard receiver cannot do.
+
+  The sender (eyzflow_player, lib/src/cast/) sends a LOAD with:
+    media.contentId    the stream id
+    media.customData   {
+      manifestUrl:  "https://stream.eyzflow.com/<id>/manifest.mpd",
+      licenseUrl:   "https://api.eyzflow.com/v1/drm/<id>/widevine/acquire"  (absent for a clear stream),
+      accessToken:  "<base64 access-token header>"                           (absent for a clear stream)
+    }
+
+  DASH with Widevine is the path the web player plays (Shaka), and the one the
+  Cast framework plays natively, so the receiver takes the DASH manifest even
+  though the phones play HLS. Both address the same encrypted segments.
+
+  Host it over HTTPS and register its URL in the Google Cast SDK developer
+  console as a Custom Receiver; the console's app id goes into the player
+  (EyzflowPlayer.castReceiverAppId, or cast.receiverAppId in a player config).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>EYZFlow</title>
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0a0a0a;
+      }
+      cast-media-player {
+        /* The web player's default theme. */
+        --theme-hue: 241;
+        --progress-color: #615fff;
+        --font-family: system-ui, sans-serif;
+        --splash-image: none;
+        --background-color: #0a0a0a;
+      }
+    </style>
+  </head>
+  <body>
+    <cast-media-player></cast-media-player>
+    <script>
+      (() => {
+        const framework = cast.framework;
+        const context = framework.CastReceiverContext.getInstance();
+        const player = context.getPlayerManager();
+
+        // The access token of the media playing now: read per licence request,
+        // so a new LOAD (next film, re-cast with a new session) takes over.
+        let accessToken = null;
+
+        player.setMessageInterceptor(framework.messages.MessageType.LOAD, (request) => {
+          const media = request.media || {};
+          const data = media.customData || {};
+          accessToken = typeof data.accessToken === "string" ? data.accessToken : null;
+          if (typeof data.manifestUrl === "string") {
+            media.contentUrl = data.manifestUrl;
+            media.contentType = "application/dash+xml";
+          }
+          media.streamType = framework.messages.StreamType.BUFFERED;
+          request.media = media;
+          return request;
+        });
+
+        player.setMediaPlaybackInfoHandler((loadRequest, playbackConfig) => {
+          const data = (loadRequest.media && loadRequest.media.customData) || {};
+          if (typeof data.licenseUrl === "string") {
+            playbackConfig.protectionSystem = framework.ContentProtection.WIDEVINE;
+            playbackConfig.licenseUrl = data.licenseUrl;
+            playbackConfig.licenseRequestHandler = (request) => {
+              request.headers = request.headers || {};
+              if (accessToken) request.headers["access-token"] = accessToken;
+            };
+          }
+          return playbackConfig;
+        });
+
+        // Licence refusals carry the backend's code (STREAM_LIMIT, DEVICE_LIMIT,
+        // PLAYER_KEY_INVALID, …); log it so a receiver debug session shows why.
+        player.addEventListener(framework.events.EventType.ERROR, (event) => {
+          console.warn("[eyzflow-receiver] error", event.detailedErrorCode, event.error);
+        });
+
+        const options = new framework.CastReceiverOptions();
+        // Close the receiver after 10 idle minutes, as Google's own does.
+        options.maxInactivity = 600;
+        options.disableIdleTimeout = false;
+        context.start(options);
+      })();
+    </script>
+  </body>
+</html>
