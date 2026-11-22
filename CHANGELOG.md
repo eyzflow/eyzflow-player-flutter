@@ -1,4 +1,4 @@
-## Unreleased
+## 0.2.0
 
 - Ads from the player config (`features.ads`, `ads.adTagUrl`) on Android,
   Android TV and iOS, through Google IMA (`interactive_media_ads`). Ad breaks
