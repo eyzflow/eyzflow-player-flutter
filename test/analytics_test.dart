@@ -70,6 +70,23 @@ void main() {
       expect(m.pausedMs, 0);
     });
 
+    test('a pre-roll before the player is ready is not startup', () {
+      // Android plays the pre-roll before the content player loads.
+      now = 200;
+      collector.beginAd();
+      now = 15200;
+      collector.endAd();
+      now = 15600;
+      collector.ready(duration: _s(3600));
+      now = 16000;
+      collector.playing(position: Duration.zero);
+
+      final m = collector.metrics();
+      // 200 ms before the ad and 400 ms after it; the 15 s ad is left out.
+      expect(m.playerStartupMs, 600);
+      expect(m.videoStartupMs, 1000);
+    });
+
     test('a mid-roll is left out of the time played and paused', () {
       collector.playing(position: Duration.zero);
       now = 10000;

@@ -30,8 +30,8 @@ final class BeatCollector {
   late final int _createdAt;
   late int _since;
 
-  /// Where video startup is measured from: creation, moved on by the time
-  /// a pre-roll took.
+  /// Where startup is measured from: creation, moved on by the time a
+  /// pre-roll took (before the player was ready, or before the first frame).
   late int _startRef;
 
   /// Since when an ad break has held the content, or null outside one.
@@ -87,7 +87,7 @@ final class BeatCollector {
     _observe(position, duration);
     if (_ready) return;
     _ready = true;
-    _playerStartupMs = _now() - _createdAt;
+    _playerStartupMs = _now() - _startRef;
   }
 
   /// The player reports playing. The first time, that is the first frame.

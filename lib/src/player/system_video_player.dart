@@ -248,9 +248,17 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
           ads.contentPosition(position);
         }
       },
-      beforePlay: ads?.beforeContent,
+      // Android: the pre-roll plays before the content player loads (below).
+      beforePlay: _prerollBeforeLoad ? null : ads?.beforeContent,
     );
     _session = session;
+    if (ads != null && _prerollBeforeLoad) {
+      // TVs (and some phones) have one hardware video decoder: while the
+      // content player holds it, IMA's ad player gets none and shows a black
+      // picture under its countdown. So the pre-roll plays first.
+      await ads.beforeContent();
+      if (!mounted || !identical(_session, session)) return;
+    }
     await session.start();
     // Overlay mode needs a rebuild once the controller exists: unlike the
     // native-controls path, nothing else calls setState on the injected-
@@ -260,6 +268,9 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     }
   }
 
+  bool get _prerollBeforeLoad =>
+      defaultTargetPlatform == TargetPlatform.android;
+
   /// The ads scheduler for a new session, or null without an ad tag. The
   /// markers are read from the manifest while the player starts.
   AdBreakScheduler? _setUpAds(PlaybackEventEmitter events) {
@@ -268,8 +279,8 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     if (ads == null) return null;
     final SystemPlayerAdHooks hooks = SystemPlayerAdHooks(
       adTagUrl: ads.adTagUrl,
-      pauseContent: () => unawaited(_playback?.pause()),
-      resumeContent: () => unawaited(_playback?.play()),
+      pauseContent: () => unawaited(_pauseForAd()),
+      resumeContent: () => unawaited(_resumeAfterAd()),
       contentDuration: () => _playback?.value.duration,
       scheduler: () => _ads!,
     );
@@ -311,6 +322,25 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       }),
     );
     return scheduler;
+  }
+
+  /// The content stops for a mid-roll. On Android its player also lets go
+  /// of the video decoder: on a TV with one, IMA's ad would have no picture.
+  Future<void> _pauseForAd() async {
+    final VideoplaybackController? playback = _playback;
+    if (playback is _SystemPlayerController && _prerollBeforeLoad) {
+      await playback.controller.releaseForAd();
+    } else {
+      await playback?.pause();
+    }
+  }
+
+  Future<void> _resumeAfterAd() async {
+    final VideoplaybackController? playback = _playback;
+    if (playback is _SystemPlayerController && _prerollBeforeLoad) {
+      await playback.controller.restoreAfterAd();
+    }
+    await playback?.play();
   }
 
   void _onAdsChanged() {

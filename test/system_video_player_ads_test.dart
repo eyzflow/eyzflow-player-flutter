@@ -5,6 +5,7 @@ import 'package:eyzflow_player/src/bloc/videoplayer_feature_bloc.dart';
 import 'package:eyzflow_player/src/player/player_controls.dart';
 import 'package:eyzflow_player/src/player/player_policy.dart';
 import 'package:eyzflow_player/src/player/system_video_player.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +52,7 @@ final class _Content implements VideoplaybackController, VideoplaybackTracks {
   final List<void Function(VideoplaybackValue)> _listeners =
       <void Function(VideoplaybackValue)>[];
   var playCount = 0;
+  var initializeCount = 0;
   var pauseCount = 0;
   VideoplaybackValue _value = const VideoplaybackValue();
 
@@ -69,7 +71,7 @@ final class _Content implements VideoplaybackController, VideoplaybackTracks {
   @override
   VideoplaybackValue get value => _value;
   @override
-  Future<void> initialize() async {}
+  Future<void> initialize() async => initializeCount++;
   @override
   Future<void> play() async => playCount++;
   @override
@@ -160,18 +162,53 @@ void main() {
     expect(f.content.playCount, 1);
   });
 
-  testWidgets('a pre-roll plays before the content starts', (tester) async {
+  testWidgets('Android: a pre-roll plays before the content player loads', (
+    tester,
+  ) async {
     final _Fixture f = _Fixture(tester);
     await f.mount();
     expect(f.ads!.requests, 1);
-    expect(f.content.playCount, 0, reason: 'held for the pre-roll');
-    expect(f.eventTypes, contains(PlaybackAdBreakStarted));
+    // A TV has one hardware decoder: the content must not hold it yet.
+    expect(f.content.initializeCount, 0);
+    expect(f.content.playCount, 0);
+    expect(f.eventTypes, <Type>[PlaybackAdBreakStarted]);
 
     f.ads!.playAd();
     await tester.pump();
+    await tester.pump();
+    expect(f.content.initializeCount, 1);
     expect(f.content.playCount, 1);
-    expect(f.eventTypes.last, PlaybackAdBreakEnded);
+    expect(f.eventTypes, <Type>[
+      PlaybackAdBreakStarted,
+      PlaybackAdBreakEnded,
+      PlaybackReady,
+    ]);
     expect(f.ads!.discards, greaterThan(0));
+  });
+
+  testWidgets('iOS: the content loads while the pre-roll plays', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      final _Fixture f = _Fixture(tester);
+      await f.mount();
+      expect(f.ads!.requests, 1);
+      expect(f.content.initializeCount, 1);
+      expect(f.content.playCount, 0, reason: 'held for the pre-roll');
+
+      f.ads!.playAd();
+      await tester.pump();
+      expect(f.content.playCount, 1);
+      expect(f.eventTypes, <Type>[
+        PlaybackReady,
+        PlaybackAdBreakStarted,
+        PlaybackAdBreakEnded,
+      ]);
+      await tester.pumpWidget(const SizedBox());
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('a mid-roll at its marker pauses and resumes the content', (

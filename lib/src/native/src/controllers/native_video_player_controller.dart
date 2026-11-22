@@ -1666,6 +1666,18 @@ class NativeVideoPlayerController {
     await _methodChannel?.pause();
   }
 
+  /// Android: pauses for an ad break and releases the video decoder, which
+  /// the ad player needs on devices that have one (TVs). Position and media
+  /// are kept; [restoreAfterAd] prepares them again.
+  Future<void> releaseForAd() async {
+    await _methodChannel?.releaseForAd();
+  }
+
+  /// Android: prepares the player again after [releaseForAd]; then [play].
+  Future<void> restoreAfterAd() async {
+    await _methodChannel?.restoreAfterAd();
+  }
+
   /// Seeks to a specific position
   Future<void> seekTo(Duration position) async {
     await _methodChannel?.seekTo(position);

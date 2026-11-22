@@ -111,6 +111,20 @@ void main() {
       });
     });
 
+    test('the driver has the request before the layer is told', () {
+      fakeAsync((FakeAsync async) {
+        // The ad layer rebuilds on the notification and mounts the display
+        // container the driver made for the request: it must exist by then.
+        final _Harness h = _Harness();
+        final List<int> requestsSeen = <int>[];
+        h.scheduler.addListener(
+          () => requestsSeen.add(h.driver.count('request')),
+        );
+        h.start(async);
+        expect(requestsSeen.first, 1);
+      });
+    });
+
     test('a VMAP keeps its own schedule: mid-roll and post-roll', () {
       fakeAsync((FakeAsync async) {
         final _Harness h = _Harness();

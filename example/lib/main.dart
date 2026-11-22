@@ -60,10 +60,10 @@ class _LoaderPageState extends State<LoaderPage> {
   final _castReceiver = TextEditingController(text: 'A534F914');
   final _startAt = TextEditingController();
 
-  bool _isFeature = true;
+  bool _isFeature = !const bool.fromEnvironment('EYZFLOW_TRAILER');
 
   // Tizen reports itself as Linux.
-  bool _isTv = Platform.isLinux;
+  bool _isTv = Platform.isLinux || const bool.fromEnvironment('EYZFLOW_TV');
   final List<String> _log = [];
 
   void _add(String line) {
@@ -74,6 +74,15 @@ class _LoaderPageState extends State<LoaderPage> {
         '${now.second.toString().padLeft(2, '0')}';
     if (!mounted) return;
     setState(() => _log.insert(0, '$stamp  $line'));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Plays the prefilled stream at once: typing on a TV remote is slow.
+    if (const bool.fromEnvironment('EYZFLOW_AUTOPLAY')) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _play());
+    }
   }
 
   String? _orNull(TextEditingController c) =>

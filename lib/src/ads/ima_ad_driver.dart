@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:interactive_media_ads/interactive_media_ads.dart';
 
@@ -67,7 +68,10 @@ final class ImaAdDriver implements AdDriver {
             unawaited(_onLoaded(data.manager, generation)),
         onAdsLoadError: (AdsLoadErrorData data) {
           if (generation != _generation) return;
-          logPlayback('ads failed to load', error: data.error.message);
+          logPlayback(
+            'ads failed to load: ${data.error.type.name} ${data.error.code.name}',
+            error: data.error.message,
+          );
           scheduler.adsFailed();
         },
       );
@@ -110,7 +114,10 @@ final class ImaAdDriver implements AdDriver {
           onAdEvent: (AdEvent event) => _onAdEvent(event, generation),
           onAdErrorEvent: (AdErrorEvent event) {
             if (generation != _generation) return;
-            logPlayback('ad failed', error: event.error.message);
+            logPlayback(
+              'ad failed: ${event.error.type.name} ${event.error.code.name}',
+              error: event.error.message,
+            );
             scheduler.adError();
           },
         ),
@@ -130,6 +137,9 @@ final class ImaAdDriver implements AdDriver {
 
   void _onAdEvent(AdEvent event, int generation) {
     if (generation != _generation) return;
+    if (event.type != AdEventType.adProgress) {
+      logPlayback('ad event ${event.type.name}');
+    }
     switch (event.type) {
       case AdEventType.contentPauseRequested:
         scheduler.contentPauseRequested();
@@ -205,11 +215,19 @@ class AdLayer extends StatelessWidget {
       return Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          if (scheduler.adPlaying) const ColoredBox(color: Colors.black),
+          // Not on Android: IMA plays the ad there in a SurfaceView, drawn
+          // behind the window, which an opaque Flutter layer can cover.
+          if (scheduler.adPlaying &&
+              defaultTargetPlatform != TargetPlatform.android)
+            const ColoredBox(color: Colors.black),
+          // Keyed here, on the Stack's own child: the backdrop appearing
+          // before it must not rebuild the platform view, which IMA allows
+          // only once per container.
           if (container != null)
             IgnorePointer(
+              key: ObjectKey(container),
               ignoring: !inBreak,
-              child: KeyedSubtree(key: ObjectKey(container), child: container),
+              child: container,
             ),
           if (inBreak && !scheduler.adPlaying)
             const ColoredBox(

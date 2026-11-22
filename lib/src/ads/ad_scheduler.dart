@@ -274,8 +274,10 @@ final class AdBreakScheduler extends ChangeNotifier {
   void _request() {
     _requesting = true;
     _startGuard();
-    notifyListeners();
+    // The driver first: it creates the display container the listeners
+    // then put on screen.
     driver.requestAds();
+    notifyListeners();
   }
 
   void _beginBreak() {
