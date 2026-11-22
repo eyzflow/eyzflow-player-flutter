@@ -5,7 +5,7 @@ import io.flutter.plugin.common.MethodChannel
 
 /**
  * A player backend reachable through the shared 'eyzflow_player_native'
- * MethodChannel routing (EyzflowPlayerPlugin.registeredViews).
+ * MethodChannel routing (EYZFlowPlayerPlugin.registeredViews).
  *
  * Implemented by [VideoPlayerView] (platform views: PlayerView or the
  * lightweight SurfaceView) and by the texture backend, which has no Android

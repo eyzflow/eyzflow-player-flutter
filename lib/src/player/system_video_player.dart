@@ -511,7 +511,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   Future<VideoplaybackController> _createSystemController(
     VideoplayerTarget target,
   ) async {
-    final EyzflowSource source = switch (target) {
+    final EYZFlowSource source = switch (target) {
       VideoplayerTrailerTarget(:final source) => source,
       VideoplayerSourceTarget(:final source) => source,
     };
@@ -782,7 +782,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     _bridgeTick(playback, bloc);
     unawaited(_loadTracksOnce(tracks, bloc));
 
-    final EyzflowSource source = switch (widget.target) {
+    final EYZFlowSource source = switch (widget.target) {
       VideoplayerTrailerTarget(:final source) => source,
       VideoplayerSourceTarget(:final source) => source,
     };

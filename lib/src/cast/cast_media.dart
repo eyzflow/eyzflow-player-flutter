@@ -13,7 +13,7 @@ import 'cast_backend.dart';
 /// clear stream). It carries the phone's device and playback session, so the
 /// film on the TV counts as the phone's one stream.
 CastMedia castMediaFor(
-  EyzflowSource source, {
+  EYZFlowSource source, {
   required Duration startAt,
   String? accessHeader,
 }) {

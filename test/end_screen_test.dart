@@ -9,7 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const VideoplayerTarget _film = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'film', title: 'Film'),
+  EYZFlowSource(id: 'film', title: 'Film'),
 );
 
 Duration _s(num seconds) => Duration(milliseconds: (seconds * 1000).round());
@@ -24,20 +24,20 @@ final List<StreamSignal> _signals = <StreamSignal>[
   ),
 ];
 
-const EyzflowEndScreenItem _next = EyzflowEndScreenItem(
+const EYZFlowEndScreenItem _next = EYZFlowEndScreenItem(
   streamId: 'ep2',
   title: 'Episode 2',
   badge: 'S1 E2',
 );
 
-const List<EyzflowEndScreenItem> _films = <EyzflowEndScreenItem>[
-  EyzflowEndScreenItem(
+const List<EYZFlowEndScreenItem> _films = <EYZFlowEndScreenItem>[
+  EYZFlowEndScreenItem(
     streamId: 'a',
     title: 'Film A',
     duration: Duration(minutes: 92),
   ),
-  EyzflowEndScreenItem(streamId: 'b', title: 'Film B'),
-  EyzflowEndScreenItem(streamId: 'c', title: 'Film C'),
+  EYZFlowEndScreenItem(streamId: 'b', title: 'Film B'),
+  EYZFlowEndScreenItem(streamId: 'c', title: 'Film C'),
 ];
 
 final class _Content implements VideoplaybackController, VideoplaybackTracks {
@@ -112,7 +112,7 @@ final class _Fixture {
 
   Future<void> mount({
     bool tv = false,
-    EyzflowEndScreen? endScreen,
+    EYZFlowEndScreen? endScreen,
     PlayerOverlayBuilder? overlayBuilder,
     PlayerConfig config = PlayerConfig.defaults,
     List<StreamSignal>? signals,
@@ -126,7 +126,7 @@ final class _Fixture {
               settings: EndScreenSettings.resolve(config, endScreen),
               endScreen: endScreen,
               overlayBuilder: overlayBuilder,
-              onPick: (EyzflowEndScreenItem item) => picked.add(item.streamId),
+              onPick: (EYZFlowEndScreenItem item) => picked.add(item.streamId),
               child: SystemVideoPlayer(
                 target: _film,
                 useSharedOverlay: tv,
@@ -142,8 +142,8 @@ final class _Fixture {
     await tester.pump();
   }
 
-  EyzflowEndScreen endScreen({int? autoplaySeconds, bool prevent = false}) =>
-      EyzflowEndScreen(
+  EYZFlowEndScreen endScreen({int? autoplaySeconds, bool prevent = false}) =>
+      EYZFlowEndScreen(
         nextUp: _next,
         items: _films,
         autoplaySeconds: autoplaySeconds,
@@ -160,7 +160,7 @@ Finder _key(String k) => find.byKey(ValueKey<String>(k));
 void main() {
   group('end screen settings', () {
     test('on with something to show; the app over the config', () {
-      final EyzflowEndScreen options = const EyzflowEndScreen(items: _films);
+      final EYZFlowEndScreen options = const EYZFlowEndScreen(items: _films);
       final EndScreenSettings defaults = EndScreenSettings.resolve(
         PlayerConfig.defaults,
         options,
@@ -176,7 +176,7 @@ void main() {
       expect(
         EndScreenSettings.resolve(
           PlayerConfig.defaults,
-          const EyzflowEndScreen(),
+          const EYZFlowEndScreen(),
         ).enabled,
         isFalse,
       );
@@ -199,7 +199,7 @@ void main() {
       expect(
         EndScreenSettings.resolve(
           remote,
-          const EyzflowEndScreen(items: _films, autoplaySeconds: 99),
+          const EYZFlowEndScreen(items: _films, autoplaySeconds: 99),
         ).autoplaySeconds,
         30,
       );
@@ -215,7 +215,7 @@ void main() {
     test('phases: the credits, the end, or not now', () {
       final EndScreenSettings on = EndScreenSettings.resolve(
         PlayerConfig.defaults,
-        const EyzflowEndScreen(items: _films),
+        const EYZFlowEndScreen(items: _films),
       );
       expect(
         endScreenPhase(on, _signals.first, ended: false),
@@ -413,7 +413,7 @@ void main() {
     () {
       final EndScreenSettings on = EndScreenSettings.resolve(
         PlayerConfig.defaults,
-        const EyzflowEndScreen(items: _films),
+        const EYZFlowEndScreen(items: _films),
       );
       expect(on.secondsBeforeEnd, 20);
       EndScreenPhase? at(num s, {bool credits = false}) => endScreenPhase(
@@ -432,7 +432,7 @@ void main() {
       );
       final EndScreenSettings off = EndScreenSettings.resolve(
         remote,
-        const EyzflowEndScreen(items: _films),
+        const EYZFlowEndScreen(items: _films),
       );
       expect(
         endScreenPhase(
@@ -448,7 +448,7 @@ void main() {
       expect(
         EndScreenSettings.resolve(
           PlayerConfig.defaults,
-          const EyzflowEndScreen(items: _films, secondsBeforeEnd: 500),
+          const EYZFlowEndScreen(items: _films, secondsBeforeEnd: 500),
         ).secondsBeforeEnd,
         120,
       );

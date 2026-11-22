@@ -8,7 +8,7 @@ import 'package:video_player_avplay/video_player.dart';
 import 'package:eyzflow_player/src/player/tizen_avplay_player.dart';
 import 'package:eyzflow_player/src/player/widevine_license_client.dart';
 
-const EyzflowSource _trailerSource = EyzflowSource(
+const EYZFlowSource _trailerSource = EYZFlowSource(
   id: 'trailer-a',
   title: 'Trailer A',
 );
@@ -21,11 +21,11 @@ void main() {
 
   test('a trailer target is never DRM-protected, even if its source carries a '
       'feature-length sourceType', () {
-    const EyzflowSource source = EyzflowSource(
+    const EYZFlowSource source = EYZFlowSource(
       id: 'trailer-with-drm-shaped-source',
       title: 'Trailer',
       drmAccessHeader: 'base64-drm-payload',
-      sourceType: EyzflowFilm('title-a'),
+      sourceType: EYZFlowFilm('title-a'),
     );
 
     expect(
@@ -40,11 +40,11 @@ void main() {
   test(
     'a source DRM payload configures its own Widevine licence request',
     () async {
-      const EyzflowSource source = EyzflowSource(
+      const EYZFlowSource source = EYZFlowSource(
         id: 'film-a',
         title: 'Film A',
         drmAccessHeader: 'base64-drm-payload',
-        sourceType: EyzflowFilm('title-a'),
+        sourceType: EYZFlowFilm('title-a'),
       );
       final WidevineLicenseClient client = WidevineLicenseClient(
         httpClient: MockClient((http.Request request) async {
@@ -77,11 +77,11 @@ void main() {
   });
 
   test('a DRM-carrying source selects Widevine and only Widevine', () {
-    const EyzflowSource source = EyzflowSource(
+    const EYZFlowSource source = EYZFlowSource(
       id: 'film-a',
       title: 'Film A',
       drmAccessHeader: 'base64-drm-payload',
-      sourceType: EyzflowFilm('title-a'),
+      sourceType: EYZFlowFilm('title-a'),
     );
     final DrmConfigs? configs = drmConfigsForTarget(
       const VideoplayerSourceTarget(source),

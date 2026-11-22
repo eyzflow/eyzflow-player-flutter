@@ -22,10 +22,10 @@ import 'package:eyzflow_player/eyzflow_player.dart';
 
 Navigator.of(context).push(MaterialPageRoute<void>(
   fullscreenDialog: true,
-  builder: (_) => EyzflowPlayer(
+  builder: (_) => EYZFlowPlayer(
     streamId: streamId,                       // not the catalogue id
     title: title,
-    sourceType: EyzflowFilm(catalogueId),     // or EyzflowTrailer(…)
+    sourceType: EYZFlowFilm(catalogueId),     // or EYZFlowTrailer(…)
     progressSeconds: resumeAt,
     isTv: isTv,
     drmAuthorization: 'Bearer $cognitoAccessToken',
@@ -80,10 +80,10 @@ Without `playerKey` there is no key check and no beats. Without `storefrontId`
 ### Viewer messages
 
 The player's own copy (controls, playback errors) is localized in en, de, fr
-and nl (`EyzflowPlayer(language:)` or `setEyzflowPlayerLanguage`, else the
+and nl (`EYZFlowPlayer(language:)` or `setEYZFlowPlayerLanguage`, else the
 device's language). Track names in the TV audio and subtitle panels come from
 a built-in table (Unicode CLDR) in the same language: "Deutsch" for `de`,
-`deu`, `ger` or `de_DE`; set `EyzflowLanguageNames.resolver` to use your own.
+`deu`, `ger` or `de_DE`; set `EYZFlowLanguageNames.resolver` to use your own.
 The limit and key messages are the web
 player's, in English; replace the error screen with `errorBuilder` to show
 your own (the failure carries its code).
@@ -252,7 +252,7 @@ Not honoured anywhere in the apps:
 - `features.qualitySelector`: the app players have no quality menu.
 - `cast.androidReceiverCompatible`, `cast.autoJoinPolicy`: options of the
   web Cast SDK.
-- `isProtected`: the source type decides (`EyzflowFilm` plays with DRM).
+- `isProtected`: the source type decides (`EYZFlowFilm` plays with DRM).
 
 Without a config (or when it cannot be loaded) the TV overlay keeps its own
 white-on-black look; the dashboard's default purple applies only when a
@@ -278,14 +278,14 @@ Pass the films; the player shows them Netflix-style at the closing credits
 stream and plays a picked one in place:
 
 ```dart
-EyzflowPlayer(
+EYZFlowPlayer(
   streamId: episode.streamId,
   title: episode.title,
-  endScreen: EyzflowEndScreen(
-    nextUp: EyzflowEndScreenItem(streamId: next.streamId, title: next.title, poster: next.poster),
+  endScreen: EYZFlowEndScreen(
+    nextUp: EYZFlowEndScreenItem(streamId: next.streamId, title: next.title, poster: next.poster),
     items: [
       for (final f in similar)
-        EyzflowEndScreenItem(streamId: f.streamId, title: f.title, poster: f.poster, duration: f.length),
+        EYZFlowEndScreenItem(streamId: f.streamId, title: f.title, poster: f.poster, duration: f.length),
     ],
     onSelect: (selection) => router.replaceWatch(selection.item.streamId),
   ),
@@ -306,7 +306,7 @@ lib/src/videoplayer_feature.dart, bloc/, player/, l10n/
                              the player
 lib/src/core/                key check, sessions, access token, beats, player
                              configs (pure Dart)
-lib/src/flutter/             EyzflowPlayer, the coordinator, the error screen
+lib/src/flutter/             EYZFlowPlayer, the coordinator, the error screen
 lib/src/native/, android/, ios/
                              the native player for Android and iOS, based on
                              better_native_video_player (MIT, see
@@ -339,8 +339,8 @@ nothing.
 
 ## Host setup
 
-1. Optionally set the player's language (`EyzflowPlayer(language:)`, or
-   `setEyzflowPlayerLanguage` before building a `VideoplayerFeatureView`);
+1. Optionally set the player's language (`EYZFlowPlayer(language:)`, or
+   `setEYZFlowPlayerLanguage` before building a `VideoplayerFeatureView`);
    without it the device's language is used when the player has it.
 2. Pass `isTv`. The package does not detect the form factor. On Android it
    picks the D-pad overlay and the `androidtv` platform; Tizen always plays
@@ -387,7 +387,7 @@ nothing.
    nothing extra.
 
 `endpoints` moves the key check, sessions and beats (for a dev backend). Stream
-and DRM licence URLs come from `EyzflowSource` and stay on production, so a dev
+and DRM licence URLs come from `EYZFlowSource` and stay on production, so a dev
 session id would not match the production licence gate.
 
 ## Known limits (v1)

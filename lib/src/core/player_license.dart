@@ -171,11 +171,11 @@ final class PlayerLicenseRequest {
 final class PlayerLicenseClient {
   PlayerLicenseClient({
     http.Client? client,
-    this.endpoints = const EyzflowEndpoints(),
+    this.endpoints = const EYZFlowEndpoints(),
   }) : _client = client ?? http.Client();
 
   final http.Client _client;
-  final EyzflowEndpoints endpoints;
+  final EYZFlowEndpoints endpoints;
 
   /// Throws [PlayerLicenseException] on a refusal, and any other exception
   /// when the check could not be made (network, server error, rate limit).

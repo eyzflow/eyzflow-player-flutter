@@ -418,7 +418,7 @@ import QuartzCore
 
             // Setup controller-level event channel (if not already set up)
             // This enables persistent event delivery for PiP and AirPlay
-            EyzflowPlayerPlugin.setupControllerEventChannel(for: controllerIdValue)
+            EYZFlowPlayerPlugin.setupControllerEventChannel(for: controllerIdValue)
 
             // If this controller is currently the one with automatic PiP enabled OR if the player is playing,
             // this new view should become the primary view and get automatic PiP
@@ -996,7 +996,7 @@ import QuartzCore
         npLog("VideoPlayerView deinit for channel: \(channelName), viewId: \(viewId)")
 
         // Drop this view from the plugin's method-call routing registry
-        EyzflowPlayerPlugin.unregisterView(withId: viewId)
+        EYZFlowPlayerPlugin.unregisterView(withId: viewId)
 
         // Use the isPipCurrentlyActive flag to check if PiP is active
         let isPipActiveNow = isPipCurrentlyActive

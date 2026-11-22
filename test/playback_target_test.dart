@@ -3,7 +3,7 @@ import 'package:eyzflow_player/eyzflow_player.dart';
 
 void main() {
   test('trailer targets carry their source and compare by it', () {
-    const EyzflowSource source = EyzflowSource(
+    const EYZFlowSource source = EYZFlowSource(
       id: 'trailer-a',
       title: 'Trailer A',
     );

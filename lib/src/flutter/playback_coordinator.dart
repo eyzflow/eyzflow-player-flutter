@@ -13,16 +13,16 @@ import '../core/player_license.dart';
 import 'event_adapter.dart';
 
 /// Why the player stopped or did not start, as the error screen shows it.
-sealed class EyzflowPlayerFailure {
-  const EyzflowPlayerFailure();
+sealed class EYZFlowPlayerFailure {
+  const EYZFlowPlayerFailure();
 
   /// The viewer-facing text.
   String get message;
 }
 
 /// The player key check refused the app.
-final class EyzflowLicenseFailure extends EyzflowPlayerFailure {
-  const EyzflowLicenseFailure(this.error);
+final class EYZFlowLicenseFailure extends EYZFlowPlayerFailure {
+  const EYZFlowLicenseFailure(this.error);
 
   final PlayerLicenseError error;
 
@@ -31,8 +31,8 @@ final class EyzflowLicenseFailure extends EyzflowPlayerFailure {
 }
 
 /// A stream or device limit, or the session was ended elsewhere.
-final class EyzflowLimitFailure extends EyzflowPlayerFailure {
-  const EyzflowLimitFailure(this.error);
+final class EYZFlowLimitFailure extends EYZFlowPlayerFailure {
+  const EYZFlowLimitFailure(this.error);
 
   final PlaybackLimitError error;
 
@@ -41,19 +41,19 @@ final class EyzflowLimitFailure extends EyzflowPlayerFailure {
 }
 
 /// Where the player is before and around playback.
-sealed class EyzflowPlayerStatus {
-  const EyzflowPlayerStatus();
+sealed class EYZFlowPlayerStatus {
+  const EYZFlowPlayerStatus();
 }
 
 /// Checking the key and opening the session.
-final class EyzflowPlayerLoading extends EyzflowPlayerStatus {
-  const EyzflowPlayerLoading();
+final class EYZFlowPlayerLoading extends EYZFlowPlayerStatus {
+  const EYZFlowPlayerLoading();
 }
 
 /// Mount the player with this DRM `access-token` (null for a stream that
 /// plays without DRM).
-final class EyzflowPlayerReady extends EyzflowPlayerStatus {
-  const EyzflowPlayerReady(
+final class EYZFlowPlayerReady extends EYZFlowPlayerStatus {
+  const EYZFlowPlayerReady(
     this.drmAccessHeader, {
     this.planAds,
     this.adTargeting = const {},
@@ -71,10 +71,10 @@ final class EyzflowPlayerReady extends EyzflowPlayerStatus {
 }
 
 /// Show the failure; the player is not (or no longer) mounted.
-final class EyzflowPlayerFailed extends EyzflowPlayerStatus {
-  const EyzflowPlayerFailed(this.failure);
+final class EYZFlowPlayerFailed extends EYZFlowPlayerStatus {
+  const EYZFlowPlayerFailed(this.failure);
 
-  final EyzflowPlayerFailure failure;
+  final EYZFlowPlayerFailure failure;
 }
 
 /// What one playback is asked to do.
@@ -120,7 +120,7 @@ final class PlaybackCoordinatorConfig {
 /// player key check, then playback session, then the DRM access token; while
 /// playing, the token renewal, the session heartbeat and the beats; on close,
 /// the final beat and the session's end. The widget mounts the player when
-/// [status] is [EyzflowPlayerReady] and feeds its events to [onPlaybackEvent].
+/// [status] is [EYZFlowPlayerReady] and feeds its events to [onPlaybackEvent].
 final class PlaybackCoordinator extends ChangeNotifier {
   PlaybackCoordinator({
     required this.config,
@@ -144,7 +144,7 @@ final class PlaybackCoordinator extends ChangeNotifier {
   final ValueChanged<PlayerLicenseError>? onLicenseError;
   final ValueChanged<String>? onError;
 
-  EyzflowPlayerStatus _status = const EyzflowPlayerLoading();
+  EYZFlowPlayerStatus _status = const EYZFlowPlayerLoading();
   PlayerLicenseSession? _license;
   BeatTransport? _transport;
   PlaybackEventAdapter? _adapter;
@@ -155,7 +155,7 @@ final class PlaybackCoordinator extends ChangeNotifier {
   var _disposed = false;
   Future<void>? _ending;
 
-  EyzflowPlayerStatus get status => _status;
+  EYZFlowPlayerStatus get status => _status;
 
   /// The player token, while the key check has granted one.
   String? get playerToken => _license?.token;
@@ -182,7 +182,7 @@ final class PlaybackCoordinator extends ChangeNotifier {
           onRefused: _onLicenseRefusedWhilePlaying,
         );
       } on PlayerLicenseException catch (refusal) {
-        return _fail(EyzflowLicenseFailure(refusal.error));
+        return _fail(EYZFlowLicenseFailure(refusal.error));
       } on Object catch (error) {
         // The check could not be made: play on without a token, as the web
         // player does. The DRM gate decides.
@@ -226,7 +226,7 @@ final class PlaybackCoordinator extends ChangeNotifier {
         final String? id = session.id;
         if (id != null) _startHeartbeat(target, id, session.heartbeatInterval);
       } on PlaybackLimitException catch (limit) {
-        return _fail(EyzflowLimitFailure(limit.error));
+        return _fail(EYZFlowLimitFailure(limit.error));
       } on Object catch (error) {
         // Not a limit: carry on. The licence request enforces limits, and
         // ads follow the player config.
@@ -250,7 +250,7 @@ final class PlaybackCoordinator extends ChangeNotifier {
 
     if (_disposed) return _endAll();
     _setStatus(
-      EyzflowPlayerReady(
+      EYZFlowPlayerReady(
         accessHeader,
         planAds: session?.ads,
         adTargeting: session?.adTargeting ?? const {},
@@ -305,7 +305,7 @@ final class PlaybackCoordinator extends ChangeNotifier {
         final alive = await _sessionClient.heartbeat(target, sessionId);
         if (!alive && !_disposed) {
           await _fail(
-            const EyzflowLimitFailure(
+            const EYZFlowLimitFailure(
               PlaybackLimitError(
                 code: PlaybackLimitCode.playbackSessionEnded,
                 message: 'Playback was stopped from another device.',
@@ -322,20 +322,20 @@ final class PlaybackCoordinator extends ChangeNotifier {
   void _onLicenseRefusedWhilePlaying(PlayerLicenseError error) {
     // Only an enforcing organisation stops a playback already under way.
     if (_license?.current.mode != PlayerKeyMode.enforce) return;
-    unawaited(_fail(EyzflowLicenseFailure(error)));
+    unawaited(_fail(EYZFlowLicenseFailure(error)));
   }
 
   /// A DRM licence refused by the limit or site check names its code in the
   /// error text, when the platform passes the server's body on.
-  static EyzflowPlayerFailure? _failureIn(String message) {
+  static EYZFlowPlayerFailure? _failureIn(String message) {
     for (final code in PlayerLicenseCode.values) {
       if (message.contains(code.wireName)) {
-        return EyzflowLicenseFailure(PlayerLicenseError.of(code));
+        return EYZFlowLicenseFailure(PlayerLicenseError.of(code));
       }
     }
     for (final code in PlaybackLimitCode.values) {
       if (message.contains(code.wireName)) {
-        return EyzflowLimitFailure(
+        return EYZFlowLimitFailure(
           PlaybackLimitError(code: code, message: code.message),
         );
       }
@@ -343,13 +343,13 @@ final class PlaybackCoordinator extends ChangeNotifier {
     return null;
   }
 
-  Future<void> _fail(EyzflowPlayerFailure failure) async {
-    if (_status is EyzflowPlayerFailed || _disposed) return;
-    _setStatus(EyzflowPlayerFailed(failure));
+  Future<void> _fail(EYZFlowPlayerFailure failure) async {
+    if (_status is EYZFlowPlayerFailed || _disposed) return;
+    _setStatus(EYZFlowPlayerFailed(failure));
     switch (failure) {
-      case EyzflowLicenseFailure(:final error):
+      case EYZFlowLicenseFailure(:final error):
         onLicenseError?.call(error);
-      case EyzflowLimitFailure(:final error):
+      case EYZFlowLimitFailure(:final error):
         onLimitReached?.call(error);
     }
     onError?.call(failure.message);
@@ -382,7 +382,7 @@ final class PlaybackCoordinator extends ChangeNotifier {
     }
   }
 
-  void _setStatus(EyzflowPlayerStatus next) {
+  void _setStatus(EYZFlowPlayerStatus next) {
     if (_disposed) return;
     _status = next;
     notifyListeners();

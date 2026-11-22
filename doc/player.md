@@ -86,7 +86,7 @@ VideoplayerFeatureView(
 
 `PlaybackEvent` is sealed, so a `switch` with no `default` is checked for
 exhaustiveness. Every event carries `sourceId`
-(`EyzflowSource.id`), the playback `position`, and the `duration`
+(`EYZFlowSource.id`), the playback `position`, and the `duration`
 once the native player knows it.
 
 | Event | When |
@@ -155,7 +155,7 @@ web player's (`eyzflow-player`, `src/lib/ad-breaks.ts`).
 **Gate.** `PlayerOptions.fromConfig` sets `PlayerOptions.ads` (a `PlayerAds`)
 only when `features.ads` is on and `ads.adTagUrl` is not empty
 (`PlayerConfig.adTagUrl`). Without it nothing below runs: no manifest read for
-markers, no IMA, no ad request. `EyzflowPlayer` makes one `PlayerAds` per
+markers, no IMA, no ad request. `EYZFlowPlayer` makes one `PlayerAds` per
 start, and it outlives the player widget, so a fresh player after casting
 plays neither the pre-roll nor a played break again.
 
@@ -263,7 +263,7 @@ signal.
   and plays or pauses otherwise.
 - **Events.** Entering and leaving a span is reported as
   `PlaybackSignalStarted` / `PlaybackSignalEnded` (with the `StreamSignal`),
-  and `EyzflowPlayer.onSignal` gets the signal, then null. A skip is also a
+  and `EYZFlowPlayer.onSignal` gets the signal, then null. A skip is also a
   `PlaybackSeeked`.
 - **Config.** `features.skipButtons: false` hides the button; the events
   still come. `skipButtonTypes` (`intro`, `recap`, `openingCredits`,
@@ -279,15 +279,15 @@ Covered in `test/stream_signals_test.dart`,
 
 ## End screen and overlays
 
-`EyzflowPlayer.endScreen` (`EyzflowEndScreen`) is a Netflix-style end screen
-from the films the app passes (`EyzflowEndScreenItem`: `streamId`, `title`,
+`EYZFlowPlayer.endScreen` (`EYZFlowEndScreen`) is a Netflix-style end screen
+from the films the app passes (`EYZFlowEndScreenItem`: `streamId`, `title`,
 `poster`, `description`, `duration`, `badge`, `sourceType`, `data`), and
-`EyzflowPlayer.overlayBuilder` draws the app's own UI instead.
+`EYZFlowPlayer.overlayBuilder` draws the app's own UI instead.
 
 - **Where.** `PlayerOverlayLayer` (`lib/src/end_screen/end_screen_view.dart`)
   wraps the video surface on every route (phones, Android TV, Tizen), from
   the first frame, so the native platform view is never re-parented. It reads
-  `PlayerOverlayScope`, which `EyzflowPlayer` puts around the player, and the
+  `PlayerOverlayScope`, which `EYZFlowPlayer` puts around the player, and the
   player's `SignalTracker` and position reports (`PlaybackFacts`).
 - **When.** From the closing credits signal. A stream without one gets it
   `secondsBeforeEnd` seconds before the end (default 20, 0–120; 0: only when
@@ -309,7 +309,7 @@ from the films the app passes (`EyzflowEndScreenItem`: `streamId`, `title`,
   runs while the credits play or after the end, then picks the next stream.
   Cancel stops it.
 - **Picking.** `onSelect(EndScreenSelection)` hears it first;
-  `preventDefault()` leaves it to the app. Otherwise `EyzflowPlayer` plays the
+  `preventDefault()` leaves it to the app. Otherwise `EYZFlowPlayer` plays the
   item in place: a new key check, playback session and DRM for its stream
   (`sourceType`, else the same kind as the stream playing). A new `streamId`
   from the app wins over a picked one.
@@ -375,7 +375,7 @@ This section describes the Tizen/AVPlay path specifically — the section
 above covers Android/iOS, which take `hlsStreamUrl` through
 the native player instead of `avplay.VideoFormat`.
 
-Every target resolves to `EyzflowSource.hlsStreamUrl` and the constant
+Every target resolves to `EYZFlowSource.hlsStreamUrl` and the constant
 `avplay.VideoFormat.hls`. There is no format to choose.
 
 HLS is not Apple's private path. Both manifests address the **same** encrypted
@@ -387,7 +387,7 @@ DASH path could not follow: on hardware, DASH played no full-length film and HLS
 plays them.
 
 FairPlay is not merely unused, it is inexpressible — the plugin's `DrmType` is
-`{none, playready, widevine}`. `EyzflowSource` exposes
+`{none, playready, widevine}`. `EYZFlowSource` exposes
 `fairplayCertificateUrl` and `fairplayLicenseUrl` for iOS, which plays through
 the native player instead.
 
@@ -498,7 +498,7 @@ latest target.
 
 While a skip burst is open or the bar is dragged, the overlay shows the frame
 of the previewed time above the thumb, from the stream's WebVTT thumbnail
-track (`EyzflowSource.thumbnailsUrl`, `thumbnails/thumbnail.vtt`: a
+track (`EYZFlowSource.thumbnailsUrl`, `thumbnails/thumbnail.vtt`: a
 199×112 tile per 5 seconds, cut from sprite images with `#xywh=`). The track
 is loaded once per stream by `ThumbnailLoader.shared`
 (`lib/src/core/thumbnails.dart`); the sprites go through Flutter's image
@@ -610,17 +610,17 @@ sensitive. URL log statements are guarded by `#if DEBUG` on Apple and
 
 Player controls, dialogs and playback errors are localized in this package
 (`lib/src/l10n`, `gen_l10n`) through `streamingL10n`, in
-`eyzflowPlayerLanguage` (set by `EyzflowPlayer(language:)` or
-`setEyzflowPlayerLanguage`, else the device's language), falling back to
+`eyzflowPlayerLanguage` (set by `EYZFlowPlayer(language:)` or
+`setEYZFlowPlayerLanguage`, else the device's language), falling back to
 English. After editing an ARB, run `flutter gen-l10n` here and commit
 `lib/src/l10n/generated`.
 
-Track language names come from `EyzflowLanguageNames`
+Track language names come from `EYZFlowLanguageNames`
 (`lib/src/l10n/language_names.dart`): a table generated from the Unicode CLDR
 display names for the two-letter codes and their regional variants, in the
 player's four languages, plus the ISO 639-2 aliases (`deu`, `ger` → `de`).
 Lookup order: the exact code, without its region, the alias, an English
-language name, the code itself. Apps can set `EyzflowLanguageNames.resolver`.
+language name, the code itself. Apps can set `EYZFlowLanguageNames.resolver`.
 
 ## Fullscreen orientation
 

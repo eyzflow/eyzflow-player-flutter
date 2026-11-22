@@ -255,7 +255,7 @@ class VideoPlayerView(
                         }
                     }
                     controllerId?.let { id ->
-                        EyzflowPlayerPlugin.registerCastButton(id) { visible ->
+                        EYZFlowPlayerPlugin.registerCastButton(id) { visible ->
                             post { visibility = if (visible) View.VISIBLE else View.GONE }
                         }
                     }
@@ -418,7 +418,7 @@ class VideoPlayerView(
         }
 
         // Get activity from plugin (most reliable) or context
-        val activity = EyzflowPlayerPlugin.getActivity() ?: getActivity(context)
+        val activity = EYZFlowPlayerPlugin.getActivity() ?: getActivity(context)
         if (activity == null) {
             NpLog.e(TAG, "Cannot get Activity, cannot handle fullscreen")
             return
@@ -781,8 +781,8 @@ class VideoPlayerView(
 
         // Remove this view from the plugin's static registry (otherwise the
         // map keeps a strong reference to every view ever created)
-        EyzflowPlayerPlugin.unregisterView(viewId)
-        controllerId?.let { EyzflowPlayerPlugin.unregisterCastButton(it) }
+        EYZFlowPlayerPlugin.unregisterView(viewId)
+        controllerId?.let { EYZFlowPlayerPlugin.unregisterCastButton(it) }
 
         // Exit fullscreen if active
         if (isFullScreen) {

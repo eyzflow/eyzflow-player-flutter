@@ -29,7 +29,7 @@ sealed class PlaybackEvent extends Equatable {
     this.duration,
   });
 
-  /// `EyzflowSource.id` of the stream being played.
+  /// `EYZFlowSource.id` of the stream being played.
   final String sourceId;
 
   /// The playback position when it happened. [Duration.zero] until the native

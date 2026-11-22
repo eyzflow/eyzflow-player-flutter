@@ -6,7 +6,7 @@ const List<String> eyzflowPlayerLanguages = <String>['en', 'de', 'fr', 'nl'];
 String? _language;
 
 /// The language of the player's own text (controls, errors, track names),
-/// as a language code: the one set with [setEyzflowPlayerLanguage], else the
+/// as a language code: the one set with [setEYZFlowPlayerLanguage], else the
 /// device's language when the player has it, else English.
 String get eyzflowPlayerLanguage =>
     _language ?? _supported(PlatformDispatcher.instance.locale.languageCode);
@@ -15,9 +15,9 @@ String get eyzflowPlayerLanguage =>
 /// the app's language; `null` follows the device again. A language the
 /// player does not have falls back to English.
 ///
-/// `EyzflowPlayer(language:)` sets it for one player; call this when using
+/// `EYZFlowPlayer(language:)` sets it for one player; call this when using
 /// `VideoplayerFeatureView` directly.
-void setEyzflowPlayerLanguage(String? languageCode) {
+void setEYZFlowPlayerLanguage(String? languageCode) {
   _language = languageCode == null ? null : _supported(languageCode);
 }
 

@@ -3,15 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   tearDown(() {
-    setEyzflowPlayerLanguage(null);
-    EyzflowLanguageNames.resolver = null;
+    setEYZFlowPlayerLanguage(null);
+    EYZFlowLanguageNames.resolver = null;
   });
 
-  String? name(String code) => EyzflowLanguageNames.languageName(code);
+  String? name(String code) => EYZFlowLanguageNames.languageName(code);
 
-  group('EyzflowLanguageNames', () {
+  group('EYZFlowLanguageNames', () {
     test('resolves two-letter, three-letter and regional codes', () {
-      setEyzflowPlayerLanguage('de');
+      setEYZFlowPlayerLanguage('de');
       // Two-letter, terminological and bibliographic three-letter codes.
       expect(name('de'), 'Deutsch');
       expect(name('deu'), 'Deutsch');
@@ -24,20 +24,20 @@ void main() {
     });
 
     test('names in the player language', () {
-      setEyzflowPlayerLanguage('en');
+      setEYZFlowPlayerLanguage('en');
       expect(name('nld'), 'Dutch');
-      setEyzflowPlayerLanguage('fr');
+      setEYZFlowPlayerLanguage('fr');
       expect(name('nld'), 'néerlandais');
-      setEyzflowPlayerLanguage('nl');
+      setEYZFlowPlayerLanguage('nl');
       expect(name('nld'), 'Nederlands');
       expect(
-        EyzflowLanguageNames.languageName('nld', uiLanguage: 'de'),
+        EYZFlowLanguageNames.languageName('nld', uiLanguage: 'de'),
         'Niederländisch',
       );
     });
 
     test('reads an English language name', () {
-      setEyzflowPlayerLanguage('de');
+      setEYZFlowPlayerLanguage('de');
       expect(name('French'), 'Französisch');
     });
 
@@ -52,8 +52,8 @@ void main() {
     });
 
     test('an app resolver goes first, and falls back to the table', () {
-      setEyzflowPlayerLanguage('de');
-      EyzflowLanguageNames.resolver = (code, ui) =>
+      setEYZFlowPlayerLanguage('de');
+      EYZFlowLanguageNames.resolver = (code, ui) =>
           code == 'de' ? 'Deutsch ($ui, app)' : null;
       expect(name('de'), 'Deutsch (de, app)');
       expect(name('en'), 'Englisch');
@@ -62,27 +62,27 @@ void main() {
 
   group('eyzflowPlayerLanguage', () {
     test('a language the player has is kept', () {
-      setEyzflowPlayerLanguage('nl_BE');
+      setEYZFlowPlayerLanguage('nl_BE');
       expect(eyzflowPlayerLanguage, 'nl');
     });
 
     test('a language the player does not have falls back to English', () {
-      setEyzflowPlayerLanguage('ja');
+      setEYZFlowPlayerLanguage('ja');
       expect(eyzflowPlayerLanguage, 'en');
     });
 
     test('unset, it follows the device', () {
-      setEyzflowPlayerLanguage(null);
+      setEYZFlowPlayerLanguage(null);
       // The test binding reports en_US.
       expect(eyzflowPlayerLanguage, 'en');
     });
   });
 
   test('the source derives the stream and DRM URLs from its id', () {
-    const source = EyzflowSource(
+    const source = EYZFlowSource(
       id: 's1',
       title: 'Film',
-      sourceType: EyzflowFilm('cat-1'),
+      sourceType: EYZFlowFilm('cat-1'),
     );
     expect(
       source.hlsStreamUrl.toString(),
@@ -110,13 +110,13 @@ void main() {
     );
     expect(
       source.copyWith(progressSeconds: 30),
-      const EyzflowSource(
+      const EYZFlowSource(
         id: 's1',
         title: 'Film',
-        sourceType: EyzflowFilm('cat-1'),
+        sourceType: EYZFlowFilm('cat-1'),
         progressSeconds: 30,
       ),
     );
-    expect(const EyzflowFilm('a'), isNot(const EyzflowTrailer('a')));
+    expect(const EYZFlowFilm('a'), isNot(const EYZFlowTrailer('a')));
   });
 }

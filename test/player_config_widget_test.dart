@@ -111,15 +111,15 @@ Future<_Backend> _pump(
   String? storefrontId,
   Map<String, Object?> drmParameters = const {},
   String? castReceiverAppId,
-  List<EyzflowSource>? mounted,
+  List<EYZFlowSource>? mounted,
 }) async {
   final backend = _Backend();
   await tester.pumpWidget(
     MaterialApp(
-      home: EyzflowPlayer(
+      home: EYZFlowPlayer(
         streamId: 'stream-1',
         title: 'Film',
-        sourceType: const EyzflowFilm('cat-1'),
+        sourceType: const EYZFlowFilm('cat-1'),
         drmAuthorization: 'Bearer viewer',
         storefrontId: storefrontId,
         drmParameters: drmParameters,
@@ -149,16 +149,16 @@ Future<_Backend> _pump(
 VideoplayerFeatureView _view(WidgetTester tester) =>
     tester.widget<VideoplayerFeatureView>(find.byType(VideoplayerFeatureView));
 
-Map<Object?, Object?> _tokenParameters(EyzflowSource source) =>
+Map<Object?, Object?> _tokenParameters(EYZFlowSource source) =>
     (jsonDecode(utf8.decode(base64Decode(source.drmAccessHeader!)))
             as Map)['parameters']
         as Map;
 
 void main() {
-  setUpAll(() => setEyzflowPlayerLanguage('en'));
+  setUpAll(() => setEYZFlowPlayerLanguage('en'));
   setUp(PlayerConfigClient.clearCache);
 
-  group("EyzflowPlayer ads and the viewer's plan", () {
+  group("EYZFlowPlayer ads and the viewer's plan", () {
     const tag = 'https://ads.example.com/ads?iu=/1/x';
     Map<String, Object?> adsConfig() => {
       ..._config(),
@@ -233,7 +233,7 @@ void main() {
     });
   });
 
-  group('EyzflowPlayer with a configId', () {
+  group('EYZFlowPlayer with a configId', () {
     testWidgets('hands the config theme and features to the player', (
       tester,
     ) async {
@@ -256,7 +256,7 @@ void main() {
     testWidgets('the config DRM parameters reach the access token, '
         'storefront included', (tester) async {
       final requests = <http.Request>[];
-      final mounted = <EyzflowSource>[];
+      final mounted = <EYZFlowSource>[];
       await _pump(
         tester,
         client: _api(
@@ -285,7 +285,7 @@ void main() {
     testWidgets('inline DRM parameters and storefront win over the config', (
       tester,
     ) async {
-      final mounted = <EyzflowSource>[];
+      final mounted = <EYZFlowSource>[];
       await _pump(
         tester,
         client: _api(
@@ -308,7 +308,7 @@ void main() {
     });
 
     testWidgets('an inline config overrides the remote one', (tester) async {
-      final mounted = <EyzflowSource>[];
+      final mounted = <EYZFlowSource>[];
       await _pump(
         tester,
         client: _api(config: _config()),
@@ -407,10 +407,10 @@ void main() {
   group('the default player builder', () {
     const options = PlayerOptions(loop: true, captions: false);
     final target = VideoplayerSourceTarget(
-      EyzflowSource(
+      EYZFlowSource(
         id: 's',
         title: 'Film',
-        sourceType: const EyzflowFilm('cat'),
+        sourceType: const EYZFlowFilm('cat'),
       ),
     );
 

@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 
 void main() {
   // The language of the player's own text; the device's when not set.
-  setEyzflowPlayerLanguage('en');
+  setEYZFlowPlayerLanguage('en');
   runApp(const ExampleApp());
 }
 
@@ -29,7 +29,7 @@ class ExampleApp extends StatelessWidget {
   );
 }
 
-/// A form for what [EyzflowPlayer] takes, and a log of what it did: every
+/// A form for what [EYZFlowPlayer] takes, and a log of what it did: every
 /// playback event, every beat it sent, and every limit or key refusal.
 class LoaderPage extends StatefulWidget {
   const LoaderPage({super.key});
@@ -108,20 +108,20 @@ class _LoaderPageState extends State<LoaderPage> {
     final bool isViewerToken = token != null && token.startsWith('eyJ');
     final String? apiOrigin = _orNull(_apiOrigin);
     final endpoints = apiOrigin == null
-        ? const EyzflowEndpoints()
-        : EyzflowEndpoints(api: apiOrigin);
+        ? const EYZFlowEndpoints()
+        : EYZFlowEndpoints(api: apiOrigin);
     final upload = HttpBeatSender(endpoints: endpoints);
     _add('▶ $id (${_isFeature ? 'film' : 'trailer'})');
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => EyzflowPlayer(
+        builder: (_) => EYZFlowPlayer(
           streamId: id,
           title: _orNull(_title) ?? id,
           sourceType: _isFeature
-              ? EyzflowFilm(_orNull(_catalogueId) ?? id)
-              : EyzflowTrailer(id),
+              ? EYZFlowFilm(_orNull(_catalogueId) ?? id)
+              : EYZFlowTrailer(id),
           progressSeconds: double.tryParse(_startAt.text.trim()),
           isTv: _isTv,
           playerKey: _orNull(_playerKey),
@@ -168,22 +168,22 @@ class _LoaderPageState extends State<LoaderPage> {
 
   /// The end screen from the ids in the form: placeholder titles, no
   /// posters. Picks are logged; the player plays them in place.
-  EyzflowEndScreen? _endScreen() {
+  EYZFlowEndScreen? _endScreen() {
     final List<String> ids = _endScreenIds.text
         .split(',')
         .map((id) => id.trim())
         .where((id) => id.isNotEmpty)
         .toList();
     if (ids.isEmpty) return null;
-    return EyzflowEndScreen(
-      nextUp: EyzflowEndScreenItem(
+    return EYZFlowEndScreen(
+      nextUp: EYZFlowEndScreenItem(
         streamId: ids.first,
         title: 'Up next: ${_short(ids.first)}',
         badge: 'Next',
       ),
       items: [
         for (final (i, id) in ids.skip(1).indexed)
-          EyzflowEndScreenItem(
+          EYZFlowEndScreenItem(
             streamId: id,
             title: 'Film ${i + 1} (${_short(id)})',
             duration: Duration(minutes: 80 + i * 12),

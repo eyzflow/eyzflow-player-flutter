@@ -17,8 +17,8 @@ v/720.m3u8
 ''';
 
 void main() {
-  setUp(() => setEyzflowPlayerLanguage('de'));
-  tearDown(() => setEyzflowPlayerLanguage(null));
+  setUp(() => setEYZFlowPlayerLanguage('de'));
+  tearDown(() => setEYZFlowPlayerLanguage(null));
 
   test('parses AUDIO and SUBTITLES renditions with quoted, comma-bearing '
       'CHARACTERISTICS', () {

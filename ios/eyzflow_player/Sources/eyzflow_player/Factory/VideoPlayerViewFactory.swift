@@ -1,7 +1,7 @@
 import Flutter
 import UIKit
 
-@objc public class EyzflowPlayerPlugin: NSObject, FlutterPlugin {
+@objc public class EYZFlowPlayerPlugin: NSObject, FlutterPlugin {
     /// Retains a controller-level EventChannel together with its handler so the
     /// channel can be deregistered (`setStreamHandler(nil)`) on teardown.
     private struct ControllerChannelEntry {
@@ -36,10 +36,10 @@ import UIKit
     public static func register(with registrar: FlutterPluginRegistrar) {
         messenger = registrar.messenger()
         textureRegistry = registrar.textures()
-        npLog("Registering EyzflowPlayerPlugin")
+        npLog("Registering EYZFlowPlayerPlugin")
         let factory = VideoPlayerViewFactory(messenger: registrar.messenger())
         registrar.register(factory, withId: "eyzflow_player_native")
-        npLog("EyzflowPlayerPlugin registered with id: native_video_player")
+        npLog("EYZFlowPlayerPlugin registered with id: native_video_player")
 
         // Register a method handler at the plugin level to forward calls to the appropriate view
         let channel = FlutterMethodChannel(name: "eyzflow_player_native", binaryMessenger: registrar.messenger())
@@ -53,7 +53,7 @@ import UIKit
                 // finds a registered handler (avoids MissingPluginException).
                 if let args = call.arguments as? [String: Any],
                    let controllerId = args["controllerId"] as? Int {
-                    EyzflowPlayerPlugin.setupControllerEventChannel(for: controllerId)
+                    EYZFlowPlayerPlugin.setupControllerEventChannel(for: controllerId)
                     result(nil)
                 } else {
                     result(FlutterError(code: "INVALID_ARGUMENT", message: "Controller ID is required", details: nil))
@@ -64,7 +64,7 @@ import UIKit
             if call.method == "teardownControllerEventChannel" {
                 if let args = call.arguments as? [String: Any],
                    let controllerId = args["controllerId"] as? Int {
-                    EyzflowPlayerPlugin.teardownControllerEventChannel(for: controllerId)
+                    EYZFlowPlayerPlugin.teardownControllerEventChannel(for: controllerId)
                     result(nil)
                 } else {
                     result(FlutterError(code: "INVALID_ARGUMENT", message: "Controller ID is required", details: nil))
@@ -274,7 +274,7 @@ class VideoPlayerViewFactory: NSObject, FlutterPlatformViewFactory {
         // The engine owns the view; the plugin only keeps a weak registry for
         // method-call routing (a strong reference here would prevent deinit,
         // which is the platform view's only disposal hook on iOS).
-        EyzflowPlayerPlugin.registerView(view, withId: viewId)
+        EYZFlowPlayerPlugin.registerView(view, withId: viewId)
         return view
     }
 

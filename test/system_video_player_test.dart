@@ -13,13 +13,13 @@ import 'package:eyzflow_player/src/player/player_policy.dart';
 import 'package:eyzflow_player/src/player/system_video_player.dart';
 
 const VideoplayerTarget _trailerA = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'trailer-a', title: 'Trailer A'),
+  EYZFlowSource(id: 'trailer-a', title: 'Trailer A'),
 );
 const VideoplayerTarget _trailerB = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'trailer-b', title: 'Trailer B'),
+  EYZFlowSource(id: 'trailer-b', title: 'Trailer B'),
 );
 const VideoplayerTarget _trailerC = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'trailer-c', title: 'Trailer C'),
+  EYZFlowSource(id: 'trailer-c', title: 'Trailer C'),
 );
 
 void main() {
@@ -29,11 +29,11 @@ void main() {
     ) async {
       final fixture = _NativeFixture(tester, delayLoad: true);
       final resumed = VideoplayerSourceTarget(
-        EyzflowSource(
+        EYZFlowSource(
           id: 'resumed',
           title: 'Resumed',
           progressSeconds: 1800,
-          sourceType: const EyzflowFilm('catalogue'),
+          sourceType: const EYZFlowFilm('catalogue'),
         ),
       );
       await fixture.mount(target: resumed);
@@ -61,11 +61,11 @@ void main() {
     final fixture = _NativeFixture(tester);
     await fixture.mount(
       target: VideoplayerSourceTarget(
-        EyzflowSource(
+        EYZFlowSource(
           id: 'resumed',
           title: 'Resumed',
           progressSeconds: 1800,
-          sourceType: const EyzflowFilm('catalogue'),
+          sourceType: const EYZFlowFilm('catalogue'),
         ),
       ),
     );
@@ -93,10 +93,10 @@ void main() {
       'positionMs': 1380000,
     });
     final nextTarget = VideoplayerSourceTarget(
-      EyzflowSource(
+      EYZFlowSource(
         id: 'film-b',
         title: 'Film B',
-        sourceType: const EyzflowFilm('catalogue-b'),
+        sourceType: const EYZFlowFilm('catalogue-b'),
       ),
     );
     final nextRecorder = WatchProgressRecorder(
@@ -1002,11 +1002,11 @@ base class _TestController implements VideoplaybackController {
   void emit(VideoplaybackValue value) => _listener?.call(value);
 }
 
-final _nativeSource = EyzflowSource(
+final _nativeSource = EYZFlowSource(
   id: 'native-film',
   title: 'Film',
   poster: Uri.parse('https://example.com/poster.jpg'),
-  sourceType: const EyzflowFilm('catalogue'),
+  sourceType: const EYZFlowFilm('catalogue'),
 );
 
 class _ProgressClient implements WatchProgressStore {

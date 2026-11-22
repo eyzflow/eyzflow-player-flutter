@@ -36,7 +36,7 @@ final class PlaybackEventEmitter {
     this.explicitSeekGrace = const Duration(seconds: 10),
   }) : _clock = clock ?? _monotonicClock();
 
-  /// `EyzflowSource.id`, stamped on every event.
+  /// `EYZFlowSource.id`, stamped on every event.
   final String sourceId;
 
   /// Where events go. While this is `null` the emitter does nothing at all —

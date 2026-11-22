@@ -2,7 +2,7 @@
 
 A loader app for `eyzflow_player`. The form takes a stream ID, title, film or
 trailer, the viewer's bearer token, the storefront, an optional player key and
-API origin; Play opens `EyzflowPlayer` full screen. The log under the form
+API origin; Play opens `EYZFlowPlayer` full screen. The log under the form
 shows every playback event, every beat sent, and every limit or key refusal.
 
 A film needs the viewer's bearer token (a Cognito access token), which the
