@@ -1,24 +1,27 @@
 import 'dart:ui' show Locale;
 
+import '../core/player_config.dart' show defaultAdCountdownSeconds;
 import '../l10n/generated/eyzflow_streaming_localizations.dart';
 import '../l10n/player_language.dart';
 import 'ad_breaks.dart';
 
-/// How long before a mid-roll the notice counts down ("Ad in 5" … "Ad in 1").
-const Duration adCountdownWindow = Duration(seconds: 5);
-
-/// The whole seconds left (5 … 1, rounded up) until the nearest of [starts]
-/// ahead of [position], or null when none is within [adCountdownWindow].
+/// The whole seconds left ([length] … 1, rounded up) until the nearest of
+/// [starts] ahead of [position], or null when none is within [length]
+/// seconds (the config's `ads.countdownSeconds`, 5 by default).
 ///
 /// The same rule as the web player's `countdownSeconds`.
-int? countdownSeconds(Duration position, Iterable<Duration> starts) {
+int? countdownSeconds(
+  Duration position,
+  Iterable<Duration> starts, {
+  int length = defaultAdCountdownSeconds,
+}) {
   Duration? next;
   for (final Duration start in starts) {
     if (start > position && (next == null || start < next)) next = start;
   }
   if (next == null) return null;
   final Duration left = next - position;
-  if (left <= Duration.zero || left > adCountdownWindow) return null;
+  if (left <= Duration.zero || left > Duration(seconds: length)) return null;
   final int seconds =
       (left.inMicroseconds + Duration.microsecondsPerSecond - 1) ~/
       Duration.microsecondsPerSecond;
@@ -38,11 +41,12 @@ int? adCountdownFor({
   required bool remote,
   required Duration? position,
   required Iterable<Duration> starts,
+  int length = defaultAdCountdownSeconds,
 }) {
   if (!enabled || !playing || inBreak || remote || position == null) {
     return null;
   }
-  return countdownSeconds(position, starts);
+  return countdownSeconds(position, starts, length: length);
 }
 
 /// The mid-roll cue points of a VMAP tag, on streams without ad break

@@ -53,6 +53,70 @@ void main() {
     });
   });
 
+  group('countdown length', () {
+    test('counts down as long as the config says', () {
+      final List<Duration> starts = <Duration>[_s(30)];
+      expect(countdownSeconds(_s(19.5), starts, length: 10), isNull);
+      expect(countdownSeconds(_s(20), starts, length: 10), 10);
+      expect(countdownSeconds(_s(20.5), starts, length: 10), 10);
+      expect(countdownSeconds(_s(25), starts, length: 10), 5);
+      expect(countdownSeconds(_s(29.5), starts, length: 10), 1);
+      expect(countdownSeconds(_s(26.5), starts, length: 3), isNull);
+      expect(countdownSeconds(_s(27), starts, length: 3), 3);
+      expect(countdownSeconds(_s(27.5), starts, length: 3), 3);
+      expect(countdownSeconds(_s(28.5), starts, length: 3), 2);
+      expect(countdownSeconds(_s(29.9), starts, length: 3), 1);
+    });
+
+    test('takes whole seconds from 1 to 30, else 5', () {
+      expect(adCountdownLength(null), 5);
+      expect(adCountdownLength('8'), 5);
+      expect(adCountdownLength(double.nan), 5);
+      expect(adCountdownLength(double.infinity), 5);
+      expect(adCountdownLength(8), 8);
+      expect(adCountdownLength(0), 1);
+      expect(adCountdownLength(-4), 1);
+      expect(adCountdownLength(90), 30);
+      expect(adCountdownLength(7.4), 7);
+      expect(adCountdownLength(7.5), 8);
+    });
+
+    test('ads.countdownSeconds from the remote config', () {
+      PlayerConfig read(Object? value) =>
+          PlayerConfig.fromJson(<String, Object?>{
+            'ads': <String, Object?>{
+              'adTagUrl': 'https://ads.example.com/vast',
+              'countdownSeconds': value,
+            },
+          });
+      expect(read(10).adCountdownSeconds, 10);
+      expect(read(null).adCountdownSeconds, 5);
+      expect(read('ten').adCountdownSeconds, 5);
+      expect(read(45).adCountdownSeconds, 30);
+      expect(read(2.6).adCountdownSeconds, 3);
+      expect(PlayerConfig.defaults.adCountdownSeconds, 5);
+      expect(PlayerOptions.fromConfig(read(10)).adCountdownSeconds, 10);
+      expect(const PlayerOptions().adCountdownSeconds, 5);
+    });
+
+    test('ads.countdownSeconds inline', () {
+      final PlayerConfig merged = mergePlayerConfig(
+        PlayerConfig.defaults,
+        const PlayerConfigOverride(
+          ads: PlayerAdsConfig(adTagUrl: 'x', countdownSeconds: 3),
+        ),
+      );
+      expect(merged.adCountdownSeconds, 3);
+      final PlayerConfig clamped = mergePlayerConfig(
+        PlayerConfig.defaults,
+        const PlayerConfigOverride(
+          ads: PlayerAdsConfig(adTagUrl: 'x', countdownSeconds: 99),
+        ),
+      );
+      expect(clamped.adCountdownSeconds, 30);
+    });
+  });
+
   group('adCountdownFor', () {
     int? at({
       bool enabled = true,

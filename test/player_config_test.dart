@@ -38,7 +38,7 @@ const Map<String, Object?> _remote = {
     'androidReceiverCompatible': false,
     'autoJoinPolicy': 'origin_scoped',
   },
-  'ads': {'adTagUrl': ''},
+  'ads': {'adTagUrl': '', 'countdownSeconds': 5},
 };
 
 void main() {

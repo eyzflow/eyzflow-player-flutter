@@ -122,7 +122,8 @@ class EyzflowPlayer extends StatefulWidget {
 
   /// Inline config, merged over the one [configId] loads: what is given here
   /// wins, as with the web player's `config` prop. Read when playback starts,
-  /// except `features.adCountdown`, which switches while playing.
+  /// except `features.adCountdown` and `ads.countdownSeconds`, which apply
+  /// while playing.
   final PlayerConfigOverride? config;
 
   /// The viewer's `Authorization`, e.g. `Bearer <token>`. Needed for DRM and
@@ -263,15 +264,20 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
       _stop();
       unawaited(_start());
     } else if (w.config?.features?.adCountdown !=
-        old.config?.features?.adCountdown) {
-      // The ad countdown switches while playing; the stream plays on.
+            old.config?.features?.adCountdown ||
+        w.config?.ads?.countdownSeconds != old.config?.ads?.countdownSeconds) {
+      // The ad countdown switches, or changes length, while playing; the
+      // stream plays on.
       final PlayerConfig config = mergePlayerConfig(
         _remoteConfig ?? PlayerConfig.defaults,
         w.config,
       );
       setState(() {
         _config = config;
-        _options = _options.withAdCountdown(config.features.adCountdown);
+        _options = _options.withAdCountdown(
+          config.features.adCountdown,
+          config.adCountdownSeconds,
+        );
       });
     }
   }

@@ -88,6 +88,7 @@ final class PlayerOptions {
     this.airPlay = true,
     this.ads,
     this.adCountdown = true,
+    this.adCountdownSeconds = defaultAdCountdownSeconds,
   });
 
   /// [PlayerConfig.features] and [PlayerConfig.theme] as the app players
@@ -112,6 +113,7 @@ final class PlayerOptions {
         null => null,
       },
       adCountdown: f.adCountdown,
+      adCountdownSeconds: config.adCountdownSeconds,
     );
   }
 
@@ -149,6 +151,10 @@ final class PlayerOptions {
   /// changing it does not reload the stream.
   final bool adCountdown;
 
+  /// How many seconds the countdown shows (1–30): the config's
+  /// `ads.countdownSeconds`. Also read while playing.
+  final int adCountdownSeconds;
+
   /// These options with [ads] in place of the config's, e.g. once the
   /// viewer's plan has said whether it plays ads.
   PlayerOptions withAds(PlayerAds? ads) => PlayerOptions(
@@ -161,20 +167,24 @@ final class PlayerOptions {
     airPlay: airPlay,
     ads: ads,
     adCountdown: adCountdown,
+    adCountdownSeconds: adCountdownSeconds,
   );
 
-  /// These options with [adCountdown] switched; the same [ads].
-  PlayerOptions withAdCountdown(bool adCountdown) => PlayerOptions(
-    controlsTheme: controlsTheme,
-    controls: controls,
-    autoHideControls: autoHideControls,
-    captions: captions,
-    loop: loop,
-    pictureInPicture: pictureInPicture,
-    airPlay: airPlay,
-    ads: ads,
-    adCountdown: adCountdown,
-  );
+  /// These options with the countdown's switch and length changed; the same
+  /// [ads].
+  PlayerOptions withAdCountdown(bool adCountdown, int adCountdownSeconds) =>
+      PlayerOptions(
+        controlsTheme: controlsTheme,
+        controls: controls,
+        autoHideControls: autoHideControls,
+        captions: captions,
+        loop: loop,
+        pictureInPicture: pictureInPicture,
+        airPlay: airPlay,
+        ads: ads,
+        adCountdown: adCountdown,
+        adCountdownSeconds: adCountdownSeconds,
+      );
 
   @override
   bool operator ==(Object other) =>
@@ -187,7 +197,8 @@ final class PlayerOptions {
       other.pictureInPicture == pictureInPicture &&
       other.airPlay == airPlay &&
       identical(other.ads, ads) &&
-      other.adCountdown == adCountdown;
+      other.adCountdown == adCountdown &&
+      other.adCountdownSeconds == adCountdownSeconds;
 
   @override
   int get hashCode => Object.hash(
@@ -200,6 +211,7 @@ final class PlayerOptions {
     airPlay,
     ads,
     adCountdown,
+    adCountdownSeconds,
   );
 }
 

@@ -285,18 +285,49 @@ final class PlayerCastConfig {
   };
 }
 
+/// How many seconds the countdown before a mid-roll shows when the config
+/// does not say.
+const int defaultAdCountdownSeconds = 5;
+
+/// The longest countdown a config can ask for.
+const int maxAdCountdownSeconds = 30;
+
+/// A config's `ads.countdownSeconds` as a length to use: whole seconds from 1
+/// to 30 (rounded, clamped), else [defaultAdCountdownSeconds] for a missing
+/// value or one that is not a number. The web player's `countdownLength`.
+int adCountdownLength(Object? configured) {
+  if (configured is! num || !configured.isFinite) {
+    return defaultAdCountdownSeconds;
+  }
+  return configured.round().clamp(1, maxAdCountdownSeconds);
+}
+
 /// The config's ads: a VAST or VMAP tag, played when `features.ads` is on
 /// (Android and iOS; see [PlayerConfig.adTagUrl]).
 @immutable
 final class PlayerAdsConfig {
-  const PlayerAdsConfig({this.adTagUrl = ''});
+  const PlayerAdsConfig({
+    this.adTagUrl = '',
+    this.countdownSeconds = defaultAdCountdownSeconds,
+  });
 
   factory PlayerAdsConfig.fromJson(Map<String, Object?> json) =>
-      PlayerAdsConfig(adTagUrl: _string(json['adTagUrl']) ?? '');
+      PlayerAdsConfig(
+        adTagUrl: _string(json['adTagUrl']) ?? '',
+        countdownSeconds: adCountdownLength(json['countdownSeconds']),
+      );
 
   final String adTagUrl;
 
-  Map<String, Object?> toJson() => {'adTagUrl': adTagUrl};
+  /// How many seconds the countdown before a mid-roll shows
+  /// (`features.adCountdown`), 1–30. Pass it through [adCountdownLength]
+  /// when it comes from elsewhere than [PlayerAdsConfig.fromJson].
+  final int countdownSeconds;
+
+  Map<String, Object?> toJson() => {
+    'adTagUrl': adTagUrl,
+    'countdownSeconds': countdownSeconds,
+  };
 }
 
 /// Extra DRM access-token parameters, e.g. `{'storefront_id': '…'}`. The
@@ -384,6 +415,11 @@ final class PlayerConfig {
   final PlayerDrmConfig? drm;
 
   /// `cast.receiverAppId`, when set.
+  /// How many seconds the countdown before a mid-roll shows:
+  /// `ads.countdownSeconds`, else [defaultAdCountdownSeconds].
+  int get adCountdownSeconds =>
+      adCountdownLength(ads?.countdownSeconds ?? defaultAdCountdownSeconds);
+
   /// The ad tag to play: set only when `features.ads` is on and
   /// `ads.adTagUrl` is not empty. Null means no ad request at all.
   String? get adTagUrl {

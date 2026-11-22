@@ -114,7 +114,11 @@ final class _Fixture {
   _FakeAds? ads;
   var markerLoads = 0;
 
-  Future<void> mount({bool tv = false, bool adCountdown = true}) async {
+  Future<void> mount({
+    bool tv = false,
+    bool adCountdown = true,
+    int countdownSeconds = 5,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -128,6 +132,7 @@ final class _Fixture {
               options: PlayerOptions(
                 ads: withAds ? _ads : null,
                 adCountdown: adCountdown,
+                adCountdownSeconds: countdownSeconds,
               ),
               createAdDriver: (SystemPlayerAdHooks hooks) =>
                   ads = _FakeAds(hooks),
@@ -347,6 +352,30 @@ void main() {
       await tester.pump();
       expect(f.ads!.requests, 1);
       expect(notice(), findsNothing, reason: 'the ad break is under way');
+    });
+
+    testWidgets('ads.countdownSeconds sets its length, without a reload', (
+      tester,
+    ) async {
+      final _Fixture f = _Fixture(tester, markers: <int>[30]);
+      await f.mount(countdownSeconds: 10);
+      f.content.tick(19.5);
+      await tester.pump();
+      expect(notice(), findsNothing);
+      f.content.tick(20);
+      await tester.pump();
+      expect(find.text('Ad in 10'), findsOneWidget);
+
+      await f.mount(countdownSeconds: 3);
+      f.content.tick(20.5);
+      await tester.pump();
+      expect(notice(), findsNothing);
+      for (num t = 21; t <= 27; t += 0.5) {
+        f.content.tick(t);
+      }
+      await tester.pump();
+      expect(find.text('Ad in 3'), findsOneWidget);
+      expect(f.content.initializeCount, 1);
     });
 
     testWidgets('adCountdown: false shows nothing', (tester) async {

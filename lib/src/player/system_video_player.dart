@@ -121,7 +121,8 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   ImaAdDriver? _imaDriver;
   var _finishing = false;
 
-  /// Seconds (5 … 1) until the next mid-roll while its notice shows.
+  /// Seconds (the countdown's length … 1) until the next mid-roll while its
+  /// notice shows.
   final ValueNotifier<int?> _adCountdown = ValueNotifier<int?>(null);
   VideoplaybackValue? _lastValue;
   Duration? _countdownPosition;
@@ -391,6 +392,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
             remote: _nativeController?.isAirplayConnected ?? false,
             position: position,
             starts: ads.upcomingMidrolls,
+            length: widget.options.adCountdownSeconds,
           );
   }
 

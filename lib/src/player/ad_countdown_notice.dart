@@ -3,7 +3,8 @@ import 'package:flutter/widgets.dart';
 
 import '../ads/ad_countdown.dart';
 
-/// The corner notice before a mid-roll: "Ad in 5" … "Ad in 1".
+/// The corner notice before a mid-roll: "Ad in 5" … "Ad in 1" (the length is
+/// the config's `ads.countdownSeconds`).
 ///
 /// Never takes a touch or the remote's focus, so the controls under it work
 /// as before; on TV it stays on screen while the controls are hidden. Read
@@ -11,7 +12,7 @@ import '../ads/ad_countdown.dart';
 class AdCountdownNotice extends StatelessWidget {
   const AdCountdownNotice({super.key, required this.seconds});
 
-  /// Seconds (5 … 1) until the break, or null for no notice.
+  /// Seconds until the break, or null for no notice.
   final ValueListenable<int?> seconds;
 
   @override
