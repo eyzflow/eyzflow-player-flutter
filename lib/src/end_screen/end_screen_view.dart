@@ -190,12 +190,22 @@ class _PlayerOverlayLayerState extends State<PlayerOverlayLayer> {
             final double height = box.maxHeight;
             final EdgeInsets padding = MediaQuery.paddingOf(context);
             const double scale = 0.34;
-            final Rect small = Rect.fromLTWH(
-              width - width * scale - 16 - padding.right,
-              16 + padding.top,
-              width * scale,
-              height * scale,
-            );
+            // Portrait: a third of the width would be tiny; the full width
+            // at the top instead.
+            final bool portrait = height > width;
+            final Rect small = portrait
+                ? Rect.fromLTWH(
+                    16 + padding.left,
+                    56 + padding.top,
+                    width - 32 - padding.horizontal,
+                    (width - 32 - padding.horizontal) * 9 / 16,
+                  )
+                : Rect.fromLTWH(
+                    width - width * scale - 16 - padding.right,
+                    16 + padding.top,
+                    width * scale,
+                    height * scale,
+                  );
             final Rect full = Rect.fromLTWH(0, 0, width, height);
             final Rect rect = shrunk ? small : full;
             const Duration motion = Duration(milliseconds: 350);
