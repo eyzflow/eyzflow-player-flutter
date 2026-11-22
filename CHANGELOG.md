@@ -12,14 +12,19 @@
   the two new cases.
 - The stream's playlist is now read once per playback for its markers even
   without ads; `loadHlsAdBreaks` is replaced by `loadHlsMarkers`.
+- `skipButtonTypes` (EYF-223): the skip button per signal type, from the
+  player config or inline. By default intro, recap and opening credits; no
+  "Skip credits" over the closing credits unless `closingCredits: true`.
 - An end screen (EYF-222): `EyzflowPlayer.endScreen` shows "Up next" with a
   countdown and a row of films the app passes, at the closing credits (the
   video shrunk into a corner) or after the film; a picked film plays in
   place with its own key check, session and DRM (`onSelect` can prevent it).
   On TV it takes the remote's focus. A stream without a closing credits
   signal gets it `secondsBeforeEnd` seconds before the end (default 20). The
-  config's `features.endScreen` and `endScreen` settings apply. `overlayBuilder` draws the app's own UI
-  instead. Texts in en, de, fr and nl.
+  config's `features.endScreen` and `endScreen` settings apply.
+  `overlayBuilder` draws the app's own UI instead. When it appears in native
+  full screen the player leaves full screen, and at the end of the film it
+  stays open on the end screen. Texts in en, de, fr and nl.
 
 ## 0.3.0
 

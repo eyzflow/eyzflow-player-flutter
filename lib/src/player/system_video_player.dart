@@ -155,7 +155,15 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   }
 
   void _onOverlayChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    // AVKit's (and Android's) native full screen covers everything Flutter
+    // draws: the end screen or the app's overlay would show behind it. Leave
+    // it, so the viewer sees them.
+    final NativeVideoPlayerController? native = _nativeController;
+    if (_overlay.active && native != null && native.isFullScreen) {
+      unawaited(native.exitFullScreen());
+    }
   }
 
   void _checkpoint([Duration? position]) {
@@ -585,13 +593,20 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     _sessionRecorder?.finish();
     final AdBreakScheduler? ads = _ads;
     if (ads == null) {
-      _close();
+      _closeUnlessEndScreen();
       return;
     }
     // A VMAP's post-roll plays before the player closes.
     if (_finishing) return;
     _finishing = true;
-    unawaited(ads.contentCompleted().whenComplete(_close));
+    unawaited(ads.contentCompleted().whenComplete(_closeUnlessEndScreen));
+  }
+
+  /// At the end of the film: the player stays on the end screen when there is
+  /// one; it closes from there (Close, Back, or a picked film).
+  void _closeUnlessEndScreen() {
+    if (mounted && endScreenAtTheEnd(context)) return;
+    _close();
   }
 
   void _close() {
@@ -715,6 +730,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
               signal: _signals,
               onSkip: _skipSignal,
               theme: widget.options.controlsTheme,
+              types: widget.options.skipButtonTypes,
             ),
           ?adLayer,
           ?countdown,
@@ -785,6 +801,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         signal: _signals,
         onSkipSignal: _skipSignal,
         skipButton: widget.options.skipButtons && !_overlay.active,
+        skipButtonTypes: widget.options.skipButtonTypes,
       ),
     );
   }

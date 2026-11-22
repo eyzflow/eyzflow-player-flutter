@@ -371,7 +371,8 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     // Recorded before the bloc tears the session down, so the completion is
     // written even though the view is about to go away.
     widget.watchProgressRecorder?.finish();
-    if (mounted) {
+    // The player stays on the end screen when there is one.
+    if (mounted && !endScreenAtTheEnd(context)) {
       context.read<VideoplayerFeatureBloc>().add(
         const VideoplayerFeaturePlaybackFinished(),
       );
@@ -451,6 +452,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
             signal: _signals,
             onSkipSignal: _skipSignal,
             skipButton: widget.options.skipButtons && !_overlay.active,
+            skipButtonTypes: widget.options.skipButtonTypes,
           ),
         ],
       ),

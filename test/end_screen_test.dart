@@ -57,6 +57,18 @@ final class _Content implements VideoplaybackController, VideoplaybackTracks {
     }
   }
 
+  /// The film played to its end.
+  void complete() {
+    _value = const VideoplaybackValue(
+      position: Duration(minutes: 10),
+      duration: Duration(minutes: 10),
+      isCompleted: true,
+    );
+    for (final listener in List.of(_listeners)) {
+      listener(_value);
+    }
+  }
+
   @override
   VideoplaybackValue get value => _value;
   @override
@@ -319,9 +331,11 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(_endScreen(), findsNothing);
+    // No "Skip credits" either: the closing credits have no skip button by
+    // default (skipButtonTypes).
     expect(
       find.byKey(const ValueKey<String>('eyzflow-skip-signal')),
-      findsOneWidget,
+      findsNothing,
     );
     await tester.pumpWidget(const SizedBox());
   });
@@ -462,4 +476,39 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('at the end the player stays open on the end screen', (
+    tester,
+  ) async {
+    final _Fixture f = _Fixture(tester);
+    await f.mount(endScreen: f.endScreen(autoplaySeconds: 0));
+    f.content.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(_endScreen(), findsOneWidget);
+    final VideoplayerFeatureBloc bloc = tester
+        .element(find.byType(SystemVideoPlayer))
+        .read<VideoplayerFeatureBloc>();
+    expect(
+      bloc.state.featureState,
+      isNot(VideoplayerFeatureStatus.finished),
+      reason: 'the player stays open on the end screen',
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('at the end without an end screen the player closes as before', (
+    tester,
+  ) async {
+    final _Fixture f = _Fixture(tester);
+    await f.mount();
+    f.content.complete();
+    await tester.pump();
+    await tester.pump();
+    final VideoplayerFeatureBloc bloc = tester
+        .element(find.byType(SystemVideoPlayer))
+        .read<VideoplayerFeatureBloc>();
+    expect(bloc.state.featureState, VideoplayerFeatureStatus.finished);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

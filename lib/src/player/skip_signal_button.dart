@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 
+import '../core/player_config.dart' show PlayerSkipButtonTypes;
 import '../l10n/generated/eyzflow_streaming_localizations.dart';
 import '../l10n/player_language.dart';
 import '../signals/stream_signals.dart';
@@ -42,6 +43,7 @@ class SkipSignalButton extends StatelessWidget {
     this.theme = const PlayerControlsTheme(),
     this.remote = false,
     this.focusNode,
+    this.types = const PlayerSkipButtonTypes(),
   });
 
   final ValueListenable<StreamSignal?> signal;
@@ -50,11 +52,15 @@ class SkipSignalButton extends StatelessWidget {
   final bool remote;
   final FocusNode? focusNode;
 
+  /// Signal types without a button (by default the closing credits) show
+  /// nothing.
+  final PlayerSkipButtonTypes types;
+
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<StreamSignal?>(
     valueListenable: signal,
     builder: (BuildContext context, StreamSignal? current, _) {
-      if (current == null) {
+      if (current == null || !types.allows(current.type)) {
         return const Positioned(right: 0, bottom: 0, child: SizedBox.shrink());
       }
       final String label = skipSignalLabel(current.type);

@@ -239,6 +239,7 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 | `features.adCountdown` | false: no "Ad in 5" notice before a mid-roll | same | – |
 | `ads.countdownSeconds` | the notice's length, 1–30 s (default 5) | same | – |
 | `features.skipButtons` | false: no "Skip intro / recap / credits" button (the signal events still come) | same | same |
+| `skipButtonTypes.*` | `intro`, `recap`, `openingCredits`, `closingCredits`: which signals get a skip button (default: all but closing credits) | same | same |
 | `features.endScreen`, `endScreen.*` | false: no end screen; `autoplaySeconds` (0–30), `showAt` (`credits`/`end`), `shrinkVideo`, `secondsBeforeEnd` (0–120, without closing credits) tune it | same | same |
 | `drm.parameters` | into the DRM `access-token`; `storefront_id` also opens the playback session | same | same |
 

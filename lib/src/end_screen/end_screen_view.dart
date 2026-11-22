@@ -10,6 +10,14 @@ import '../player/player_options.dart';
 import '../signals/stream_signals.dart';
 import 'end_screen.dart';
 
+/// Whether the end screen takes over when the film ends, so the player stays
+/// open on it instead of closing.
+bool endScreenAtTheEnd(BuildContext context) {
+  final PlayerOverlayScope? scope = context
+      .getInheritedWidgetOfExactType<PlayerOverlayScope>();
+  return scope != null && scope.endScreen != null && scope.settings.enabled;
+}
+
 /// Where playback is, for the overlay layer: fed from the player's position
 /// reports.
 @immutable

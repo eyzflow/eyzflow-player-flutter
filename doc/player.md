@@ -266,7 +266,9 @@ signal.
   and `EyzflowPlayer.onSignal` gets the signal, then null. A skip is also a
   `PlaybackSeeked`.
 - **Config.** `features.skipButtons: false` hides the button; the events
-  still come. The button takes the config's theme: the bar colour and text
+  still come. `skipButtonTypes` (`intro`, `recap`, `openingCredits`,
+  `closingCredits`) picks the types with a button: by default all but the
+  closing credits, where skipping only ends the film. The button takes the config's theme: the bar colour and text
   colour, the accent when focused, the radius.
 - The dashboard's `label` is passed on (`StreamSignal.label`) but not shown.
 
@@ -294,6 +296,11 @@ from the films the app passes (`EyzflowEndScreenItem`: `streamId`, `title`,
   `isCompleted`. `showAt: end`: only when the film ends.
   Not during an ad break. `EndScreenSettings.resolve` puts the app's values
   over the config's `features.endScreen` and `endScreen` section.
+- **Full screen.** AVKit's and Android's native full screen cover everything
+  Flutter draws, so when the end screen (or the app's overlay) appears the
+  player leaves native full screen. At the end of the film the player stays
+  open on the end screen instead of closing; without one it closes as before.
+  The skip buttons do not leave full screen and are not seen there.
 - **Shrinking.** At the credits the surface is resized (not transformed:
   native platform views do not always follow a transform) into the top-right
   corner; a tap on it, or "Back to credits", hides the end screen until the

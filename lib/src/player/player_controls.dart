@@ -15,6 +15,7 @@ import 'player_policy.dart';
 import '../l10n/streaming_l10n.dart';
 import 'player_loading_indicator.dart';
 import 'player_options.dart';
+import '../core/player_config.dart' show PlayerSkipButtonTypes;
 import '../signals/stream_signals.dart';
 import 'skip_signal_button.dart';
 
@@ -158,6 +159,7 @@ class PlayerControls extends StatefulWidget {
     this.signal,
     this.onSkipSignal,
     this.skipButton = true,
+    this.skipButtonTypes = const PlayerSkipButtonTypes(),
   });
 
   final String title;
@@ -189,9 +191,19 @@ class PlayerControls extends StatefulWidget {
   /// `skipButtons: false`).
   final bool skipButton;
 
+  /// Which signal types get the button (a player config's
+  /// `skipButtonTypes`): by default all but the closing credits.
+  final PlayerSkipButtonTypes skipButtonTypes;
+
   /// The signal OK skips right now, if any.
-  StreamSignal? get _skippable =>
-      skipButton && onSkipSignal != null ? signal?.value : null;
+  StreamSignal? get _skippable {
+    final StreamSignal? current = skipButton && onSkipSignal != null
+        ? signal?.value
+        : null;
+    return current != null && skipButtonTypes.allows(current.type)
+        ? current
+        : null;
+  }
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -526,6 +538,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       theme: widget.theme,
       remote: true,
       focusNode: _nodes.skipSignal,
+      types: widget.skipButtonTypes,
     );
   }
 

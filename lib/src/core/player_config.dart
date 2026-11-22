@@ -2,6 +2,7 @@
 /// player reads them (`config-types.ts`, `remote-config.ts`).
 library;
 
+import '../signals/stream_signals.dart' show StreamSignalType;
 import 'dart:async';
 import 'dart:convert';
 
@@ -369,6 +370,69 @@ int? endScreenAutoplayLength(Object? configured) {
   return configured.round().clamp(0, maxEndScreenAutoplaySeconds);
 }
 
+/// Which signals get a skip button (`features.skipButtons`): the config's
+/// `skipButtonTypes`. A type left out keeps its default: intro, recap and
+/// opening credits on, closing credits off (skipping them only ends the film;
+/// the end screen belongs there).
+@immutable
+final class PlayerSkipButtonTypes {
+  const PlayerSkipButtonTypes({
+    this.intro,
+    this.recap,
+    this.openingCredits,
+    this.closingCredits,
+  });
+
+  factory PlayerSkipButtonTypes.fromJson(Map<String, Object?> json) =>
+      PlayerSkipButtonTypes(
+        intro: _bool(json['intro']),
+        recap: _bool(json['recap']),
+        openingCredits: _bool(json['openingCredits']),
+        closingCredits: _bool(json['closingCredits']),
+      );
+
+  final bool? intro;
+  final bool? recap;
+  final bool? openingCredits;
+  final bool? closingCredits;
+
+  /// Whether [type] gets a skip button.
+  bool allows(StreamSignalType type) => switch (type) {
+    StreamSignalType.intro => intro ?? true,
+    StreamSignalType.recap => recap ?? true,
+    StreamSignalType.openingCredits => openingCredits ?? true,
+    StreamSignalType.closingCredits => closingCredits ?? false,
+  };
+
+  /// [patch]'s values over these.
+  PlayerSkipButtonTypes merge(PlayerSkipButtonTypes? patch) => patch == null
+      ? this
+      : PlayerSkipButtonTypes(
+          intro: patch.intro ?? intro,
+          recap: patch.recap ?? recap,
+          openingCredits: patch.openingCredits ?? openingCredits,
+          closingCredits: patch.closingCredits ?? closingCredits,
+        );
+
+  Map<String, Object?> toJson() => {
+    'intro': ?intro,
+    'recap': ?recap,
+    'openingCredits': ?openingCredits,
+    'closingCredits': ?closingCredits,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlayerSkipButtonTypes &&
+      other.intro == intro &&
+      other.recap == recap &&
+      other.openingCredits == openingCredits &&
+      other.closingCredits == closingCredits;
+
+  @override
+  int get hashCode => Object.hash(intro, recap, openingCredits, closingCredits);
+}
+
 /// Seconds before the end the end screen shows on a stream without a closing
 /// credits signal, when the config does not say.
 const int defaultEndScreenSecondsBeforeEnd = 20;
@@ -479,6 +543,7 @@ final class PlayerConfig {
     this.ads,
     this.drm,
     this.endScreen,
+    this.skipButtonTypes,
   });
 
   /// The web player's `DEFAULT_CONFIG`, and the backend's defaults.
@@ -516,6 +581,10 @@ final class PlayerConfig {
       ),
       _ => null,
     },
+    skipButtonTypes: switch (json['skipButtonTypes']) {
+      final Map<String, Object?> types => PlayerSkipButtonTypes.fromJson(types),
+      _ => null,
+    },
   );
 
   final String id;
@@ -530,6 +599,7 @@ final class PlayerConfig {
   final PlayerAdsConfig? ads;
   final PlayerDrmConfig? drm;
   final PlayerEndScreenConfig? endScreen;
+  final PlayerSkipButtonTypes? skipButtonTypes;
 
   /// `cast.receiverAppId`, when set.
   /// How many seconds the countdown before a mid-roll shows:
@@ -560,6 +630,7 @@ final class PlayerConfig {
     if (ads case final ads?) 'ads': ads.toJson(),
     if (drm case final drm?) 'drm': drm.toJson(),
     if (endScreen case final endScreen?) 'endScreen': endScreen.toJson(),
+    if (skipButtonTypes case final types?) 'skipButtonTypes': types.toJson(),
   };
 }
 
@@ -577,6 +648,7 @@ final class PlayerConfigOverride {
     this.ads,
     this.drm,
     this.endScreen,
+    this.skipButtonTypes,
   });
 
   final String? id;
@@ -600,6 +672,9 @@ final class PlayerConfigOverride {
 
   /// Merged field by field.
   final PlayerEndScreenConfig? endScreen;
+
+  /// Merged type by type.
+  final PlayerSkipButtonTypes? skipButtonTypes;
 }
 
 /// The web player's `mergeConfig`: [patch] over [base]. Theme and features
@@ -632,6 +707,11 @@ PlayerConfig mergePlayerConfig(PlayerConfig base, PlayerConfigOverride? patch) {
         secondsBeforeEnd:
             e.secondsBeforeEnd ?? base.endScreen?.secondsBeforeEnd,
       ),
+    },
+    skipButtonTypes: switch (patch.skipButtonTypes) {
+      null => base.skipButtonTypes,
+      final PlayerSkipButtonTypes t =>
+        (base.skipButtonTypes ?? const PlayerSkipButtonTypes()).merge(t),
     },
   );
 }
