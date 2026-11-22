@@ -8,6 +8,7 @@ import '../videoplayer_feature.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../ads/ad_tag.dart';
 import '../cast/cast_backend.dart';
 import '../cast/cast_controller.dart';
 import '../cast/cast_media.dart';
@@ -366,7 +367,11 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   void _onStatus() {
     final coordinator = _coordinator;
     if (coordinator == null || !mounted) return;
-    if (coordinator.status case EyzflowPlayerReady(:final drmAccessHeader)) {
+    if (coordinator.status case EyzflowPlayerReady(
+      :final drmAccessHeader,
+      :final planAds,
+      :final adTargeting,
+    )) {
       final w = widget;
       final source = EyzflowSource(
         id: w.streamId,
@@ -379,6 +384,18 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
       );
       final store = w.watchProgressStore;
       final firstReady = _source == null;
+      if (firstReady) {
+        // The session has answered before the player mounts, so before the
+        // pre-roll's request: a plan without ads requests none at all.
+        final String? adTag = planAdTag(
+          _config.adTagUrl,
+          planAds: planAds,
+          targeting: adTargeting,
+        );
+        _options = _options.withAds(
+          adTag == null ? null : PlayerAds(adTagUrl: adTag),
+        );
+      }
       _source = source;
       if (firstReady) unawaited(_cast?.scan());
       _recorder = store != null && w._isProtected

@@ -57,14 +57,15 @@ Before playback, in the web player's order:
    place of a web page's Origin. A refusal shows the error screen and calls
    `onLicenseError`. If the check cannot be made, playback goes on without a
    token and without analytics.
-3. With `drmAuthorization` and `storefrontId`, for a film (not a trailer): opens
-   a playback session with `platform` (`android`, `androidtv`, `ios`, `tizen`)
-   and `X-Device-Id`. A limit shows the error screen and calls
-   `onLimitReached`. Any other failure carries on; the DRM licence request
-   enforces the limits too.
-4. Builds the `access-token`: `authorization` plus `storefront_id`,
-   `device_id`, `playback_session_id` and `player_token`, with any
-   `drmParameters`.
+3. With `drmAuthorization` and `storefrontId`: opens a playback session with
+   `platform` (`android`, `androidtv`, `ios`, `tizen`) and `X-Device-Id`, for
+   a trailer too (it says whether the viewer's plan plays ads, see
+   [Ads](#ads)), so trailers count against the plan's stream limit. A limit
+   shows the error screen and calls `onLimitReached`. Any other failure
+   carries on; the DRM licence request enforces the limits too.
+4. For a film: builds the `access-token`: `authorization` plus
+   `storefront_id`, `device_id`, `playback_session_id` and `player_token`,
+   with any `drmParameters`.
 
 While playing: the token renews after `refresh_after` (a refusal stops playback
 only when the organisation enforces), the session heartbeats at the interval
@@ -74,7 +75,7 @@ the first frame and on errors, and when the app goes to the background. On
 close: a final beat and `DELETE` of the session.
 
 Without `playerKey` there is no key check and no beats. Without `storefrontId`
-there is no session. A trailer plays with neither DRM nor a session.
+(or `drmAuthorization`) there is no session. A trailer plays without DRM.
 
 ### Viewer messages
 
@@ -136,7 +137,19 @@ over the local network, no Google Cast SDK). Turn it off with
 
 On Android, Android TV and iOS the player plays ads from the player config:
 `features.ads` on **and** a non-empty `ads.adTagUrl` (a VAST or VMAP tag).
-Otherwise no ad request is made at all. Ads play through Google IMA
+Otherwise no ad request is made at all.
+
+For a storefront viewer (`drmAuthorization` and `storefrontId`) the plan
+decides too: the playback session, answered before the player loads, says
+whether the plan plays ads for the title (`ads`: true when the plan requires
+ads or the product is AVOD or FAST). `ads: false` plays no ads at all, no
+pre-roll and no mid-rolls at the markers. When the session says nothing (no
+session, an older backend, a failed request), the config decides as above.
+The session's `ad_targeting` (e.g. `plan=basic-ads`, `access=svod`) is added
+to the tag's `cust_params`; a key the tag already sets there keeps the tag's
+value. A plan with ads cannot turn on ads the config has off.
+
+Ads play through Google IMA
 (`interactive_media_ads`), which shows the ad, its countdown, the skip button
 when the ad allows one, and the click-through. Tizen plays no ads (there is no
 IMA for it).

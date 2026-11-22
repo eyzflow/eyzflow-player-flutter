@@ -164,4 +164,70 @@ void main() {
       'DELETE /v1/content/storefront/sf%201/playback-sessions/ps_1',
     ]);
   });
+
+  group('ads', () {
+    Future<PlaybackSession> openWith(Map<String, Object?> body) =>
+        PlaybackSessionClient(
+          client: MockClient((_) async => http.Response(jsonEncode(body), 201)),
+        ).open(_target, streamId: 's', platform: PlayerPlatform.android);
+
+    test("reads the plan's ads answer and its targeting", () async {
+      final session = await openWith({
+        'id': 'ps_1',
+        'ads': true,
+        'ad_targeting': {'plan': 'basic-ads', 'access': 'svod'},
+      });
+
+      expect(session.ads, isTrue);
+      expect(session.adTargeting, {'plan': 'basic-ads', 'access': 'svod'});
+    });
+
+    test('a plan without ads', () async {
+      final session = await openWith({'id': 'ps_1', 'ads': false});
+
+      expect(session.ads, isFalse);
+      expect(session.adTargeting, isEmpty);
+    });
+
+    test('an older backend says nothing: null, no targeting', () async {
+      final session = await openWith({'id': 'ps_1'});
+
+      expect(session.ads, isNull);
+      expect(session.adTargeting, isEmpty);
+    });
+
+    test('ads that is not a bool is null', () async {
+      for (final value in ['true', 1, null, <Object?>[]]) {
+        expect((await openWith({'id': 'ps_1', 'ads': value})).ads, isNull);
+      }
+    });
+
+    test('targeting keeps string values only', () async {
+      final session = await openWith({
+        'id': 'ps_1',
+        'ads': true,
+        'ad_targeting': {
+          'plan': 'basic-ads',
+          'tier': 2,
+          'flag': true,
+          'nested': {'a': 'b'},
+          'none': null,
+          'empty': '',
+        },
+      });
+
+      expect(session.adTargeting, {'plan': 'basic-ads'});
+    });
+
+    test('targeting that is not an object is empty', () async {
+      for (final value in [
+        'plan=x',
+        3,
+        <Object?>['a'],
+      ]) {
+        final session = await openWith({'ads': true, 'ad_targeting': value});
+        expect(session.adTargeting, isEmpty);
+      }
+    });
+  });
 }
