@@ -98,4 +98,16 @@ class EYZFlowStreamingLocalizationsNl extends EYZFlowStreamingLocalizations {
   String adCountdown(int seconds) {
     return 'Reclame over $seconds';
   }
+
+  @override
+  String get skipIntro => 'Intro overslaan';
+
+  @override
+  String get skipRecap => 'Samenvatting overslaan';
+
+  @override
+  String get skipOpeningCredits => 'Begintiteling overslaan';
+
+  @override
+  String get skipClosingCredits => 'Aftiteling overslaan';
 }

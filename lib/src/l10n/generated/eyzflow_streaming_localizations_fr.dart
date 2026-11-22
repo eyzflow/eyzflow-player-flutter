@@ -98,4 +98,16 @@ class EYZFlowStreamingLocalizationsFr extends EYZFlowStreamingLocalizations {
   String adCountdown(int seconds) {
     return 'Publicité dans $seconds';
   }
+
+  @override
+  String get skipIntro => 'Passer l’intro';
+
+  @override
+  String get skipRecap => 'Passer le récap';
+
+  @override
+  String get skipOpeningCredits => 'Passer le générique';
+
+  @override
+  String get skipClosingCredits => 'Passer le générique';
 }

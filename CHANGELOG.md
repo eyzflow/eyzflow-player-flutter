@@ -1,3 +1,18 @@
+## Unreleased
+
+- Skip intro, recap and credits (EYF-214). The signals marked on a stream
+  (Stream → Signals) are read from its HLS playlist, on every route. While
+  playback is in one, a "Skip intro", "Skip recap" or "Skip credits" button
+  shows: tapped on phones and tablets; on TV it holds focus while the
+  controls are hidden, so OK skips. `features.skipButtons: false` hides it.
+  The button takes the config's theme. Text in en, de, fr and nl.
+- New playback events `PlaybackSignalStarted` and `PlaybackSignalEnded`, and
+  `EyzflowPlayer.onSignal`, for offering the next episode at the closing
+  credits. `PlaybackEvent` is sealed: an exhaustive `switch` over it needs
+  the two new cases.
+- The stream's playlist is now read once per playback for its markers even
+  without ads; `loadHlsAdBreaks` is replaced by `loadHlsMarkers`.
+
 ## 0.3.0
 
 - Ads follow the viewer's plan (EYF-210). The playback session's `ads` and

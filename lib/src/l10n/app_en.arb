@@ -72,5 +72,21 @@
         "type": "int"
       }
     }
+  },
+  "skipIntro": "Skip intro",
+  "@skipIntro": {
+    "description": "Button that jumps past the intro marked on the stream."
+  },
+  "skipRecap": "Skip recap",
+  "@skipRecap": {
+    "description": "Button that jumps past the recap (\"previously on\") marked on the stream."
+  },
+  "skipOpeningCredits": "Skip credits",
+  "@skipOpeningCredits": {
+    "description": "Button that jumps past the opening credits marked on the stream."
+  },
+  "skipClosingCredits": "Skip credits",
+  "@skipClosingCredits": {
+    "description": "Button that jumps past the closing credits marked on the stream."
   }
 }

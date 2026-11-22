@@ -133,6 +133,8 @@ void main() {
       PlaybackSubtitleTrackChanged(:final language) => 'subtitles $language',
       PlaybackAdBreakStarted() => 'ad break started',
       PlaybackAdBreakEnded() => 'ad break ended',
+      PlaybackSignalStarted(:final signal) => 'signal ${signal.type} started',
+      PlaybackSignalEnded(:final signal) => 'signal ${signal.type} ended',
       PlaybackCompleted() => 'completed',
       PlaybackClosed() => 'closed',
     };

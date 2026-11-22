@@ -117,6 +117,7 @@ final class PlayerFeatures {
     this.ads = false,
     this.autoHideControls = true,
     this.adCountdown = true,
+    this.skipButtons = true,
   });
 
   final bool controls;
@@ -134,6 +135,10 @@ final class PlayerFeatures {
   /// Count down the last 5 s before a mid-roll ("Ad in 5" … "Ad in 1"),
   /// when ads play. Missing (configs saved before it): on.
   final bool adCountdown;
+
+  /// "Skip intro", "Skip recap" and "Skip credits" at the stream's signals.
+  /// Missing (configs saved before it): on.
+  final bool skipButtons;
 
   factory PlayerFeatures.fromJson(
     Map<String, Object?> json, {
@@ -155,6 +160,7 @@ final class PlayerFeatures {
           ads: patch.ads ?? ads,
           autoHideControls: patch.autoHideControls ?? autoHideControls,
           adCountdown: patch.adCountdown ?? adCountdown,
+          skipButtons: patch.skipButtons ?? skipButtons,
         );
 
   Map<String, Object?> toJson() => {
@@ -170,6 +176,7 @@ final class PlayerFeatures {
     'ads': ads,
     'autoHideControls': autoHideControls,
     'adCountdown': adCountdown,
+    'skipButtons': skipButtons,
   };
 
   @override
@@ -186,7 +193,8 @@ final class PlayerFeatures {
       other.pip == pip &&
       other.ads == ads &&
       other.autoHideControls == autoHideControls &&
-      other.adCountdown == adCountdown;
+      other.adCountdown == adCountdown &&
+      other.skipButtons == skipButtons;
 
   @override
   int get hashCode => Object.hash(
@@ -202,6 +210,7 @@ final class PlayerFeatures {
     ads,
     autoHideControls,
     adCountdown,
+    skipButtons,
   );
 }
 
@@ -221,6 +230,7 @@ final class PlayerFeaturesOverride {
     this.ads,
     this.autoHideControls,
     this.adCountdown,
+    this.skipButtons,
   });
 
   factory PlayerFeaturesOverride.fromJson(Map<String, Object?> json) =>
@@ -237,6 +247,7 @@ final class PlayerFeaturesOverride {
         ads: _bool(json['ads']),
         autoHideControls: _bool(json['autoHideControls']),
         adCountdown: _bool(json['adCountdown']),
+        skipButtons: _bool(json['skipButtons']),
       );
 
   final bool? controls;
@@ -251,6 +262,7 @@ final class PlayerFeaturesOverride {
   final bool? ads;
   final bool? autoHideControls;
   final bool? adCountdown;
+  final bool? skipButtons;
 }
 
 /// The config's Chromecast settings.

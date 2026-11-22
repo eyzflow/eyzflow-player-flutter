@@ -171,11 +171,12 @@ playlist as
 so `START-DATE` minus the first `PROGRAM-DATE-TIME` is the position in the
 content, and into the MPD as an `urn:scte:scte35:2014:xml+bin` EventStream
 (`presentationTime` in its `timescale`). Intro and credits signals
-(`CLASS="com.eyzflow.signal"`, `urn:eyzflow:signal`) are skipped. The player
-loads `master.m3u8`, so `loadHlsAdBreaks` reads that and its first media
-playlist while the native player starts; a manifest that cannot be read
-counts as a stream without markers. `parseDashAdBreaks` reads an MPD the same
-way, for a DASH route.
+(`CLASS="com.eyzflow.signal"`, `urn:eyzflow:signal`) are skipped here and
+read as signals (below). The player loads `master.m3u8`, so `loadHlsMarkers`
+(`lib/src/signals/stream_signals.dart`) reads that and its first media
+playlist once while the native player starts, for both the ad breaks and the
+signals; a manifest that cannot be read counts as a stream without markers.
+`parseDashAdBreaks` reads an MPD the same way, for a DASH route.
 
 **Scheduling** (`AdBreakScheduler`, `lib/src/ads/ad_scheduler.dart`, pure
 Dart; `ImaAdDriver` does the IMA calls):
@@ -230,6 +231,49 @@ Covered without IMA in `test/ad_breaks_test.dart`,
 (a fake `AdDriver` through `SystemVideoPlayer.createAdDriver`). Not tried on a
 device with ad break markers yet (Google's sample VAST and VMAP tags on an
 iPhone and an Android TV); see the README's known limits.
+
+## Skip intro, recap and credits
+
+The intro, recap, opening and closing credits marked on a stream in the
+dashboard (Stream → Signals) are written by the backend into every HLS media
+playlist next to the ad breaks:
+
+```
+#EXT-X-DATERANGE:ID="eyz-intro",CLASS="com.eyzflow.signal",START-DATE="1970-01-01T00:00:15.000Z",DURATION=15.000,X-EYZ-TYPE="intro",X-EYZ-LABEL="Main titles"
+```
+
+`loadHlsMarkers` reads them with the ad breaks, on every route and with or
+without ads (`parseHlsSignals`; `parseDashSignals` reads the MPD's
+`urn:eyzflow:signal` EventStream, for a DASH route). A `SignalTracker` in
+each player follows the position reports: inside a span (until 0.25 s before
+its end; with overlapping spans, the one that started last) it holds that
+signal.
+
+- **Phones and tablets** (`SystemVideoPlayer` with the native controls): a
+  "Skip intro" / "Skip recap" / "Skip credits" button (`SkipSignalButton`),
+  bottom right over the native player. A tap seeks to the span's end, or to
+  the end of the content, which ends it. Hidden during an ad break; the ad
+  countdown moves up above it when both show.
+- **TV** (Android TV overlay and Tizen, `PlayerControls`): while the overlay
+  is hidden the button shows as the focused control and holds focus
+  (`controls.skipSignal`, in no row), so OK skips. Any other key wakes the
+  overlay as before, with focus on the transport; with the overlay up the
+  button hides and OK is the focused control's. After a skip, focus goes back
+  to the transport. With `controls: false` OK skips while there is a signal
+  and plays or pauses otherwise.
+- **Events.** Entering and leaving a span is reported as
+  `PlaybackSignalStarted` / `PlaybackSignalEnded` (with the `StreamSignal`),
+  and `EyzflowPlayer.onSignal` gets the signal, then null. A skip is also a
+  `PlaybackSeeked`.
+- **Config.** `features.skipButtons: false` hides the button; the events
+  still come. The button takes the config's theme: the bar colour and text
+  colour, the accent when focused, the radius.
+- The dashboard's `label` is passed on (`StreamSignal.label`) but not shown.
+
+Covered in `test/stream_signals_test.dart`,
+`test/system_video_player_signals_test.dart` and
+`test/tizen_avplay_player_signals_test.dart` (signals through the
+`loadSignals` seam). Not tried on a device yet.
 
 ## AVPlay: the single Tizen implementation
 
@@ -449,7 +493,8 @@ The same mapping serves the Samsung remote and an Android TV D-pad. Key
 handling follows the `flutter-tizen-tv-remote-input` pattern
 (`FocusableActionDetector`/`Focus`, not raw key listeners):
 
-- OK (`select` and `enter`) activates the focused control.
+- OK (`select` and `enter`) activates the focused control. While the overlay
+  is hidden during an intro, recap or credits, that is the skip button.
 - Back (`goBack` and `escape`) closes an open track panel first, then hides a
   visible overlay, then pops the player.
 - Media keys drive playback directly: `mediaPlay`/`mediaPause`/`mediaPlayPause`

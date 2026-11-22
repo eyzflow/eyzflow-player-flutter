@@ -1,5 +1,9 @@
 import 'package:equatable/equatable.dart';
 
+import '../signals/stream_signals.dart';
+
+export '../signals/stream_signals.dart' show StreamSignal, StreamSignalType;
+
 /// Receives every [PlaybackEvent] of one player.
 ///
 /// Called synchronously from the player's own listeners, so it must be cheap
@@ -270,6 +274,51 @@ final class PlaybackAdBreakEnded extends PlaybackEvent {
 
   @override
   String get _name => 'PlaybackAdBreakEnded';
+}
+
+/// Playback entered one of the stream's intro, recap or credits signals: by
+/// playing into it or by a seek. [PlaybackSignalEnded] follows when it
+/// leaves, before the next signal's start.
+final class PlaybackSignalStarted extends PlaybackEvent {
+  const PlaybackSignalStarted({
+    required super.sourceId,
+    required super.position,
+    super.duration,
+    required this.signal,
+  });
+
+  final StreamSignal signal;
+
+  @override
+  String get _name => 'PlaybackSignalStarted';
+
+  @override
+  Map<String, Object?> get _details => <String, Object?>{'signal': signal};
+
+  @override
+  List<Object?> get props => <Object?>[...super.props, signal];
+}
+
+/// Playback left [signal]: it played past its end, the viewer skipped it or
+/// seeked out of it.
+final class PlaybackSignalEnded extends PlaybackEvent {
+  const PlaybackSignalEnded({
+    required super.sourceId,
+    required super.position,
+    super.duration,
+    required this.signal,
+  });
+
+  final StreamSignal signal;
+
+  @override
+  String get _name => 'PlaybackSignalEnded';
+
+  @override
+  Map<String, Object?> get _details => <String, Object?>{'signal': signal};
+
+  @override
+  List<Object?> get props => <Object?>[...super.props, signal];
 }
 
 /// Playback reached the end. Reported once; only [PlaybackClosed] follows.
