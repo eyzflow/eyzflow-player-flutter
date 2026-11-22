@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
 import '../core/source.dart';
+import '../signals/stream_signals.dart';
 import 'package:video_player_avplay/video_player.dart';
 import 'package:video_player_avplay/video_player_platform_interface.dart'
     as avplay;
@@ -128,11 +130,16 @@ class TizenAvplayPlayer extends StatefulWidget {
     this.watchProgressRecorder,
     this.onPlaybackEvent,
     this.options = const PlayerOptions(),
+    this.loadSignals,
   });
 
   final VideoplayerTarget target;
   final VideoplaybackControllerFactory? createController;
   final TizenDeviceDiagnostics? diagnostics;
+
+  /// Replaces reading the intro, recap and credits signals from the manifest.
+  /// A test seam.
+  final Future<List<StreamSignal>> Function(Uri master)? loadSignals;
   final WidevineLicenseClient? licenseClient;
 
   /// Records what the viewer watched. Absent in previews and tests, and for a
@@ -174,6 +181,9 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   bool _ready = false;
   bool _tickBridged = false;
   bool _tracksRequested = false;
+
+  /// The intro, recap or credits signal playback is in.
+  final SignalTracker _signals = SignalTracker();
 
   WidevineLicenseClient get _licenseClient =>
       widget.licenseClient ?? (_ownedLicenseClient ??= WidevineLicenseClient());
@@ -240,6 +250,16 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       onEvent: widget.onPlaybackEvent,
     );
     _events = events;
+    _signals
+      ..onStarted = events.signalStarted
+      ..onEnded = events.signalEnded
+      ..position(null)
+      ..signals = const <StreamSignal>[];
+    unawaited(
+      _loadSignals(_hlsMaster(widget.target)).then((List<StreamSignal> found) {
+        if (mounted && identical(_events, events)) _signals.signals = found;
+      }),
+    );
     final VideoplaybackSession session = VideoplaybackSession(
       target: widget.target,
       createController: _createAndCaptureController,
@@ -250,7 +270,10 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
           : (Duration position, Duration _) => recorder.report(position),
       onInitialized: (VideoplaybackValue value) =>
           events.ready(position: value.position, duration: value.duration),
-      onValue: events.tick,
+      onValue: (VideoplaybackValue value) {
+        events.tick(value);
+        _signals.position(value.isCompleted ? null : value.position);
+      },
       // The controller opens at the resume position itself; see
       // [_createAvplayController].
       seeksToResumePosition: false,
@@ -348,6 +371,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   @override
   void dispose() {
     _request++;
+    _signals.dispose();
     _closeEvents();
     unawaited(_session?.dispose() ?? Future<void>.value());
     unawaited(_controlsBloc?.close() ?? Future<void>.value());
@@ -384,6 +408,9 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
             onBack: () => _closeFromControls(context),
             theme: widget.options.controlsTheme,
             showControls: widget.options.controls,
+            signal: _signals,
+            onSkipSignal: _skipSignal,
+            skipButton: widget.options.skipButtons,
           ),
         ],
       ),
@@ -446,6 +473,34 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   /// `isBuffering` come only from the plugin's `VideoPlayerValue`, so this runs
   /// on the real path only. Separate from the `VideoplaybackSession` listener
   /// that records watch progress, so neither disturbs the other.
+  /// The stream's signals, from the playlist AVPlay loads. None when it
+  /// cannot be read.
+  Future<List<StreamSignal>> _loadSignals(Uri master) async {
+    final Future<List<StreamSignal>> Function(Uri)? load = widget.loadSignals;
+    if (load != null) return load(master);
+    final http.Client client = http.Client();
+    try {
+      return (await loadHlsMarkers(client, master)).signals;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Jumps to the end of the signal playback is in (the end of the content
+  /// at most, which ends it).
+  void _skipSignal() {
+    final StreamSignal? signal = _signals.value;
+    final VideoplaybackController? playback = _playback;
+    if (signal == null || playback == null) return;
+    final Duration? duration = playback.value.duration;
+    final Duration target = duration != null && signal.end > duration
+        ? duration
+        : signal.end;
+    _events?.seeked(playback.value.position ?? signal.start, target);
+    _signals.skipped(signal, target);
+    unawaited(playback.seekTo(target));
+  }
+
   void _bridgeTick(VideoPlayerController controller, PlayerControlsBloc bloc) {
     if (_tickBridged) return;
     _tickBridged = true;
@@ -750,3 +805,8 @@ final class _AvplayController
     );
   }
 }
+
+Uri _hlsMaster(VideoplayerTarget target) => switch (target) {
+  VideoplayerTrailerTarget(:final source) => source.hlsStreamUrl,
+  VideoplayerSourceTarget(:final source) => source.hlsStreamUrl,
+};

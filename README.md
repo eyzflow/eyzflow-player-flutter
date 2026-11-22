@@ -222,11 +222,11 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 
 | Field | Phones | Android TV | Tizen |
 |---|---|---|---|
-| `theme.accentColor` | – | focused control, progress bar | same |
-| `theme.textColor` | – | title, times, icons, track rows | same |
+| `theme.accentColor` | – | focused control (the skip button too), progress bar | same |
+| `theme.textColor` | skip button text | title, times, icons, track rows | same |
 | `theme.backgroundColor` | – | audio/subtitle panel | same |
-| `theme.controlsBarColor` | – | shade behind the controls | same |
-| `theme.borderRadius` (px) | – | track rows, focused progress bar | same |
+| `theme.controlsBarColor` | skip button | shade behind the controls | same |
+| `theme.borderRadius` (px) | skip button | track rows, focused progress bar, skip button | same |
 | `features.controls` | – (the native controls hold Close) | false: no overlay; Back closes, OK plays/pauses, left/right and media keys skip | same |
 | `features.autoHideControls` | – | false: the overlay stays up | same |
 | `features.captions` | – (the native menu offers subtitles) | false: no subtitles, none offered | same |
@@ -238,6 +238,7 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 | `features.ads`, `ads.adTagUrl` | ads through Google IMA, see [Ads](#ads) | same | – (no IMA on Tizen) |
 | `features.adCountdown` | false: no "Ad in 5" notice before a mid-roll | same | – |
 | `ads.countdownSeconds` | the notice's length, 1–30 s (default 5) | same | – |
+| `features.skipButtons` | false: no "Skip intro / recap / credits" button (the signal events still come) | same | same |
 | `drm.parameters` | into the DRM `access-token`; `storefront_id` also opens the playback session | same | same |
 
 Not honoured anywhere in the apps:

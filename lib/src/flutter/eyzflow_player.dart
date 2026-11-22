@@ -79,6 +79,7 @@ class EyzflowPlayer extends StatefulWidget {
     this.onLicenseError,
     this.onError,
     this.onReady,
+    this.onSignal,
     this.onCloseRequested,
     this.onPlaybackEvent,
     this.errorBuilder,
@@ -166,6 +167,12 @@ class EyzflowPlayer extends StatefulWidget {
 
   /// The player is initialized.
   final VoidCallback? onReady;
+
+  /// Playback entered an intro, recap or credits signal marked on the stream
+  /// (Stream → Signals), or left one (null). For example, offer the next
+  /// episode when [StreamSignalType.closingCredits] starts. The same as the
+  /// [PlaybackSignalStarted] and [PlaybackSignalEnded] events.
+  final ValueChanged<StreamSignal?>? onSignal;
 
   /// Closing; [Navigator.pop] when null.
   final VoidCallback? onCloseRequested;
@@ -433,6 +440,8 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   void _onEvent(PlaybackEvent event) {
     _coordinator?.onPlaybackEvent(event);
     if (event is PlaybackReady) widget.onReady?.call();
+    if (event is PlaybackSignalEnded) widget.onSignal?.call(null);
+    if (event is PlaybackSignalStarted) widget.onSignal?.call(event.signal);
     widget.onPlaybackEvent?.call(event);
   }
 

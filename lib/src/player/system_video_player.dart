@@ -13,6 +13,7 @@ import '../core/source.dart';
 
 import '../bloc/player_controls_bloc.dart';
 import '../bloc/videoplayer_feature_bloc.dart';
+import '../signals/stream_signals.dart';
 import 'ad_countdown_notice.dart';
 import 'hls_renditions.dart';
 import 'playback_event.dart';
@@ -22,6 +23,7 @@ import 'player_controls.dart';
 import 'player_log.dart';
 import 'player_options.dart';
 import 'player_policy.dart';
+import 'skip_signal_button.dart';
 import 'system_drm_config.dart';
 import 'subtitle_preference_store.dart';
 import 'system_player_tracks.dart';
@@ -54,6 +56,7 @@ class SystemVideoPlayer extends StatefulWidget {
     this.options = const PlayerOptions(),
     this.createAdDriver,
     this.loadAdBreaks,
+    this.loadSignals,
   });
 
   final VideoplayerTarget target;
@@ -64,6 +67,10 @@ class SystemVideoPlayer extends StatefulWidget {
 
   /// Replaces reading the ad break markers from the manifest. A test seam.
   final Future<List<AdBreak>> Function(Uri master)? loadAdBreaks;
+
+  /// Replaces reading the intro, recap and credits signals from the manifest.
+  /// A test seam.
+  final Future<List<StreamSignal>> Function(Uri master)? loadSignals;
 
   /// Records what the viewer watched. Absent in previews and tests, and for
   /// a trailer, which is not something a viewer resumes.
@@ -126,6 +133,9 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   final ValueNotifier<int?> _adCountdown = ValueNotifier<int?>(null);
   VideoplaybackValue? _lastValue;
   Duration? _countdownPosition;
+
+  /// The intro, recap or credits signal playback is in.
+  final SignalTracker _signals = SignalTracker();
 
   void _checkpoint([Duration? position]) {
     final recorder = _sessionRecorder;
@@ -238,7 +248,22 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       onEvent: widget.onPlaybackEvent,
     );
     _events = events;
-    final AdBreakScheduler? ads = _setUpAds(events);
+    final Future<HlsMarkers> markers = _loadMarkers(
+      _masterPlaylist(widget.target),
+    );
+    _signals
+      ..onStarted = events.signalStarted
+      ..onEnded = events.signalEnded
+      ..position(null)
+      ..signals = const <StreamSignal>[];
+    unawaited(
+      markers.then((HlsMarkers found) {
+        if (mounted && identical(_events, events)) {
+          _signals.signals = found.signals;
+        }
+      }),
+    );
+    final AdBreakScheduler? ads = _setUpAds(events, markers);
     final VideoplaybackSession session = VideoplaybackSession(
       target: widget.target,
       createController: _createAndCaptureController,
@@ -256,6 +281,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
           ads.contentPosition(position);
         }
         _updateAdCountdown(value);
+        _signals.position(value.isCompleted ? null : position);
       },
       // Android: the pre-roll plays before the content player loads (below).
       beforePlay: _prerollBeforeLoad ? null : ads?.beforeContent,
@@ -282,7 +308,10 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
 
   /// The ads scheduler for a new session, or null without an ad tag. The
   /// markers are read from the manifest while the player starts.
-  AdBreakScheduler? _setUpAds(PlaybackEventEmitter events) {
+  AdBreakScheduler? _setUpAds(
+    PlaybackEventEmitter events,
+    Future<HlsMarkers> markers,
+  ) {
     _disposeAds();
     final PlayerAds? ads = widget.options.ads;
     if (ads == null) return null;
@@ -322,15 +351,43 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       ads.loadMarkers(() async {
         final Future<List<AdBreak>> Function(Uri)? load = widget.loadAdBreaks;
         if (load != null) return load(master);
-        final http.Client client = http.Client();
-        try {
-          return await loadHlsAdBreaks(client, master);
-        } finally {
-          client.close();
-        }
+        return (await markers).adBreaks;
       }),
     );
     return scheduler;
+  }
+
+  /// The stream's ad break markers and signals, read once per session from
+  /// the playlist the native player loads.
+  Future<HlsMarkers> _loadMarkers(Uri master) async {
+    final Future<List<StreamSignal>> Function(Uri)? loadSignals =
+        widget.loadSignals;
+    if (loadSignals != null) {
+      return (adBreaks: const <AdBreak>[], signals: await loadSignals(master));
+    }
+    final http.Client client = http.Client();
+    try {
+      return await loadHlsMarkers(client, master);
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Jumps to the end of the signal playback is in (the end of the content
+  /// at most, which ends it).
+  void _skipSignal() {
+    final StreamSignal? signal = _signals.value;
+    final VideoplaybackController? playback = _playback;
+    if (signal == null || playback == null || (_ads?.inBreak ?? false)) {
+      return;
+    }
+    final Duration? duration = playback.value.duration;
+    final Duration target = duration != null && signal.end > duration
+        ? duration
+        : signal.end;
+    _events?.seeked(playback.value.position ?? signal.start, target);
+    _signals.skipped(signal, target);
+    unawaited(playback.seekTo(target));
   }
 
   /// The content stops for a mid-roll. On Android its player also lets go
@@ -540,6 +597,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   @override
   void dispose() {
     _request++;
+    _signals.dispose();
     _disposeAds();
     _closeEvents();
     _retireNative();
@@ -591,13 +649,18 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     };
     // Over the video and the controls, never focusable: on TV it stays up
     // while the controls are hidden. Switched off without a reload.
+    final bool skipButtons = widget.options.skipButtons;
     final Widget? countdown = _ads != null && widget.options.adCountdown
-        ? AdCountdownNotice(seconds: _adCountdown)
+        ? AdCountdownNotice(
+            seconds: _adCountdown,
+            liftedBy: skipButtons ? _signals : null,
+          )
         : null;
 
     if (!widget.useSharedOverlay) {
       if (defaultTargetPlatform != TargetPlatform.iOS &&
-          widget.options.ads == null) {
+          widget.options.ads == null &&
+          !skipButtons) {
         return surface;
       }
       // iOS: the Cast button sits over the native controls (AVKit has no slot
@@ -607,6 +670,12 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         fit: StackFit.expand,
         children: <Widget>[
           surface,
+          if (skipButtons && !inAdBreak)
+            SkipSignalButton(
+              signal: _signals,
+              onSkip: _skipSignal,
+              theme: widget.options.controlsTheme,
+            ),
           ?adLayer,
           ?countdown,
           if (widget._showsCast && controller != null && !inAdBreak)
@@ -673,6 +742,9 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         onBack: () => _closeFromControls(context),
         theme: widget.options.controlsTheme,
         showControls: widget.options.controls,
+        signal: _signals,
+        onSkipSignal: _skipSignal,
+        skipButton: widget.options.skipButtons,
       ),
     );
   }

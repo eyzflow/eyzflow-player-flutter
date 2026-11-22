@@ -96,4 +96,16 @@ class EYZFlowStreamingLocalizationsEn extends EYZFlowStreamingLocalizations {
   String adCountdown(int seconds) {
     return 'Ad in $seconds';
   }
+
+  @override
+  String get skipIntro => 'Skip intro';
+
+  @override
+  String get skipRecap => 'Skip recap';
+
+  @override
+  String get skipOpeningCredits => 'Skip credits';
+
+  @override
+  String get skipClosingCredits => 'Skip credits';
 }

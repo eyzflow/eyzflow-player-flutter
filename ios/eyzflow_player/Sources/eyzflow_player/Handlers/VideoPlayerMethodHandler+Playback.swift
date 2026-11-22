@@ -49,7 +49,15 @@ extension VideoPlayerView {
         if let args = call.arguments as? [String: Any],
            let milliseconds = args["milliseconds"] as? Int {
             let seconds = Double(milliseconds) / 1000.0
-            player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 1000)) { _ in
+            // Never before the requested time: with the default tolerance
+            // AVPlayer snaps an HLS seek to an earlier keyframe, seconds
+            // short (a skip past the credits landed 4 s inside them). The
+            // first keyframe at or after it keeps the seek fast.
+            player?.seek(
+                to: CMTime(seconds: seconds, preferredTimescale: 1000),
+                toleranceBefore: .zero,
+                toleranceAfter: .positiveInfinity
+            ) { _ in
                 // Texture views must render the seeked frame even while
                 // paused (the engine shows the last copied buffer otherwise)
                 self.textureRenderer?.expectFrame()

@@ -89,6 +89,7 @@ final class PlayerOptions {
     this.ads,
     this.adCountdown = true,
     this.adCountdownSeconds = defaultAdCountdownSeconds,
+    this.skipButtons = true,
   });
 
   /// [PlayerConfig.features] and [PlayerConfig.theme] as the app players
@@ -114,6 +115,7 @@ final class PlayerOptions {
       },
       adCountdown: f.adCountdown,
       adCountdownSeconds: config.adCountdownSeconds,
+      skipButtons: f.skipButtons,
     );
   }
 
@@ -155,6 +157,11 @@ final class PlayerOptions {
   /// `ads.countdownSeconds`. Also read while playing.
   final int adCountdownSeconds;
 
+  /// Shows "Skip intro", "Skip recap" and "Skip credits" while playback is in
+  /// one of the stream's signals: the config's `features.skipButtons`. The
+  /// signal playback events are reported either way.
+  final bool skipButtons;
+
   /// These options with [ads] in place of the config's, e.g. once the
   /// viewer's plan has said whether it plays ads.
   PlayerOptions withAds(PlayerAds? ads) => PlayerOptions(
@@ -168,6 +175,7 @@ final class PlayerOptions {
     ads: ads,
     adCountdown: adCountdown,
     adCountdownSeconds: adCountdownSeconds,
+    skipButtons: skipButtons,
   );
 
   /// These options with the countdown's switch and length changed; the same
@@ -184,6 +192,7 @@ final class PlayerOptions {
         ads: ads,
         adCountdown: adCountdown,
         adCountdownSeconds: adCountdownSeconds,
+        skipButtons: skipButtons,
       );
 
   @override
@@ -198,7 +207,8 @@ final class PlayerOptions {
       other.airPlay == airPlay &&
       identical(other.ads, ads) &&
       other.adCountdown == adCountdown &&
-      other.adCountdownSeconds == adCountdownSeconds;
+      other.adCountdownSeconds == adCountdownSeconds &&
+      other.skipButtons == skipButtons;
 
   @override
   int get hashCode => Object.hash(
@@ -212,6 +222,7 @@ final class PlayerOptions {
     ads,
     adCountdown,
     adCountdownSeconds,
+    skipButtons,
   );
 }
 

@@ -51,6 +51,8 @@ final class PlaybackEventAdapter {
         collector.beginAd();
       case PlaybackAdBreakEnded():
         collector.endAd();
+      case PlaybackSignalStarted() || PlaybackSignalEnded():
+        break;
     }
   }
 }

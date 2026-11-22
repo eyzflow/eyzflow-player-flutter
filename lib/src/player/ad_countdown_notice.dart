@@ -10,21 +10,28 @@ import '../ads/ad_countdown.dart';
 /// as before; on TV it stays on screen while the controls are hidden. Read
 /// out by screen readers as it changes.
 class AdCountdownNotice extends StatelessWidget {
-  const AdCountdownNotice({super.key, required this.seconds});
+  const AdCountdownNotice({super.key, required this.seconds, this.liftedBy});
 
   /// Seconds until the break, or null for no notice.
   final ValueListenable<int?> seconds;
 
+  /// While this holds something (a skip button's signal), the notice moves
+  /// up above it.
+  final ValueListenable<Object?>? liftedBy;
+
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<int?>(
-    valueListenable: seconds,
-    builder: (BuildContext context, int? left, _) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge(<Listenable?>[seconds, liftedBy]),
+    builder: (BuildContext context, _) {
+      final int? left = seconds.value;
       if (left == null) {
         return const Positioned(right: 0, bottom: 0, child: SizedBox.shrink());
       }
       return Positioned(
         right: 16,
-        bottom: 72 + MediaQuery.paddingOf(context).bottom,
+        bottom:
+            (liftedBy?.value == null ? 72 : 128) +
+            MediaQuery.paddingOf(context).bottom,
         child: IgnorePointer(
           child: ExcludeFocus(
             child: Semantics(

@@ -25,5 +25,9 @@
   "castPlayingOn": "Lecture sur {device}",
   "castStop": "Arrêter la diffusion",
   "castFailed": "Impossible de lire sur {device}.",
-  "adCountdown": "Publicité dans {seconds}"
+  "adCountdown": "Publicité dans {seconds}",
+  "skipIntro": "Passer l’intro",
+  "skipRecap": "Passer le récap",
+  "skipOpeningCredits": "Passer le générique",
+  "skipClosingCredits": "Passer le générique"
 }

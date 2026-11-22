@@ -32,6 +32,7 @@ const Map<String, Object?> _remote = {
     'ads': false,
     'autoHideControls': false,
     'adCountdown': false,
+    'skipButtons': false,
   },
   'cast': {
     'receiverAppId': 'ABCD1234',
@@ -52,6 +53,7 @@ void main() {
       expect(config.theme.borderRadius, '4px');
       expect(config.features.loop, isTrue);
       expect(config.features.chromecast, isFalse);
+      expect(config.features.skipButtons, isFalse);
       expect(config.castReceiverAppId, 'ABCD1234');
       expect(config.cast!.autoJoinPolicy, 'origin_scoped');
       expect(config.ads!.adTagUrl, '');

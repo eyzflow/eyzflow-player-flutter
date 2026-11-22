@@ -260,6 +260,30 @@ abstract class EYZFlowStreamingLocalizations {
   /// In en, this message translates to:
   /// **'Ad in {seconds}'**
   String adCountdown(int seconds);
+
+  /// Button that jumps past the intro marked on the stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip intro'**
+  String get skipIntro;
+
+  /// Button that jumps past the recap ("previously on") marked on the stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip recap'**
+  String get skipRecap;
+
+  /// Button that jumps past the opening credits marked on the stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip credits'**
+  String get skipOpeningCredits;
+
+  /// Button that jumps past the closing credits marked on the stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip credits'**
+  String get skipClosingCredits;
 }
 
 class _EYZFlowStreamingLocalizationsDelegate
