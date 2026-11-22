@@ -7,8 +7,8 @@ import '../signals/stream_signals.dart';
 /// A film or episode the end screen offers. The app supplies them; the player
 /// plays [streamId] in place when it is picked.
 @immutable
-final class EyzflowEndScreenItem {
-  const EyzflowEndScreenItem({
+final class EYZFlowEndScreenItem {
+  const EYZFlowEndScreenItem({
     required this.streamId,
     required this.title,
     this.poster,
@@ -32,9 +32,9 @@ final class EyzflowEndScreenItem {
 
   /// How it plays when picked. Null: the same kind as the stream playing
   /// (a film plays with DRM, its progress recorded against [streamId]).
-  final EyzflowSourceType? sourceType;
+  final EYZFlowSourceType? sourceType;
 
-  /// Anything the app wants back in [EyzflowEndScreen.onSelect].
+  /// Anything the app wants back in [EYZFlowEndScreen.onSelect].
   final Object? data;
 }
 
@@ -42,7 +42,7 @@ final class EyzflowEndScreenItem {
 final class EndScreenSelection {
   EndScreenSelection(this.item, {required this.autoplay});
 
-  final EyzflowEndScreenItem item;
+  final EYZFlowEndScreenItem item;
 
   /// Picked by the countdown reaching 0, not by the viewer.
   final bool autoplay;
@@ -59,9 +59,9 @@ final class EndScreenSelection {
 /// film. The player config's `features.endScreen` and `endScreen` settings
 /// apply where this leaves them out.
 @immutable
-final class EyzflowEndScreen {
-  const EyzflowEndScreen({
-    this.items = const <EyzflowEndScreenItem>[],
+final class EYZFlowEndScreen {
+  const EYZFlowEndScreen({
+    this.items = const <EYZFlowEndScreenItem>[],
     this.nextUp,
     this.autoplaySeconds,
     this.title,
@@ -74,10 +74,10 @@ final class EyzflowEndScreen {
   });
 
   /// The row of films.
-  final List<EyzflowEndScreenItem> items;
+  final List<EYZFlowEndScreenItem> items;
 
   /// The next stream: "Up next", played when its countdown reaches 0.
-  final EyzflowEndScreenItem? nextUp;
+  final EYZFlowEndScreenItem? nextUp;
 
   /// Seconds the countdown runs (0–30; 0: none). Null: the config's, else 10.
   final int? autoplaySeconds;
@@ -102,7 +102,7 @@ final class EyzflowEndScreen {
   /// Draws one film instead of the built-in card; call `select` to pick it.
   final Widget Function(
     BuildContext context,
-    EyzflowEndScreenItem item,
+    EYZFlowEndScreenItem item,
     VoidCallback select,
   )?
   itemBuilder;
@@ -123,7 +123,7 @@ final class EndScreenSettings {
   /// `features.endScreen` not false and the app not switching it off.
   factory EndScreenSettings.resolve(
     PlayerConfig config,
-    EyzflowEndScreen? options,
+    EYZFlowEndScreen? options,
   ) {
     final PlayerEndScreenConfig? remote = config.endScreen;
     final bool hasContent =
@@ -253,7 +253,7 @@ final class PlayerOverlayContext {
 typedef PlayerOverlayBuilder =
     Widget? Function(BuildContext context, PlayerOverlayContext overlay);
 
-/// What [EyzflowPlayer] gives the player routes for the overlay and the end
+/// What [EYZFlowPlayer] gives the player routes for the overlay and the end
 /// screen. Read with [PlayerOverlayScope.maybeOf].
 final class PlayerOverlayScope extends InheritedWidget {
   const PlayerOverlayScope({
@@ -266,11 +266,11 @@ final class PlayerOverlayScope extends InheritedWidget {
   });
 
   final EndScreenSettings settings;
-  final EyzflowEndScreen? endScreen;
+  final EYZFlowEndScreen? endScreen;
   final PlayerOverlayBuilder? overlayBuilder;
 
   /// An end screen item was picked (and not prevented): play it in place.
-  final void Function(EyzflowEndScreenItem item) onPick;
+  final void Function(EYZFlowEndScreenItem item) onPick;
 
   static PlayerOverlayScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlayerOverlayScope>();

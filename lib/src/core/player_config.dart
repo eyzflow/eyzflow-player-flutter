@@ -591,7 +591,7 @@ final class PlayerConfig {
   final String name;
 
   /// Whether the config plays protected streams. The app players decide from
-  /// the source type instead (`EyzflowFilm` plays with DRM).
+  /// the source type instead (`EYZFlowFilm` plays with DRM).
   final bool isProtected;
   final PlayerTheme theme;
   final PlayerFeatures features;
@@ -726,12 +726,12 @@ PlayerConfig mergePlayerConfig(PlayerConfig base, PlayerConfigOverride? patch) {
 final class PlayerConfigClient {
   PlayerConfigClient({
     required this._client,
-    this.endpoints = const EyzflowEndpoints(),
+    this.endpoints = const EYZFlowEndpoints(),
     this.timeout = const Duration(seconds: 5),
   });
 
   final http.Client _client;
-  final EyzflowEndpoints endpoints;
+  final EYZFlowEndpoints endpoints;
 
   /// How long playback waits for the config before it starts with the
   /// defaults.

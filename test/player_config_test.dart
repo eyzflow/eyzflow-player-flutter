@@ -169,7 +169,7 @@ void main() {
       });
       final configs = PlayerConfigClient(
         client: client,
-        endpoints: const EyzflowEndpoints(api: 'https://api.dev.test/'),
+        endpoints: const EYZFlowEndpoints(api: 'https://api.dev.test/'),
       );
 
       final first = await configs.load('cfg_main01');

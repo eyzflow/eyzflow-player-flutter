@@ -34,7 +34,7 @@ registered with Google as the published Custom Receiver **"EYZFlow Player",
 application id `A534F914`**. Apps use it as it is:
 
 ```dart
-EyzflowPlayer(castReceiverAppId: 'A534F914', …)
+EYZFlowPlayer(castReceiverAppId: 'A534F914', …)
 ```
 
 To run your own copy, host `index.html` over HTTPS (no build step), register

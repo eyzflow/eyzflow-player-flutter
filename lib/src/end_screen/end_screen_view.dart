@@ -231,7 +231,7 @@ class _PlayerOverlayLayerState extends State<PlayerOverlayLayer> {
                     theme: widget.theme,
                     remote: widget.remote,
                     leaveRightFor: shrunk ? small.width + 32 : 0,
-                    onPick: (EyzflowEndScreenItem item, bool autoplay) {
+                    onPick: (EYZFlowEndScreenItem item, bool autoplay) {
                       final EndScreenSelection selection = EndScreenSelection(
                         item,
                         autoplay: autoplay,
@@ -276,13 +276,13 @@ class EndScreenView extends StatefulWidget {
     this.leaveRightFor = 0,
   });
 
-  final EyzflowEndScreen options;
+  final EYZFlowEndScreen options;
   final EndScreenSettings settings;
   final EndScreenPhase phase;
 
   /// The countdown runs only while this is true.
   final bool counting;
-  final void Function(EyzflowEndScreenItem item, bool autoplay) onPick;
+  final void Function(EYZFlowEndScreenItem item, bool autoplay) onPick;
   final VoidCallback onBack;
   final PlayerControlsTheme theme;
   final bool remote;
@@ -343,7 +343,7 @@ class _EndScreenViewState extends State<EndScreenView> {
     }
   }
 
-  void _pick(EyzflowEndScreenItem item, {bool autoplay = false}) {
+  void _pick(EYZFlowEndScreenItem item, {bool autoplay = false}) {
     if (_picked) return;
     setState(() => _picked = true);
     _timer?.cancel();
@@ -365,8 +365,8 @@ class _EndScreenViewState extends State<EndScreenView> {
     final PlayerControlsTheme theme = widget.theme;
     final bool tv = widget.remote;
     final double scale = tv ? 1.25 : 1;
-    final EyzflowEndScreenItem? next = widget.options.nextUp;
-    final List<EyzflowEndScreenItem> items = widget.options.items;
+    final EYZFlowEndScreenItem? next = widget.options.nextUp;
+    final List<EYZFlowEndScreenItem> items = widget.options.items;
     final int total = widget.settings.autoplaySeconds;
     final TextStyle text = TextStyle(
       color: theme.textColor,
@@ -541,10 +541,10 @@ class _EndScreenViewState extends State<EndScreenView> {
                           itemCount: items.length,
                           separatorBuilder: (_, _) => const SizedBox(width: 12),
                           itemBuilder: (BuildContext context, int i) {
-                            final EyzflowEndScreenItem item = items[i];
+                            final EYZFlowEndScreenItem item = items[i];
                             final Widget Function(
                               BuildContext,
-                              EyzflowEndScreenItem,
+                              EYZFlowEndScreenItem,
                               VoidCallback,
                             )?
                             builder = widget.options.itemBuilder;
@@ -612,7 +612,7 @@ class _EndScreenViewState extends State<EndScreenView> {
 class _Poster extends StatelessWidget {
   const _Poster({required this.item, required this.width, required this.theme});
 
-  final EyzflowEndScreenItem item;
+  final EYZFlowEndScreenItem item;
   final double width;
   final PlayerControlsTheme theme;
 

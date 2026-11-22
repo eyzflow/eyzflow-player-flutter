@@ -125,7 +125,7 @@ final class WatchProgressRecorder {
 
   static String? _catalogueIdOf(VideoplayerTarget target) => switch (target) {
     VideoplayerSourceTarget(:final source) => switch (source.sourceType) {
-      EyzflowFilm(:final catalogueId) => catalogueId,
+      EYZFlowFilm(:final catalogueId) => catalogueId,
       _ => null,
     },
     VideoplayerTrailerTarget() => null,

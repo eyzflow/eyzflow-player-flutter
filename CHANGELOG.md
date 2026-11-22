@@ -1,3 +1,13 @@
+## Unreleased
+
+- Renamed (EYF-225): every public `Eyzflow…` name is now spelled `EYZFlow…`
+  to match the product, e.g. `EYZFlowPlayer`, `EYZFlowSource`, `EYZFlowFilm`,
+  `EYZFlowEndpoints`, `EYZFlowPlayerStatus` and `setEYZFlowPlayerLanguage`.
+  The old names still work as deprecated aliases and are removed in 0.6.0.
+  The package name `eyzflow_player` is unchanged. The native plugin classes
+  are now `EYZFlowPlayerPlugin`; Flutter regenerates the registrant on the
+  next build.
+
 ## 0.4.0
 
 - Skip intro, recap and credits (EYF-214). The signals marked on a stream
@@ -7,7 +17,7 @@
   controls are hidden, so OK skips. `features.skipButtons: false` hides it.
   The button takes the config's theme. Text in en, de, fr and nl.
 - New playback events `PlaybackSignalStarted` and `PlaybackSignalEnded`, and
-  `EyzflowPlayer.onSignal`, for offering the next episode at the closing
+  `EYZFlowPlayer.onSignal`, for offering the next episode at the closing
   credits. `PlaybackEvent` is sealed: an exhaustive `switch` over it needs
   the two new cases.
 - The stream's playlist is now read once per playback for its markers even
@@ -15,7 +25,7 @@
 - `skipButtonTypes` (EYF-223): the skip button per signal type, from the
   player config or inline. By default intro, recap and opening credits; no
   "Skip credits" over the closing credits unless `closingCredits: true`.
-- An end screen (EYF-222): `EyzflowPlayer.endScreen` shows "Up next" with a
+- An end screen (EYF-222): `EYZFlowPlayer.endScreen` shows "Up next" with a
   countdown and a row of films the app passes, at the closing credits (the
   video shrunk into a corner) or after the film; a picked film plays in
   place with its own key check, session and DRM (`onSelect` can prevent it).

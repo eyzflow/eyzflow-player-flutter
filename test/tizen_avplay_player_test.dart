@@ -13,13 +13,13 @@ import 'package:eyzflow_player/src/player/tizen_avplay_player.dart';
 import 'package:eyzflow_player/src/player/player_controls.dart';
 
 const VideoplayerTarget _trailerA = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'trailer-a', title: 'Trailer A'),
+  EYZFlowSource(id: 'trailer-a', title: 'Trailer A'),
 );
 const VideoplayerTarget _trailerB = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'trailer-b', title: 'Trailer B'),
+  EYZFlowSource(id: 'trailer-b', title: 'Trailer B'),
 );
 const VideoplayerTarget _trailerC = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'trailer-c', title: 'Trailer C'),
+  EYZFlowSource(id: 'trailer-c', title: 'Trailer C'),
 );
 
 void main() {

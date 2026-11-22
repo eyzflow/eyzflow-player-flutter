@@ -87,7 +87,7 @@ void main() {
         containsPair('app', {'platform': 'android', 'id': 'com.example.app'}),
       );
       expect(backend.requests[1].headers['X-Device-Id'], 'device-1');
-      final status = coordinator.status as EyzflowPlayerReady;
+      final status = coordinator.status as EYZFlowPlayerReady;
       expect(_decodeHeader(status.drmAccessHeader!), {
         'headers': {'authorization': 'Bearer viewer'},
         'parameters': {
@@ -142,8 +142,8 @@ void main() {
         ..start();
       async.flushMicrotasks();
 
-      final status = coordinator.status as EyzflowPlayerFailed;
-      expect(status.failure, isA<EyzflowLimitFailure>());
+      final status = coordinator.status as EYZFlowPlayerFailed;
+      expect(status.failure, isA<EYZFlowLimitFailure>());
       expect(limits.single.code, PlaybackLimitCode.streamLimit);
       expect(errors.single, contains('too many screens'));
       coordinator.dispose();
@@ -158,7 +158,7 @@ void main() {
       final coordinator = _coordinator(backend, refusals: refusals)..start();
       async.flushMicrotasks();
 
-      expect(coordinator.status, isA<EyzflowPlayerFailed>());
+      expect(coordinator.status, isA<EYZFlowPlayerFailed>());
       expect(refusals.single.code, PlayerLicenseCode.playerKeyInvalid);
       expect(backend.calls, ['POST /v1/player/license']);
       coordinator.dispose();
@@ -172,7 +172,7 @@ void main() {
       final coordinator = _coordinator(backend, beats: beats)..start();
       async.flushMicrotasks();
 
-      final status = coordinator.status as EyzflowPlayerReady;
+      final status = coordinator.status as EYZFlowPlayerReady;
       expect(
         (_decodeHeader(status.drmAccessHeader!)['parameters']! as Map)
             .containsKey('player_token'),
@@ -193,11 +193,11 @@ void main() {
       final limits = <PlaybackLimitError>[];
       final coordinator = _coordinator(backend, limits: limits)..start();
       async.flushMicrotasks();
-      expect(coordinator.status, isA<EyzflowPlayerReady>());
+      expect(coordinator.status, isA<EYZFlowPlayerReady>());
 
       async.elapse(const Duration(seconds: 30));
 
-      expect(coordinator.status, isA<EyzflowPlayerFailed>());
+      expect(coordinator.status, isA<EYZFlowPlayerFailed>());
       expect(limits.single.code, PlaybackLimitCode.playbackSessionEnded);
       expect(
         backend.calls.last,
@@ -214,7 +214,7 @@ void main() {
       async.flushMicrotasks();
       async.elapse(const Duration(minutes: 5));
 
-      final status = coordinator.status as EyzflowPlayerReady;
+      final status = coordinator.status as EYZFlowPlayerReady;
       expect(
         (_decodeHeader(status.drmAccessHeader!)['parameters']! as Map)
             .containsKey('playback_session_id'),
@@ -239,7 +239,7 @@ void main() {
       async.flushMicrotasks();
 
       expect(backend.calls, isEmpty);
-      final status = coordinator.status as EyzflowPlayerReady;
+      final status = coordinator.status as EYZFlowPlayerReady;
       expect(_decodeHeader(status.drmAccessHeader!)['parameters'], {
         'device_id': 'device-1',
       });
@@ -275,7 +275,7 @@ void main() {
           jsonDecode(backend.requests.single.body),
           containsPair('stream_id', 'trailer-1'),
         );
-        final status = coordinator.status as EyzflowPlayerReady;
+        final status = coordinator.status as EYZFlowPlayerReady;
         expect(status.drmAccessHeader, isNull);
         expect(status.planAds, isFalse);
         expect(status.adTargeting, {'plan': 'premium'});
@@ -314,7 +314,7 @@ void main() {
         async.flushMicrotasks();
 
         expect(backend.calls, isEmpty);
-        final status = coordinator.status as EyzflowPlayerReady;
+        final status = coordinator.status as EYZFlowPlayerReady;
         expect(status.drmAccessHeader, isNull);
         expect(status.planAds, isNull);
         expect(status.adTargeting, isEmpty);
@@ -334,7 +334,7 @@ void main() {
       final coordinator = _coordinator(backend)..start();
       async.flushMicrotasks();
 
-      final status = coordinator.status as EyzflowPlayerReady;
+      final status = coordinator.status as EYZFlowPlayerReady;
       expect(status.planAds, isTrue);
       expect(status.adTargeting, {'plan': 'basic-ads', 'access': 'svod'});
       expect(
@@ -352,7 +352,7 @@ void main() {
       final coordinator = _coordinator(backend)..start();
       async.flushMicrotasks();
 
-      final status = coordinator.status as EyzflowPlayerReady;
+      final status = coordinator.status as EYZFlowPlayerReady;
       expect(status.planAds, isNull);
       expect(status.adTargeting, isEmpty);
       expect(status.drmAccessHeader, isNotNull);
@@ -376,7 +376,7 @@ void main() {
       async.flushMicrotasks();
 
       expect(limits.single.code, PlaybackLimitCode.deviceLimit);
-      expect(coordinator.status, isA<EyzflowPlayerFailed>());
+      expect(coordinator.status, isA<EYZFlowPlayerFailed>());
       coordinator.dispose();
     });
   });
@@ -400,8 +400,8 @@ void main() {
         expect(
           coordinator.status,
           mode == 'enforce'
-              ? isA<EyzflowPlayerFailed>()
-              : isA<EyzflowPlayerReady>(),
+              ? isA<EYZFlowPlayerFailed>()
+              : isA<EYZFlowPlayerReady>(),
           reason: mode,
         );
         coordinator.dispose();

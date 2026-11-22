@@ -25,15 +25,15 @@ class VideoplayerFeatureView extends StatelessWidget {
   /// Source-based playback. Tizen plays it through AVPlay, Android and iOS
   /// through the native system player; every other platform shows no player.
   ///
-  /// An [EyzflowTrailer] source (or one with no
-  /// [EyzflowSource.sourceType] at all, for legacy callers)
+  /// An [EYZFlowTrailer] source (or one with no
+  /// [EYZFlowSource.sourceType] at all, for legacy callers)
   /// becomes a [VideoplayerTrailerTarget] — never DRM-protected. An
-  /// [EyzflowFilm] source becomes a [VideoplayerSourceTarget],
+  /// [EYZFlowFilm] source becomes a [VideoplayerSourceTarget],
   /// which carries the source's own DRM license request: Widevine on Tizen
   /// and Android, FairPlay on iOS.
   VideoplayerFeatureView({
     super.key,
-    required EyzflowSource videoSource,
+    required EYZFlowSource videoSource,
     this.onCloseRequested,
     this.playerBuilder,
     this.watchProgressRecorder,
@@ -45,7 +45,7 @@ class VideoplayerFeatureView extends StatelessWidget {
     this.options = const PlayerOptions(),
   }) : target =
            videoSource.sourceType == null ||
-               videoSource.sourceType is EyzflowTrailer
+               videoSource.sourceType is EYZFlowTrailer
            ? VideoplayerTrailerTarget(videoSource)
            : VideoplayerSourceTarget(videoSource);
 

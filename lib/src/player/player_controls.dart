@@ -27,7 +27,7 @@ const Duration _fadeDuration = Duration(milliseconds: 250);
 typedef _NamedTrack = ({int? trackId, String label});
 
 /// The audio tracks a panel can offer: those whose language code resolves to
-/// a name a viewer can read (see [EyzflowLanguageNames.languageName], which
+/// a name a viewer can read (see [EYZFlowLanguageNames.languageName], which
 /// answers `null` for `und`, `zxx` and the untagged renditions EYZFlow emits
 /// as `un`).
 ///
@@ -38,7 +38,7 @@ List<_NamedTrack> _namedAudioTracks(
   List<PlayerAudioTrack> tracks,
 ) => <_NamedTrack>[
   for (final PlayerAudioTrack t in tracks)
-    if (EyzflowLanguageNames.languageName(t.language) case final String name)
+    if (EYZFlowLanguageNames.languageName(t.language) case final String name)
       (trackId: t.trackId, label: _audioLabel(name, t)),
 ];
 
@@ -61,7 +61,7 @@ List<_NamedTrack> _namedTextTracks(
   List<PlayerTextTrack> tracks,
 ) => <_NamedTrack>[
   for (final PlayerTextTrack t in tracks)
-    if (EyzflowLanguageNames.languageName(t.language) case final String name)
+    if (EYZFlowLanguageNames.languageName(t.language) case final String name)
       (trackId: t.trackId, label: t.isSdh ? '$name (SDH)' : name),
 ];
 

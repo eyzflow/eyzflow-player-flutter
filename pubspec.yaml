@@ -51,6 +51,6 @@ flutter:
     platforms:
       android:
         package: com.eyzflow.player
-        pluginClass: EyzflowPlayerPlugin
+        pluginClass: EYZFlowPlayerPlugin
       ios:
-        pluginClass: EyzflowPlayerPlugin
+        pluginClass: EYZFlowPlayerPlugin

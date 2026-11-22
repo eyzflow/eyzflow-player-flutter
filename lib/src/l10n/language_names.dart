@@ -15,7 +15,7 @@ typedef LanguageNameResolver = String? Function(String code, String uiLanguage);
 ///
 /// Built in, from the Unicode CLDR display names, for the player's four UI
 /// languages; an app with its own names sets [resolver].
-abstract final class EyzflowLanguageNames {
+abstract final class EYZFlowLanguageNames {
   /// Consulted first; null (the default) uses the built-in table only.
   static LanguageNameResolver? resolver;
 

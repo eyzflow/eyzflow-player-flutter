@@ -17,7 +17,7 @@ class CastingView extends StatefulWidget {
     required this.onClose,
   });
 
-  final EyzflowCastController cast;
+  final EYZFlowCastController cast;
   final String title;
   final Uri? poster;
   final VoidCallback onClose;

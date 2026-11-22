@@ -4,15 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:eyzflow_player/eyzflow_player.dart';
 import 'package:eyzflow_player/src/player/player_policy.dart';
 
-const source = EyzflowSource(id: 'trailer', title: 'Trailer');
+const source = EYZFlowSource(id: 'trailer', title: 'Trailer');
 
 void main() {
   group('buildVideoplayerRoute', () {
     const VideoplayerTarget trailer = VideoplayerTrailerTarget(
-      EyzflowSource(id: 'trailer-a', title: 'Trailer A'),
+      EYZFlowSource(id: 'trailer-a', title: 'Trailer A'),
     );
     const VideoplayerTarget film = VideoplayerSourceTarget(
-      EyzflowSource(id: 'film-a', title: 'Film A'),
+      EYZFlowSource(id: 'film-a', title: 'Film A'),
     );
 
     test('Tizen routes both targets to AVPlay and keeps the target', () {
@@ -238,10 +238,10 @@ void main() {
     final log = <String>[];
     final session = VideoplaybackSession(
       target: VideoplayerSourceTarget(
-        EyzflowSource(
+        EYZFlowSource(
           id: 'stream',
           title: 'Episode',
-          sourceType: const EyzflowFilm('episode'),
+          sourceType: const EYZFlowFilm('episode'),
           progressSeconds: 1800,
         ),
       ),
@@ -286,10 +286,10 @@ void main() {
     final ready = <Duration?>[];
     final session = VideoplaybackSession(
       target: VideoplayerSourceTarget(
-        EyzflowSource(
+        EYZFlowSource(
           id: 'stream',
           title: 'Episode',
-          sourceType: const EyzflowFilm('episode'),
+          sourceType: const EYZFlowFilm('episode'),
           progressSeconds: 612,
         ),
       ),
@@ -317,10 +317,10 @@ void main() {
         .._value = const VideoplaybackValue(duration: Duration(minutes: 30));
       final session = VideoplaybackSession(
         target: VideoplayerSourceTarget(
-          EyzflowSource(
+          EYZFlowSource(
             id: 'stream',
             title: 'Episode',
-            sourceType: const EyzflowFilm('episode'),
+            sourceType: const EYZFlowFilm('episode'),
             progressSeconds: 612,
           ),
         ),
@@ -341,10 +341,10 @@ void main() {
         .._value = const VideoplaybackValue(duration: Duration(seconds: 100));
       final session = VideoplaybackSession(
         target: VideoplayerSourceTarget(
-          EyzflowSource(
+          EYZFlowSource(
             id: 'stream',
             title: 'Episode',
-            sourceType: const EyzflowFilm('episode'),
+            sourceType: const EYZFlowFilm('episode'),
             progressSeconds: 100,
           ),
         ),
@@ -374,10 +374,10 @@ void main() {
         final reported = <Duration>[];
         final session = VideoplaybackSession(
           target: VideoplayerSourceTarget(
-            EyzflowSource(
+            EYZFlowSource(
               id: 'stream',
               title: 'Episode',
-              sourceType: const EyzflowFilm('episode'),
+              sourceType: const EYZFlowFilm('episode'),
               progressSeconds: 612,
             ),
           ),
@@ -410,10 +410,10 @@ void main() {
         final reported = <Duration>[];
         final session = VideoplaybackSession(
           target: VideoplayerSourceTarget(
-            EyzflowSource(
+            EYZFlowSource(
               id: 'stream',
               title: 'Episode',
-              sourceType: const EyzflowFilm('episode'),
+              sourceType: const EYZFlowFilm('episode'),
               progressSeconds: 612,
             ),
           ),
@@ -449,10 +449,10 @@ void main() {
           .._value = const VideoplaybackValue(duration: Duration(minutes: 30));
         final session = VideoplaybackSession(
           target: VideoplayerSourceTarget(
-            EyzflowSource(
+            EYZFlowSource(
               id: 'stream',
               title: 'Episode',
-              sourceType: const EyzflowFilm('episode'),
+              sourceType: const EYZFlowFilm('episode'),
               progressSeconds: 612,
             ),
           ),

@@ -8,7 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const VideoplayerTarget _film = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'film', title: 'Film'),
+  EYZFlowSource(id: 'film', title: 'Film'),
 );
 
 Duration _s(num seconds) => Duration(milliseconds: (seconds * 1000).round());

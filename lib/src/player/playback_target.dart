@@ -12,7 +12,7 @@ sealed class VideoplayerTarget extends Equatable {
 final class VideoplayerTrailerTarget extends VideoplayerTarget {
   const VideoplayerTrailerTarget(this.source);
 
-  final EyzflowSource source;
+  final EYZFlowSource source;
 
   @override
   List<Object?> get props => <Object?>[source];
@@ -23,11 +23,11 @@ final class VideoplayerTrailerTarget extends VideoplayerTarget {
 /// Kept distinct from [VideoplayerTrailerTarget] so the type itself says
 /// which sources carry a real Widevine license request — a trailer target is
 /// never DRM-protected, so nothing has to inspect
-/// [EyzflowSource.sourceType] at the player layer to know that.
+/// [EYZFlowSource.sourceType] at the player layer to know that.
 final class VideoplayerSourceTarget extends VideoplayerTarget {
   const VideoplayerSourceTarget(this.source);
 
-  final EyzflowSource source;
+  final EYZFlowSource source;
 
   @override
   List<Object?> get props => <Object?>[source];

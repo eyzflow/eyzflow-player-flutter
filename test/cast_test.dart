@@ -98,17 +98,17 @@ const _media = CastMedia(
 Duration _min(int m) => Duration(minutes: m);
 
 void main() {
-  group('EyzflowCastController', () {
+  group('EYZFlowCastController', () {
     late _FakeBackend backend;
     late List<(CastEndReason, Duration)> ended;
     late List<CastPlayback> playbacks;
-    late EyzflowCastController cast;
+    late EYZFlowCastController cast;
 
     setUp(() {
       backend = _FakeBackend();
       ended = [];
       playbacks = [];
-      cast = EyzflowCastController(
+      cast = EYZFlowCastController(
         backend: backend,
         onPlayback: playbacks.add,
         onEnded: (reason, position) => ended.add((reason, position)),
@@ -123,7 +123,7 @@ void main() {
     });
 
     test('a failed scan leaves no devices', () async {
-      final failing = EyzflowCastController(backend: _ThrowingBackend());
+      final failing = EYZFlowCastController(backend: _ThrowingBackend());
       await failing.scan();
       expect(failing.devices, isEmpty);
     });
@@ -225,7 +225,7 @@ void main() {
 
     test('a TV that never starts playing fails after the load timeout', () {
       fakeAsync((async) {
-        final slow = EyzflowCastController(
+        final slow = EYZFlowCastController(
           backend: backend,
           onEnded: (reason, position) => ended.add((reason, position)),
           loadTimeout: const Duration(seconds: 20),
@@ -250,10 +250,10 @@ void main() {
   });
 
   group('castMediaFor', () {
-    const source = EyzflowSource(
+    const source = EYZFlowSource(
       id: 'stream-1',
       title: 'Film',
-      sourceType: EyzflowFilm('cat'),
+      sourceType: EYZFlowFilm('cat'),
     );
 
     test('a film carries the licence URL and the access token', () {
@@ -284,8 +284,8 @@ void main() {
     });
   });
 
-  group('EyzflowPlayer casting', () {
-    setUpAll(() => setEyzflowPlayerLanguage('en'));
+  group('EYZFlowPlayer casting', () {
+    setUpAll(() => setEYZFlowPlayerLanguage('en'));
 
     Future<_FakeBackend> pump(
       WidgetTester tester, {
@@ -303,10 +303,10 @@ void main() {
       });
       await tester.pumpWidget(
         MaterialApp(
-          home: EyzflowPlayer(
+          home: EYZFlowPlayer(
             streamId: 'stream-1',
             title: 'Film',
-            sourceType: const EyzflowFilm('cat'),
+            sourceType: const EYZFlowFilm('cat'),
             drmAuthorization: 'Bearer viewer',
             storefrontId: 'sf',
             isTv: isTv,

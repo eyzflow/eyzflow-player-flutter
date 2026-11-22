@@ -334,7 +334,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     //
     // See docs/superpowers/specs/
     // 2026-08-19-flutter-tizen-avplay-widevine-findings.md.
-    final EyzflowSource source = switch (target) {
+    final EYZFlowSource source = switch (target) {
       VideoplayerTrailerTarget(:final source) => source,
       VideoplayerSourceTarget(:final source) => source,
     };
@@ -416,7 +416,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     final PlayerControlsBloc bloc = _ensureControlsBloc(playback, tracks);
     _loadTracksOnce(tracks, bloc);
 
-    final EyzflowSource source = switch (widget.target) {
+    final EYZFlowSource source = switch (widget.target) {
       VideoplayerTrailerTarget(:final source) => source,
       VideoplayerSourceTarget(:final source) => source,
     };

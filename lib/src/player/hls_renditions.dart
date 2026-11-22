@@ -90,7 +90,7 @@ List<HlsRendition?> hlsRenditionsFor(
 /// Compared by resolved name, as the subtitle preference is: `deu`, `de` and
 /// `de_DE` name one language, and Media3 rewrites three-letter codes to two.
 String _normalized(String? language) =>
-    EyzflowLanguageNames.languageName(language ?? '') ?? (language ?? '');
+    EYZFlowLanguageNames.languageName(language ?? '') ?? (language ?? '');
 
 /// Stamps each native track with its rendition's characteristics and channel count, read from
 /// the [master] playlist. A failed fetch leaves tracks as they

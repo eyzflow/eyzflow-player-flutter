@@ -38,9 +38,9 @@ class _ControlledStore extends _RecordingStore {
   }
 }
 
-EyzflowSource _source({
-  EyzflowSourceType? sourceType = const EyzflowFilm('episode-catalogue'),
-}) => EyzflowSource(id: 'stream', title: 'Episode', sourceType: sourceType);
+EYZFlowSource _source({
+  EYZFlowSourceType? sourceType = const EYZFlowFilm('episode-catalogue'),
+}) => EYZFlowSource(id: 'stream', title: 'Episode', sourceType: sourceType);
 
 void main() {
   test('pauseCheckpointsLatestPosition', () async {
@@ -174,7 +174,7 @@ void main() {
     final recorder = WatchProgressRecorder(
       store: store,
       target: VideoplayerTrailerTarget(
-        _source(sourceType: const EyzflowTrailer('film')),
+        _source(sourceType: const EYZFlowTrailer('film')),
       ),
     );
 

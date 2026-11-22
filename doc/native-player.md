@@ -12,7 +12,7 @@ Identifiers are EYZFlow's own, so an app can also use the upstream plugin:
 | | Upstream | Here |
 |---|---|---|
 | Android package | `com.huddlecommunity.better_native_video_player` | `com.eyzflow.player` |
-| Plugin class | `NativeVideoPlayerPlugin` | `EyzflowPlayerPlugin` |
+| Plugin class | `NativeVideoPlayerPlugin` | `EYZFlowPlayerPlugin` |
 | iOS pod / Swift package | `better_native_video_player` | `eyzflow_player` |
 | Platform channels and view type | `native_video_player…` | `eyzflow_player_native…` |
 | Android resources | `bnvp_…` | `eyzflow_player_…` |
