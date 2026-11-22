@@ -1,3 +1,31 @@
+## 0.3.0
+
+- Ads follow the viewer's plan (EYF-210). The playback session's `ads` and
+  `ad_targeting` (`PlaybackSession.ads`, `PlaybackSession.adTargeting`) are
+  read before the player loads: `ads: false` makes no ad request at all, and
+  `ad_targeting` is added to the tag's `cust_params` (a key the tag already
+  sets keeps the tag's value). Without an answer the config decides, as
+  before. `EyzflowPlayerReady` has the new `planAds` and `adTargeting` fields,
+  and `PlayerOptions.withAds()` swaps the ads once the plan has answered.
+- Playback sessions now open for clear streams too, whenever
+  `drmAuthorization` and a storefront are given, so a plan's stream limit
+  counts trailers. A host that passes them for trailers can now get
+  `onLimitReached` there.
+- A countdown before each mid-roll (EYF-208): a corner notice, "Ad in 5" …
+  "Ad in 1", for the stream's ad break markers, else a VMAP tag's mid-roll
+  cue points (never a pre-roll or post-roll). In en, de, fr and nl. It hides
+  while paused or seeking, during an ad, on AirPlay and once the break is
+  seeked past. It takes no touch or focus; on Android TV it stays up while the
+  controls are hidden.
+  - `features.adCountdown` (`PlayerFeatures.adCountdown`) switches it; missing
+    means on.
+  - `ads.countdownSeconds` (`PlayerAdsConfig.countdownSeconds`) sets its
+    length, 1–30 s, default 5 (`adCountdownLength()` rounds and clamps).
+  - Both apply from an inline `config` change without reloading the stream
+    (`PlayerOptions.adCountdown`, `adCountdownSeconds`, `withAdCountdown()`).
+- `PlayerFeatures.toJson()` and `PlayerAdsConfig.toJson()` now include
+  `adCountdown` and `countdownSeconds`.
+
 ## 0.2.0
 
 - Ads from the player config (`features.ads`, `ads.adTagUrl`) on Android,
