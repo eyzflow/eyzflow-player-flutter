@@ -1,4 +1,4 @@
-## Unreleased
+## 0.4.0
 
 - Skip intro, recap and credits (EYF-214). The signals marked on a stream
   (Stream → Signals) are read from its HLS playlist, on every route. While
