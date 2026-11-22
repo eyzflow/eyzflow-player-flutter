@@ -15,6 +15,7 @@ import 'player_policy.dart';
 import '../l10n/streaming_l10n.dart';
 import 'player_loading_indicator.dart';
 import 'player_options.dart';
+import '../core/player_config.dart' show PlayerSkipButtonTypes;
 import '../signals/stream_signals.dart';
 import 'skip_signal_button.dart';
 
@@ -158,6 +159,7 @@ class PlayerControls extends StatefulWidget {
     this.signal,
     this.onSkipSignal,
     this.skipButton = true,
+    this.skipButtonTypes = const PlayerSkipButtonTypes(),
   });
 
   final String title;
@@ -189,9 +191,19 @@ class PlayerControls extends StatefulWidget {
   /// `skipButtons: false`).
   final bool skipButton;
 
+  /// Which signal types get the button (a player config's
+  /// `skipButtonTypes`): by default all but the closing credits.
+  final PlayerSkipButtonTypes skipButtonTypes;
+
   /// The signal OK skips right now, if any.
-  StreamSignal? get _skippable =>
-      skipButton && onSkipSignal != null ? signal?.value : null;
+  StreamSignal? get _skippable {
+    final StreamSignal? current = skipButton && onSkipSignal != null
+        ? signal?.value
+        : null;
+    return current != null && skipButtonTypes.allows(current.type)
+        ? current
+        : null;
+  }
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -246,10 +258,21 @@ class _PlayerControlsState extends State<PlayerControls> {
     if (mounted) _nodes.playPause.requestFocus();
   }
 
+  /// Whether focus is the overlay's to move: on one of its controls, or on
+  /// nothing (a scope). Focus elsewhere — the end screen, an app's own
+  /// overlay — is left alone.
+  bool get _focusIsOurs {
+    final FocusNode? focused = FocusManager.instance.primaryFocus;
+    return focused == null ||
+        identical(focused, FocusScope.of(context)) ||
+        _nodes.all.contains(focused) ||
+        identical(focused, _nodes.skipSignal);
+  }
+
   /// Where focus rests while the overlay is hidden: the skip button while
   /// there is a signal to skip, else the transport.
   void _focusWhileHidden() {
-    if (!mounted) return;
+    if (!mounted || !_focusIsOurs) return;
     if (widget._skippable != null && _nodes.skipSignal.context != null) {
       _nodes.skipSignal.requestFocus();
     } else {
@@ -289,7 +312,11 @@ class _PlayerControlsState extends State<PlayerControls> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final FocusNode? settled = FocusManager.instance.primaryFocus;
-      if (settled == null || settled is FocusScopeNode) _focusPlayPause();
+      // Only the scope the controls live in: another scope with focus (the
+      // end screen's, an app overlay's) is not a lost focus.
+      if (settled == null || identical(settled, FocusScope.of(context))) {
+        _focusPlayPause();
+      }
     });
   }
 
@@ -511,6 +538,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       theme: widget.theme,
       remote: true,
       focusNode: _nodes.skipSignal,
+      types: widget.skipButtonTypes,
     );
   }
 

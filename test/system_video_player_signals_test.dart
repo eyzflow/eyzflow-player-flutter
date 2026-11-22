@@ -87,7 +87,11 @@ final class _Fixture {
   final List<PlaybackEvent> events = <PlaybackEvent>[];
   Uri? loadedFrom;
 
-  Future<void> mount({bool tv = false, bool skipButtons = true}) async {
+  Future<void> mount({
+    bool tv = false,
+    bool skipButtons = true,
+    PlayerSkipButtonTypes types = const PlayerSkipButtonTypes(),
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -98,7 +102,10 @@ final class _Fixture {
               useSharedOverlay: tv,
               createController: (_) async => content,
               onPlaybackEvent: events.add,
-              options: PlayerOptions(skipButtons: skipButtons),
+              options: PlayerOptions(
+                skipButtons: skipButtons,
+                skipButtonTypes: types,
+              ),
               loadSignals: (Uri master) async {
                 loadedFrom = master;
                 return _signals;
@@ -164,7 +171,7 @@ void main() {
     tester,
   ) async {
     final _Fixture f = _Fixture(tester);
-    await f.mount();
+    await f.mount(types: const PlayerSkipButtonTypes(closingCredits: true));
     f.content.tick(545);
     await tester.pump();
     expect(find.text('Skip credits'), findsOneWidget);
@@ -227,6 +234,37 @@ void main() {
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       'controls.playPause',
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'closing credits get no skip button by default; the event still comes',
+    (tester) async {
+      final _Fixture f = _Fixture(tester);
+      await f.mount();
+      f.content.tick(545);
+      await tester.pump();
+      expect(_button(), findsNothing);
+      expect(
+        f.events.whereType<PlaybackSignalStarted>().single.signal.type,
+        StreamSignalType.closingCredits,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('skipButtonTypes turns one type off and leaves the others', (
+    tester,
+  ) async {
+    final _Fixture f = _Fixture(tester);
+    await f.mount(types: const PlayerSkipButtonTypes(intro: false));
+    f.content.tick(6);
+    await tester.pump();
+    expect(_button(), findsNothing);
+    expect(
+      const PlayerSkipButtonTypes(intro: false).allows(StreamSignalType.recap),
+      isTrue,
     );
     await tester.pumpWidget(const SizedBox());
   });

@@ -33,6 +33,7 @@ const Map<String, Object?> _remote = {
     'autoHideControls': false,
     'adCountdown': false,
     'skipButtons': false,
+    'endScreen': false,
   },
   'cast': {
     'receiverAppId': 'ABCD1234',
@@ -40,6 +41,7 @@ const Map<String, Object?> _remote = {
     'autoJoinPolicy': 'origin_scoped',
   },
   'ads': {'adTagUrl': '', 'countdownSeconds': 5},
+  'endScreen': {'autoplaySeconds': 5, 'showAt': 'end', 'shrinkVideo': false},
 };
 
 void main() {
@@ -54,6 +56,10 @@ void main() {
       expect(config.features.loop, isTrue);
       expect(config.features.chromecast, isFalse);
       expect(config.features.skipButtons, isFalse);
+      expect(config.features.endScreen, isFalse);
+      expect(config.endScreen?.autoplaySeconds, 5);
+      expect(config.endScreen?.showAt, EndScreenShowAt.end);
+      expect(config.endScreen?.shrinkVideo, isFalse);
       expect(config.castReceiverAppId, 'ABCD1234');
       expect(config.cast!.autoJoinPolicy, 'origin_scoped');
       expect(config.ads!.adTagUrl, '');

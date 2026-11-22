@@ -239,6 +239,8 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 | `features.adCountdown` | false: no "Ad in 5" notice before a mid-roll | same | – |
 | `ads.countdownSeconds` | the notice's length, 1–30 s (default 5) | same | – |
 | `features.skipButtons` | false: no "Skip intro / recap / credits" button (the signal events still come) | same | same |
+| `skipButtonTypes.*` | `intro`, `recap`, `openingCredits`, `closingCredits`: which signals get a skip button (default: all but closing credits) | same | same |
+| `features.endScreen`, `endScreen.*` | false: no end screen; `autoplaySeconds` (0–30), `showAt` (`credits`/`end`), `shrinkVideo`, `secondsBeforeEnd` (0–120, without closing credits) tune it | same | same |
 | `drm.parameters` | into the DRM `access-token`; `storefront_id` also opens the playback session | same | same |
 
 Not honoured anywhere in the apps:
@@ -268,6 +270,33 @@ The pieces are exported for hosts that drive playback themselves:
 `buildAccessToken`, `BeatCollector` / `BeatTransport` / `HttpBeatSender`,
 `PlaybackEventAdapter` and `PlaybackCoordinator`. The code under
 `lib/src/core` imports no Flutter.
+
+## End screen
+
+Pass the films; the player shows them Netflix-style at the closing credits
+(the video shrinks into a corner) or after the film, counts down to the next
+stream and plays a picked one in place:
+
+```dart
+EyzflowPlayer(
+  streamId: episode.streamId,
+  title: episode.title,
+  endScreen: EyzflowEndScreen(
+    nextUp: EyzflowEndScreenItem(streamId: next.streamId, title: next.title, poster: next.poster),
+    items: [
+      for (final f in similar)
+        EyzflowEndScreenItem(streamId: f.streamId, title: f.title, poster: f.poster, duration: f.length),
+    ],
+    onSelect: (selection) => router.replaceWatch(selection.item.streamId),
+  ),
+)
+```
+
+`onSelect` can call `preventDefault()` to handle the pick itself.
+`itemBuilder` draws a film your way, `title` renames the row, and the
+config's theme styles it. On TV it takes the remote's focus. For a layout of
+your own, `overlayBuilder` is asked at each signal and after the end, and
+wins when it returns a widget. See [doc/player.md](doc/player.md#end-screen-and-overlays).
 
 ## Layout
 

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
 import '../core/source.dart';
+import '../end_screen/end_screen.dart' show PlayerOverlayControls;
+import '../end_screen/end_screen_view.dart';
 import '../signals/stream_signals.dart';
 import 'package:video_player_avplay/video_player.dart';
 import 'package:video_player_avplay/video_player_platform_interface.dart'
@@ -185,12 +187,25 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   /// The intro, recap or credits signal playback is in.
   final SignalTracker _signals = SignalTracker();
 
+  /// Where playback is, for the overlay layer (end screen, app overlay).
+  final ValueNotifier<PlaybackFacts> _facts = ValueNotifier<PlaybackFacts>(
+    const PlaybackFacts(),
+  );
+
+  /// Whether the overlay layer shows something: the skip button stays away.
+  final PlayerOverlayState _overlay = PlayerOverlayState();
+
+  void _onOverlayChanged() {
+    if (mounted) setState(() {});
+  }
+
   WidevineLicenseClient get _licenseClient =>
       widget.licenseClient ?? (_ownedLicenseClient ??= WidevineLicenseClient());
 
   @override
   void initState() {
     super.initState();
+    _overlay.addListener(_onOverlayChanged);
     unawaited(_start());
   }
 
@@ -255,6 +270,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       ..onEnded = events.signalEnded
       ..position(null)
       ..signals = const <StreamSignal>[];
+    _facts.value = const PlaybackFacts();
     unawaited(
       _loadSignals(_hlsMaster(widget.target)).then((List<StreamSignal> found) {
         if (mounted && identical(_events, events)) _signals.signals = found;
@@ -273,6 +289,12 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       onValue: (VideoplaybackValue value) {
         events.tick(value);
         _signals.position(value.isCompleted ? null : value.position);
+        _facts.value = PlaybackFacts(
+          position: value.position,
+          duration: value.duration,
+          playing: value.isPlaying,
+          ended: value.isCompleted,
+        );
       },
       // The controller opens at the resume position itself; see
       // [_createAvplayController].
@@ -349,7 +371,8 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     // Recorded before the bloc tears the session down, so the completion is
     // written even though the view is about to go away.
     widget.watchProgressRecorder?.finish();
-    if (mounted) {
+    // The player stays on the end screen when there is one.
+    if (mounted && !endScreenAtTheEnd(context)) {
       context.read<VideoplayerFeatureBloc>().add(
         const VideoplayerFeaturePlaybackFinished(),
       );
@@ -372,6 +395,9 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   void dispose() {
     _request++;
     _signals.dispose();
+    _overlay.removeListener(_onOverlayChanged);
+    _overlay.dispose();
+    _facts.dispose();
     _closeEvents();
     unawaited(_session?.dispose() ?? Future<void>.value());
     unawaited(_controlsBloc?.close() ?? Future<void>.value());
@@ -401,7 +427,22 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          _buildVideoSurface(bloc),
+          PlayerOverlayLayer(
+            surface: _buildVideoSurface(bloc),
+            signal: _signals,
+            facts: _facts,
+            inAdBreak: false,
+            state: _overlay,
+            theme: widget.options.controlsTheme,
+            remote: true,
+            controls: PlayerOverlayControls(
+              skip: _skipSignal,
+              seek: (Duration position) => unawaited(playback.seekTo(position)),
+              play: () => unawaited(playback.play()),
+              pause: () => unawaited(playback.pause()),
+              dismiss: () {},
+            ),
+          ),
           PlayerControls(
             title: title,
             thumbnailsUrl: source.thumbnailsUrl,
@@ -410,7 +451,8 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
             showControls: widget.options.controls,
             signal: _signals,
             onSkipSignal: _skipSignal,
-            skipButton: widget.options.skipButtons,
+            skipButton: widget.options.skipButtons && !_overlay.active,
+            skipButtonTypes: widget.options.skipButtonTypes,
           ),
         ],
       ),

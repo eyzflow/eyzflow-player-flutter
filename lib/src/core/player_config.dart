@@ -2,6 +2,7 @@
 /// player reads them (`config-types.ts`, `remote-config.ts`).
 library;
 
+import '../signals/stream_signals.dart' show StreamSignalType;
 import 'dart:async';
 import 'dart:convert';
 
@@ -118,6 +119,7 @@ final class PlayerFeatures {
     this.autoHideControls = true,
     this.adCountdown = true,
     this.skipButtons = true,
+    this.endScreen = true,
   });
 
   final bool controls;
@@ -140,6 +142,10 @@ final class PlayerFeatures {
   /// Missing (configs saved before it): on.
   final bool skipButtons;
 
+  /// The end screen (up next and similar films) when the app passes items.
+  /// Missing (configs saved before it): on.
+  final bool endScreen;
+
   factory PlayerFeatures.fromJson(
     Map<String, Object?> json, {
     PlayerFeatures base = const PlayerFeatures(),
@@ -161,6 +167,7 @@ final class PlayerFeatures {
           autoHideControls: patch.autoHideControls ?? autoHideControls,
           adCountdown: patch.adCountdown ?? adCountdown,
           skipButtons: patch.skipButtons ?? skipButtons,
+          endScreen: patch.endScreen ?? endScreen,
         );
 
   Map<String, Object?> toJson() => {
@@ -177,6 +184,7 @@ final class PlayerFeatures {
     'autoHideControls': autoHideControls,
     'adCountdown': adCountdown,
     'skipButtons': skipButtons,
+    'endScreen': endScreen,
   };
 
   @override
@@ -194,7 +202,8 @@ final class PlayerFeatures {
       other.ads == ads &&
       other.autoHideControls == autoHideControls &&
       other.adCountdown == adCountdown &&
-      other.skipButtons == skipButtons;
+      other.skipButtons == skipButtons &&
+      other.endScreen == endScreen;
 
   @override
   int get hashCode => Object.hash(
@@ -211,6 +220,7 @@ final class PlayerFeatures {
     autoHideControls,
     adCountdown,
     skipButtons,
+    endScreen,
   );
 }
 
@@ -231,6 +241,7 @@ final class PlayerFeaturesOverride {
     this.autoHideControls,
     this.adCountdown,
     this.skipButtons,
+    this.endScreen,
   });
 
   factory PlayerFeaturesOverride.fromJson(Map<String, Object?> json) =>
@@ -248,6 +259,7 @@ final class PlayerFeaturesOverride {
         autoHideControls: _bool(json['autoHideControls']),
         adCountdown: _bool(json['adCountdown']),
         skipButtons: _bool(json['skipButtons']),
+        endScreen: _bool(json['endScreen']),
       );
 
   final bool? controls;
@@ -263,6 +275,7 @@ final class PlayerFeaturesOverride {
   final bool? autoHideControls;
   final bool? adCountdown;
   final bool? skipButtons;
+  final bool? endScreen;
 }
 
 /// The config's Chromecast settings.
@@ -342,6 +355,154 @@ final class PlayerAdsConfig {
   };
 }
 
+/// How many seconds the end screen's "Up next" counts down when the config
+/// does not say.
+const int defaultEndScreenAutoplaySeconds = 10;
+
+/// The longest "Up next" countdown a config can ask for.
+const int maxEndScreenAutoplaySeconds = 30;
+
+/// An "Up next" countdown as a length to use: whole seconds from 0 (no
+/// countdown) to 30, else null for a missing value or one that is not a
+/// number.
+int? endScreenAutoplayLength(Object? configured) {
+  if (configured is! num || !configured.isFinite) return null;
+  return configured.round().clamp(0, maxEndScreenAutoplaySeconds);
+}
+
+/// Which signals get a skip button (`features.skipButtons`): the config's
+/// `skipButtonTypes`. A type left out keeps its default: intro, recap and
+/// opening credits on, closing credits off (skipping them only ends the film;
+/// the end screen belongs there).
+@immutable
+final class PlayerSkipButtonTypes {
+  const PlayerSkipButtonTypes({
+    this.intro,
+    this.recap,
+    this.openingCredits,
+    this.closingCredits,
+  });
+
+  factory PlayerSkipButtonTypes.fromJson(Map<String, Object?> json) =>
+      PlayerSkipButtonTypes(
+        intro: _bool(json['intro']),
+        recap: _bool(json['recap']),
+        openingCredits: _bool(json['openingCredits']),
+        closingCredits: _bool(json['closingCredits']),
+      );
+
+  final bool? intro;
+  final bool? recap;
+  final bool? openingCredits;
+  final bool? closingCredits;
+
+  /// Whether [type] gets a skip button.
+  bool allows(StreamSignalType type) => switch (type) {
+    StreamSignalType.intro => intro ?? true,
+    StreamSignalType.recap => recap ?? true,
+    StreamSignalType.openingCredits => openingCredits ?? true,
+    StreamSignalType.closingCredits => closingCredits ?? false,
+  };
+
+  /// [patch]'s values over these.
+  PlayerSkipButtonTypes merge(PlayerSkipButtonTypes? patch) => patch == null
+      ? this
+      : PlayerSkipButtonTypes(
+          intro: patch.intro ?? intro,
+          recap: patch.recap ?? recap,
+          openingCredits: patch.openingCredits ?? openingCredits,
+          closingCredits: patch.closingCredits ?? closingCredits,
+        );
+
+  Map<String, Object?> toJson() => {
+    'intro': ?intro,
+    'recap': ?recap,
+    'openingCredits': ?openingCredits,
+    'closingCredits': ?closingCredits,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlayerSkipButtonTypes &&
+      other.intro == intro &&
+      other.recap == recap &&
+      other.openingCredits == openingCredits &&
+      other.closingCredits == closingCredits;
+
+  @override
+  int get hashCode => Object.hash(intro, recap, openingCredits, closingCredits);
+}
+
+/// Seconds before the end the end screen shows on a stream without a closing
+/// credits signal, when the config does not say.
+const int defaultEndScreenSecondsBeforeEnd = 20;
+
+/// The most seconds before the end a config can ask for.
+const int maxEndScreenSecondsBeforeEnd = 120;
+
+/// Seconds before the end as a length to use: whole seconds from 0 to 120,
+/// else null for a missing value or one that is not a number.
+int? endScreenSecondsBeforeEnd(Object? configured) {
+  if (configured is! num || !configured.isFinite) return null;
+  return configured.round().clamp(0, maxEndScreenSecondsBeforeEnd);
+}
+
+/// When the end screen shows: from the closing credits (else at the end), or
+/// only at the end.
+enum EndScreenShowAt {
+  credits('credits'),
+  end('end');
+
+  const EndScreenShowAt(this.wireName);
+  final String wireName;
+}
+
+/// The config's end screen settings (`features.endScreen`). The items come
+/// from the app.
+@immutable
+final class PlayerEndScreenConfig {
+  const PlayerEndScreenConfig({
+    this.autoplaySeconds,
+    this.showAt,
+    this.shrinkVideo,
+    this.secondsBeforeEnd,
+  });
+
+  factory PlayerEndScreenConfig.fromJson(Map<String, Object?> json) =>
+      PlayerEndScreenConfig(
+        autoplaySeconds: endScreenAutoplayLength(json['autoplaySeconds']),
+        showAt: switch (json['showAt']) {
+          'end' => EndScreenShowAt.end,
+          'credits' => EndScreenShowAt.credits,
+          _ => null,
+        },
+        shrinkVideo: _bool(json['shrinkVideo']),
+        secondsBeforeEnd: endScreenSecondsBeforeEnd(json['secondsBeforeEnd']),
+      );
+
+  /// Seconds the "Up next" countdown runs, 0–30; 0 is no countdown. Null:
+  /// [defaultEndScreenAutoplaySeconds].
+  final int? autoplaySeconds;
+
+  /// Null: [EndScreenShowAt.credits].
+  final EndScreenShowAt? showAt;
+
+  /// Null: on.
+  final bool? shrinkVideo;
+
+  /// On a stream without a closing credits signal, the end screen shows this
+  /// many seconds before the end, as at the credits (0–120; 0: only when the
+  /// film ends). Null: [defaultEndScreenSecondsBeforeEnd].
+  final int? secondsBeforeEnd;
+
+  Map<String, Object?> toJson() => {
+    'autoplaySeconds': ?autoplaySeconds,
+    'showAt': ?showAt?.wireName,
+    'shrinkVideo': ?shrinkVideo,
+    'secondsBeforeEnd': ?secondsBeforeEnd,
+  };
+}
+
 /// Extra DRM access-token parameters, e.g. `{'storefront_id': '…'}`. The
 /// dashboard does not store this section today; it comes from an inline
 /// config, as on the web.
@@ -381,6 +542,8 @@ final class PlayerConfig {
     this.cast,
     this.ads,
     this.drm,
+    this.endScreen,
+    this.skipButtonTypes,
   });
 
   /// The web player's `DEFAULT_CONFIG`, and the backend's defaults.
@@ -412,6 +575,16 @@ final class PlayerConfig {
       final Map<String, Object?> drm => PlayerDrmConfig.fromJson(drm),
       _ => null,
     },
+    endScreen: switch (json['endScreen']) {
+      final Map<String, Object?> endScreen => PlayerEndScreenConfig.fromJson(
+        endScreen,
+      ),
+      _ => null,
+    },
+    skipButtonTypes: switch (json['skipButtonTypes']) {
+      final Map<String, Object?> types => PlayerSkipButtonTypes.fromJson(types),
+      _ => null,
+    },
   );
 
   final String id;
@@ -425,6 +598,8 @@ final class PlayerConfig {
   final PlayerCastConfig? cast;
   final PlayerAdsConfig? ads;
   final PlayerDrmConfig? drm;
+  final PlayerEndScreenConfig? endScreen;
+  final PlayerSkipButtonTypes? skipButtonTypes;
 
   /// `cast.receiverAppId`, when set.
   /// How many seconds the countdown before a mid-roll shows:
@@ -454,6 +629,8 @@ final class PlayerConfig {
     if (cast case final cast?) 'cast': cast.toJson(),
     if (ads case final ads?) 'ads': ads.toJson(),
     if (drm case final drm?) 'drm': drm.toJson(),
+    if (endScreen case final endScreen?) 'endScreen': endScreen.toJson(),
+    if (skipButtonTypes case final types?) 'skipButtonTypes': types.toJson(),
   };
 }
 
@@ -470,6 +647,8 @@ final class PlayerConfigOverride {
     this.cast,
     this.ads,
     this.drm,
+    this.endScreen,
+    this.skipButtonTypes,
   });
 
   final String? id;
@@ -490,6 +669,12 @@ final class PlayerConfigOverride {
 
   /// Its parameters are merged over the remote ones.
   final PlayerDrmConfig? drm;
+
+  /// Merged field by field.
+  final PlayerEndScreenConfig? endScreen;
+
+  /// Merged type by type.
+  final PlayerSkipButtonTypes? skipButtonTypes;
 }
 
 /// The web player's `mergeConfig`: [patch] over [base]. Theme and features
@@ -513,6 +698,21 @@ PlayerConfig mergePlayerConfig(PlayerConfig base, PlayerConfigOverride? patch) {
               ...drm.parameters,
             }),
           ),
+    endScreen: switch (patch.endScreen) {
+      null => base.endScreen,
+      final PlayerEndScreenConfig e => PlayerEndScreenConfig(
+        autoplaySeconds: e.autoplaySeconds ?? base.endScreen?.autoplaySeconds,
+        showAt: e.showAt ?? base.endScreen?.showAt,
+        shrinkVideo: e.shrinkVideo ?? base.endScreen?.shrinkVideo,
+        secondsBeforeEnd:
+            e.secondsBeforeEnd ?? base.endScreen?.secondsBeforeEnd,
+      ),
+    },
+    skipButtonTypes: switch (patch.skipButtonTypes) {
+      null => base.skipButtonTypes,
+      final PlayerSkipButtonTypes t =>
+        (base.skipButtonTypes ?? const PlayerSkipButtonTypes()).merge(t),
+    },
   );
 }
 

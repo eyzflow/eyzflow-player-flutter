@@ -266,7 +266,9 @@ signal.
   and `EyzflowPlayer.onSignal` gets the signal, then null. A skip is also a
   `PlaybackSeeked`.
 - **Config.** `features.skipButtons: false` hides the button; the events
-  still come. The button takes the config's theme: the bar colour and text
+  still come. `skipButtonTypes` (`intro`, `recap`, `openingCredits`,
+  `closingCredits`) picks the types with a button: by default all but the
+  closing credits, where skipping only ends the film. The button takes the config's theme: the bar colour and text
   colour, the accent when focused, the radius.
 - The dashboard's `label` is passed on (`StreamSignal.label`) but not shown.
 
@@ -274,6 +276,56 @@ Covered in `test/stream_signals_test.dart`,
 `test/system_video_player_signals_test.dart` and
 `test/tizen_avplay_player_signals_test.dart` (signals through the
 `loadSignals` seam). Not tried on a device yet.
+
+## End screen and overlays
+
+`EyzflowPlayer.endScreen` (`EyzflowEndScreen`) is a Netflix-style end screen
+from the films the app passes (`EyzflowEndScreenItem`: `streamId`, `title`,
+`poster`, `description`, `duration`, `badge`, `sourceType`, `data`), and
+`EyzflowPlayer.overlayBuilder` draws the app's own UI instead.
+
+- **Where.** `PlayerOverlayLayer` (`lib/src/end_screen/end_screen_view.dart`)
+  wraps the video surface on every route (phones, Android TV, Tizen), from
+  the first frame, so the native platform view is never re-parented. It reads
+  `PlayerOverlayScope`, which `EyzflowPlayer` puts around the player, and the
+  player's `SignalTracker` and position reports (`PlaybackFacts`).
+- **When.** From the closing credits signal. A stream without one gets it
+  `secondsBeforeEnd` seconds before the end (default 20, 0–120; 0: only when
+  the film ends), as at the credits. The last second counts as the end:
+  credits that run to the end leave their signal a moment before
+  `isCompleted`. `showAt: end`: only when the film ends.
+  Not during an ad break. `EndScreenSettings.resolve` puts the app's values
+  over the config's `features.endScreen` and `endScreen` section.
+- **Full screen.** AVKit's and Android's native full screen cover everything
+  Flutter draws, so when the end screen (or the app's overlay) appears the
+  player leaves native full screen. At the end of the film the player stays
+  open on the end screen instead of closing; without one it closes as before.
+  The skip buttons do not leave full screen and are not seen there.
+- **Shrinking.** At the credits the surface is resized (not transformed:
+  native platform views do not always follow a transform) into the top-right
+  corner; a tap on it, or "Back to credits", hides the end screen until the
+  end of the film.
+- **Up next.** A countdown (`autoplaySeconds`, default 10; 0: none) that
+  runs while the credits play or after the end, then picks the next stream.
+  Cancel stops it.
+- **Picking.** `onSelect(EndScreenSelection)` hears it first;
+  `preventDefault()` leaves it to the app. Otherwise `EyzflowPlayer` plays the
+  item in place: a new key check, playback session and DRM for its stream
+  (`sourceType`, else the same kind as the stream playing). A new `streamId`
+  from the app wins over a picked one.
+- **TV.** The end screen is its own focus scope with Play focused (or the
+  first film without a next stream); the D-pad moves between its buttons and
+  films and OK activates. `PlayerControls` leaves focus that is not on its
+  own controls or its scope alone, and its skip button stays away while the
+  layer shows something (`PlayerOverlayState`).
+- **App overlay.** `overlayBuilder(context, PlayerOverlayContext)` is asked at
+  a signal or after the end with `signal`, `ended` and `controls` (`skip`,
+  `seek`, `play`, `pause`, `dismiss`); a widget it returns wins over the end
+  screen. `dismiss()` hides it for that moment.
+
+Covered in `test/end_screen_test.dart` (settings, phases, the phone layer
+with shrink, countdown, pick, prevent, cancel and back, the config switch,
+the app overlay's precedence, TV focus and Select).
 
 ## AVPlay: the single Tizen implementation
 

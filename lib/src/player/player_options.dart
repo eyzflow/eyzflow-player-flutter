@@ -90,6 +90,7 @@ final class PlayerOptions {
     this.adCountdown = true,
     this.adCountdownSeconds = defaultAdCountdownSeconds,
     this.skipButtons = true,
+    this.skipButtonTypes = const PlayerSkipButtonTypes(),
   });
 
   /// [PlayerConfig.features] and [PlayerConfig.theme] as the app players
@@ -116,6 +117,7 @@ final class PlayerOptions {
       adCountdown: f.adCountdown,
       adCountdownSeconds: config.adCountdownSeconds,
       skipButtons: f.skipButtons,
+      skipButtonTypes: config.skipButtonTypes ?? const PlayerSkipButtonTypes(),
     );
   }
 
@@ -162,6 +164,10 @@ final class PlayerOptions {
   /// signal playback events are reported either way.
   final bool skipButtons;
 
+  /// Which signal types get a skip button: the config's `skipButtonTypes`
+  /// (by default all but the closing credits).
+  final PlayerSkipButtonTypes skipButtonTypes;
+
   /// These options with [ads] in place of the config's, e.g. once the
   /// viewer's plan has said whether it plays ads.
   PlayerOptions withAds(PlayerAds? ads) => PlayerOptions(
@@ -176,6 +182,7 @@ final class PlayerOptions {
     adCountdown: adCountdown,
     adCountdownSeconds: adCountdownSeconds,
     skipButtons: skipButtons,
+    skipButtonTypes: skipButtonTypes,
   );
 
   /// These options with the countdown's switch and length changed; the same
@@ -193,6 +200,7 @@ final class PlayerOptions {
         adCountdown: adCountdown,
         adCountdownSeconds: adCountdownSeconds,
         skipButtons: skipButtons,
+        skipButtonTypes: skipButtonTypes,
       );
 
   @override
@@ -208,7 +216,8 @@ final class PlayerOptions {
       identical(other.ads, ads) &&
       other.adCountdown == adCountdown &&
       other.adCountdownSeconds == adCountdownSeconds &&
-      other.skipButtons == skipButtons;
+      other.skipButtons == skipButtons &&
+      other.skipButtonTypes == skipButtonTypes;
 
   @override
   int get hashCode => Object.hash(
@@ -223,6 +232,7 @@ final class PlayerOptions {
     adCountdown,
     adCountdownSeconds,
     skipButtons,
+    skipButtonTypes,
   );
 }
 

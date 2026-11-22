@@ -59,6 +59,11 @@ class _LoaderPageState extends State<LoaderPage> {
   // The EYZFlow Cast receiver (cast-receiver/README.md), published unlisted.
   final _castReceiver = TextEditingController(text: 'A534F914');
   final _startAt = TextEditingController();
+  // Stream ids for the end screen: the first is "Up next", the rest the row
+  // of films. Empty: no end screen.
+  final _endScreenIds = TextEditingController(
+    text: const String.fromEnvironment('EYZFLOW_END_SCREEN_IDS'),
+  );
 
   bool _isFeature = !const bool.fromEnvironment('EYZFLOW_TRAILER');
 
@@ -146,6 +151,7 @@ class _LoaderPageState extends State<LoaderPage> {
             );
             return upload(beat);
           },
+          endScreen: _endScreen(),
           onPlaybackEvent: (event) => _add(event.toString()),
           onLimitReached: (limit) => _add(
             'limit ${limit.code.wireName}: '
@@ -154,6 +160,38 @@ class _LoaderPageState extends State<LoaderPage> {
           onLicenseError: (error) => _add('key refused ${error.code.wireName}'),
           onError: (message) => _add('error: $message'),
         ),
+      ),
+    );
+  }
+
+  String _short(String id) => id.length > 8 ? id.substring(0, 8) : id;
+
+  /// The end screen from the ids in the form: placeholder titles, no
+  /// posters. Picks are logged; the player plays them in place.
+  EyzflowEndScreen? _endScreen() {
+    final List<String> ids = _endScreenIds.text
+        .split(',')
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toList();
+    if (ids.isEmpty) return null;
+    return EyzflowEndScreen(
+      nextUp: EyzflowEndScreenItem(
+        streamId: ids.first,
+        title: 'Up next: ${_short(ids.first)}',
+        badge: 'Next',
+      ),
+      items: [
+        for (final (i, id) in ids.skip(1).indexed)
+          EyzflowEndScreenItem(
+            streamId: id,
+            title: 'Film ${i + 1} (${_short(id)})',
+            duration: Duration(minutes: 80 + i * 12),
+          ),
+      ],
+      onSelect: (selection) => _add(
+        'end screen picked ${selection.item.streamId}'
+        '${selection.autoplay ? ' (autoplay)' : ''}',
       ),
     );
   }
@@ -172,6 +210,7 @@ class _LoaderPageState extends State<LoaderPage> {
       _apiOrigin,
       _castReceiver,
       _startAt,
+      _endScreenIds,
     ]) {
       c.dispose();
     }
@@ -259,6 +298,11 @@ class _LoaderPageState extends State<LoaderPage> {
             _castReceiver,
             'Cast receiver app id',
             helper: 'Google Cast console; else the config\'s. Films need one',
+          ),
+          _field(
+            _endScreenIds,
+            'End screen stream IDs',
+            helper: 'Comma-separated: the first is Up next, the rest the row',
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,

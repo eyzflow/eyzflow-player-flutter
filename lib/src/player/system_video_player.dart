@@ -13,6 +13,8 @@ import '../core/source.dart';
 
 import '../bloc/player_controls_bloc.dart';
 import '../bloc/videoplayer_feature_bloc.dart';
+import '../end_screen/end_screen.dart' show PlayerOverlayControls;
+import '../end_screen/end_screen_view.dart';
 import '../signals/stream_signals.dart';
 import 'ad_countdown_notice.dart';
 import 'hls_renditions.dart';
@@ -137,6 +139,33 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   /// The intro, recap or credits signal playback is in.
   final SignalTracker _signals = SignalTracker();
 
+  /// Where playback is, for the overlay layer (end screen, app overlay).
+  final ValueNotifier<PlaybackFacts> _facts = ValueNotifier<PlaybackFacts>(
+    const PlaybackFacts(),
+  );
+
+  /// Whether the overlay layer shows something: the skip button stays away.
+  final PlayerOverlayState _overlay = PlayerOverlayState();
+
+  @override
+  void initState() {
+    super.initState();
+    _overlay.addListener(_onOverlayChanged);
+    unawaited(_start());
+  }
+
+  void _onOverlayChanged() {
+    if (!mounted) return;
+    setState(() {});
+    // AVKit's (and Android's) native full screen covers everything Flutter
+    // draws: the end screen or the app's overlay would show behind it. Leave
+    // it, so the viewer sees them.
+    final NativeVideoPlayerController? native = _nativeController;
+    if (_overlay.active && native != null && native.isFullScreen) {
+      unawaited(native.exitFullScreen());
+    }
+  }
+
   void _checkpoint([Duration? position]) {
     final recorder = _sessionRecorder;
     final latest =
@@ -175,12 +204,6 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   PlayerControlsBloc? _controlsBloc;
   var _tickBridged = false;
   var _tracksRequested = false;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_start());
-  }
 
   @override
   void didUpdateWidget(SystemVideoPlayer oldWidget) {
@@ -256,6 +279,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       ..onEnded = events.signalEnded
       ..position(null)
       ..signals = const <StreamSignal>[];
+    _facts.value = const PlaybackFacts();
     unawaited(
       markers.then((HlsMarkers found) {
         if (mounted && identical(_events, events)) {
@@ -282,6 +306,12 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         }
         _updateAdCountdown(value);
         _signals.position(value.isCompleted ? null : position);
+        _facts.value = PlaybackFacts(
+          position: position,
+          duration: value.duration,
+          playing: value.isPlaying,
+          ended: value.isCompleted,
+        );
       },
       // Android: the pre-roll plays before the content player loads (below).
       beforePlay: _prerollBeforeLoad ? null : ads?.beforeContent,
@@ -563,13 +593,20 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     _sessionRecorder?.finish();
     final AdBreakScheduler? ads = _ads;
     if (ads == null) {
-      _close();
+      _closeUnlessEndScreen();
       return;
     }
     // A VMAP's post-roll plays before the player closes.
     if (_finishing) return;
     _finishing = true;
-    unawaited(ads.contentCompleted().whenComplete(_close));
+    unawaited(ads.contentCompleted().whenComplete(_closeUnlessEndScreen));
+  }
+
+  /// At the end of the film: the player stays on the end screen when there is
+  /// one; it closes from there (Close, Back, or a picked film).
+  void _closeUnlessEndScreen() {
+    if (mounted && endScreenAtTheEnd(context)) return;
+    _close();
   }
 
   void _close() {
@@ -598,6 +635,9 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   void dispose() {
     _request++;
     _signals.dispose();
+    _overlay.removeListener(_onOverlayChanged);
+    _overlay.dispose();
+    _facts.dispose();
     _disposeAds();
     _closeEvents();
     _retireNative();
@@ -639,6 +679,26 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
           );
 
     final bool inAdBreak = _ads?.inBreak ?? false;
+    // The surface with the end screen or the app's overlay over it; it can
+    // shrink the surface into a corner. Always present, so the platform view
+    // keeps its place in the tree.
+    final Widget layered = PlayerOverlayLayer(
+      surface: surface,
+      signal: _signals,
+      facts: _facts,
+      inAdBreak: inAdBreak,
+      state: _overlay,
+      theme: widget.options.controlsTheme,
+      remote: widget.useSharedOverlay,
+      controls: PlayerOverlayControls(
+        skip: _skipSignal,
+        seek: (Duration position) =>
+            unawaited(_playback?.seekTo(position) ?? Future<void>.value()),
+        play: () => unawaited(_playback?.play() ?? Future<void>.value()),
+        pause: () => unawaited(_playback?.pause() ?? Future<void>.value()),
+        dismiss: () {},
+      ),
+    );
     // Over the controls: during an ad break it takes the input.
     final Widget? adLayer = switch ((_ads, _imaDriver)) {
       (final AdBreakScheduler ads, final ImaAdDriver driver) => AdLayer(
@@ -649,7 +709,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     };
     // Over the video and the controls, never focusable: on TV it stays up
     // while the controls are hidden. Switched off without a reload.
-    final bool skipButtons = widget.options.skipButtons;
+    final bool skipButtons = widget.options.skipButtons && !_overlay.active;
     final Widget? countdown = _ads != null && widget.options.adCountdown
         ? AdCountdownNotice(
             seconds: _adCountdown,
@@ -658,23 +718,19 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         : null;
 
     if (!widget.useSharedOverlay) {
-      if (defaultTargetPlatform != TargetPlatform.iOS &&
-          widget.options.ads == null &&
-          !skipButtons) {
-        return surface;
-      }
       // iOS: the Cast button sits over the native controls (AVKit has no slot
       // for it). One Stack from the first frame, surface at index 0, so the
       // button or the ads appearing never re-parent the platform view.
       return Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          surface,
+          layered,
           if (skipButtons && !inAdBreak)
             SkipSignalButton(
               signal: _signals,
               onSkip: _skipSignal,
               theme: widget.options.controlsTheme,
+              types: widget.options.skipButtonTypes,
             ),
           ?adLayer,
           ?countdown,
@@ -702,7 +758,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        surface,
+        layered,
         if (controls != null)
           // Hidden and out of the remote's reach during an ad break: no
           // focus, so no seek, no track panel. Kept alive for after it.
@@ -744,7 +800,8 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         showControls: widget.options.controls,
         signal: _signals,
         onSkipSignal: _skipSignal,
-        skipButton: widget.options.skipButtons,
+        skipButton: widget.options.skipButtons && !_overlay.active,
+        skipButtonTypes: widget.options.skipButtonTypes,
       ),
     );
   }

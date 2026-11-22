@@ -110,4 +110,24 @@ class EYZFlowStreamingLocalizationsNl extends EYZFlowStreamingLocalizations {
 
   @override
   String get skipClosingCredits => 'Aftiteling overslaan';
+
+  @override
+  String get endScreenUpNext => 'Hierna';
+
+  @override
+  String endScreenNextIn(int seconds) {
+    return 'Volgende over $seconds';
+  }
+
+  @override
+  String get endScreenPlay => 'Afspelen';
+
+  @override
+  String get endScreenCancel => 'Annuleren';
+
+  @override
+  String get endScreenMoreLikeThis => 'Meer zoals dit';
+
+  @override
+  String get endScreenBackToCredits => 'Terug naar de aftiteling';
 }
