@@ -1,7 +1,10 @@
 import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
 
+import '../ads/ad_scheduler.dart';
 import '../core/player_config.dart';
+
+export '../ads/ad_scheduler.dart' show PlayerAds;
 
 /// The TV controls overlay's colours and corner radius (Android TV and Tizen).
 ///
@@ -83,6 +86,7 @@ final class PlayerOptions {
     this.loop = false,
     this.pictureInPicture = true,
     this.airPlay = true,
+    this.ads,
   });
 
   /// [PlayerConfig.features] and [PlayerConfig.theme] as the app players
@@ -102,6 +106,10 @@ final class PlayerOptions {
       loop: f.loop,
       pictureInPicture: f.pip,
       airPlay: f.airplay,
+      ads: switch (config.adTagUrl) {
+        final String url => PlayerAds(adTagUrl: url),
+        null => null,
+      },
     );
   }
 
@@ -129,6 +137,11 @@ final class PlayerOptions {
   /// False keeps the video off AirPlay on iOS.
   final bool airPlay;
 
+  /// The ads to play (Android, Android TV and iOS), from the config's
+  /// `features.ads` and `ads.adTagUrl`. Null plays no ads and makes no ad
+  /// request. Compared by identity: one per impression.
+  final PlayerAds? ads;
+
   @override
   bool operator ==(Object other) =>
       other is PlayerOptions &&
@@ -138,7 +151,8 @@ final class PlayerOptions {
       other.captions == captions &&
       other.loop == loop &&
       other.pictureInPicture == pictureInPicture &&
-      other.airPlay == airPlay;
+      other.airPlay == airPlay &&
+      identical(other.ads, ads);
 
   @override
   int get hashCode => Object.hash(
@@ -149,6 +163,7 @@ final class PlayerOptions {
     loop,
     pictureInPicture,
     airPlay,
+    ads,
   );
 }
 

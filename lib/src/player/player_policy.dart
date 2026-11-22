@@ -224,6 +224,7 @@ final class VideoplaybackSession {
     this.onValue,
     this.startupTimeout = const Duration(seconds: 15),
     this.seeksToResumePosition = true,
+    this.beforePlay,
   });
 
   final VideoplayerTarget target;
@@ -252,6 +253,11 @@ final class VideoplaybackSession {
   /// prepare. A seek on the paused, freshly initialized player instead is what
   /// raced the licence and failed the hardware decoder there.
   final bool seeksToResumePosition;
+
+  /// Awaited after the resume seek, just before the first play: a pre-roll
+  /// ad plays here. Not part of [startupTimeout], which measures the
+  /// content's own startup; whoever passes it bounds its own wait.
+  final Future<void> Function()? beforePlay;
   VideoplaybackController? _controller;
 
   /// Progress is withheld until playback has reached its resume position.
@@ -324,6 +330,7 @@ final class VideoplaybackSession {
     _startup = startup;
     try {
       await startup.timeout(startupTimeout);
+      if (beforePlay != null) await _playAfterHook(controller);
     } on TimeoutException {
       logPlayback('startup exceeded $startupTimeout');
       if (!_isDisposed) onFailure(streamingL10n.playbackTookTooLong);
@@ -341,10 +348,23 @@ final class VideoplaybackSession {
     if (_isDisposed) return;
     onInitialized?.call(controller.value);
     if (seeksToResumePosition) await _applyResumeSeek(controller);
-    if (_isDisposed) return;
+    if (_isDisposed || beforePlay != null) return;
     await controller.play();
     logPlayback('play requested');
+  }
+
+  /// [beforePlay], then the first play, which still has [startupTimeout].
+  Future<void> _playAfterHook(VideoplaybackController controller) async {
     if (_isDisposed) return;
+    try {
+      await beforePlay!();
+    } on Object catch (error) {
+      // An ad that fails must not keep the content from playing.
+      logPlayback('before play failed', error: error);
+    }
+    if (_isDisposed) return;
+    await controller.play().timeout(startupTimeout);
+    logPlayback('play requested');
   }
 
   /// Seeks to the source's recorded position, if it has a usable one.

@@ -50,6 +50,44 @@ void main() {
       expect(m.rebufferCount, 1);
     });
 
+    test('a pre-roll counts towards neither startup nor time played', () {
+      now = 400;
+      collector.ready(duration: _s(3600));
+      now = 1200;
+      collector.beginAd();
+      now = 16200;
+      expect(collector.metrics().playedMs, 0);
+      expect(collector.metrics().pausedMs, 0);
+      collector.endAd();
+      now = 16500;
+      collector.playing(position: Duration.zero);
+      now = 26500;
+
+      final m = collector.metrics();
+      expect(m.playerStartupMs, 400);
+      expect(m.videoStartupMs, 1500);
+      expect(m.playedMs, 10000);
+      expect(m.pausedMs, 0);
+    });
+
+    test('a mid-roll is left out of the time played and paused', () {
+      collector.playing(position: Duration.zero);
+      now = 10000;
+      collector.beginAd();
+      collector.paused(position: _s(10)); // the ad break pauses the content
+      now = 40000;
+      expect(collector.metrics().playedMs, 10000);
+      collector.endAd();
+      collector.playing(position: _s(10));
+      now = 45000;
+
+      final m = collector.metrics();
+      expect(m.playedMs, 15000);
+      expect(m.pausedMs, 0);
+      expect(m.maxPositionS, closeTo(15, 0.01));
+      expect(collector.state, BeatState.playing);
+    });
+
     test('buffering before the first frame is startup, not a stall', () {
       collector.bufferingStarted();
       now = 2000;

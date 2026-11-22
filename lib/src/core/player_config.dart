@@ -273,7 +273,8 @@ final class PlayerCastConfig {
   };
 }
 
-/// The config's ads. The app players play no ads.
+/// The config's ads: a VAST or VMAP tag, played when `features.ads` is on
+/// (Android and iOS; see [PlayerConfig.adTagUrl]).
 @immutable
 final class PlayerAdsConfig {
   const PlayerAdsConfig({this.adTagUrl = ''});
@@ -371,6 +372,14 @@ final class PlayerConfig {
   final PlayerDrmConfig? drm;
 
   /// `cast.receiverAppId`, when set.
+  /// The ad tag to play: set only when `features.ads` is on and
+  /// `ads.adTagUrl` is not empty. Null means no ad request at all.
+  String? get adTagUrl {
+    if (!features.ads) return null;
+    final String url = ads?.adTagUrl.trim() ?? '';
+    return url.isEmpty ? null : url;
+  }
+
   String? get castReceiverAppId => switch (cast?.receiverAppId) {
     final String id when id.isNotEmpty => id,
     _ => null,

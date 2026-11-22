@@ -2,4 +2,6 @@
     <!-- EYZFlow patch: Chromecast discovery holds a Wi-Fi multicast lock. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Google IMA (ads) checks the network before it requests an ad. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>

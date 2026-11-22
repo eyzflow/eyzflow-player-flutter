@@ -1,3 +1,14 @@
+## Unreleased
+
+- Ads from the player config (`features.ads`, `ads.adTagUrl`) on Android,
+  Android TV and iOS, through Google IMA (`interactive_media_ads`). Ad breaks
+  follow the stream's SCTE-35 markers; streams without markers follow the tag.
+  See the README's Ads section.
+- `PlaybackAdBreakStarted` and `PlaybackAdBreakEnded` playback events; a
+  host's exhaustive `switch` over `PlaybackEvent` needs the two new cases.
+- `BeatCollector.beginAd` / `endAd`: ad time is left out of the beats.
+- Android apps need core library desugaring for IMA (README, Host setup).
+
 ## 0.1.0
 
 First release.

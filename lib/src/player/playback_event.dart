@@ -244,6 +244,34 @@ final class PlaybackSubtitleTrackChanged extends PlaybackEvent {
   List<Object?> get props => <Object?>[...super.props, language];
 }
 
+/// An ad break began: the content stopped (or has not started yet) while an
+/// ad from the player config's ad tag is requested and played. Everything the
+/// content reports until [PlaybackAdBreakEnded] (its pause, its resume) is
+/// the ad break's doing, not the viewer's.
+final class PlaybackAdBreakStarted extends PlaybackEvent {
+  const PlaybackAdBreakStarted({
+    required super.sourceId,
+    required super.position,
+    super.duration,
+  });
+
+  @override
+  String get _name => 'PlaybackAdBreakStarted';
+}
+
+/// The ad break is over: played, empty, failed or timed out. The content
+/// plays on.
+final class PlaybackAdBreakEnded extends PlaybackEvent {
+  const PlaybackAdBreakEnded({
+    required super.sourceId,
+    required super.position,
+    super.duration,
+  });
+
+  @override
+  String get _name => 'PlaybackAdBreakEnded';
+}
+
 /// Playback reached the end. Reported once; only [PlaybackClosed] follows.
 final class PlaybackCompleted extends PlaybackEvent {
   const PlaybackCompleted({

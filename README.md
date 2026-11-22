@@ -99,8 +99,8 @@ your own (the failure carries its code).
 ### Playback events
 
 `onPlaybackEvent` reports what playback does: ready, started, paused, resumed,
-seeked, buffering started/ended, error, audio/subtitle track changed,
-completed, closed. The beats are computed from them; a host can also send them
+seeked, buffering started/ended, error, audio/subtitle track changed, ad break
+started/ended, completed, closed. The beats are computed from them; a host can also send them
 to its own analytics. Rules and limits: [doc/player.md](doc/player.md#playback-events).
 
 ### Chromecast and AirPlay
@@ -131,6 +131,45 @@ button, and FairPlay keys for the Apple TV are requested by the phone.
 Casting uses the Chromecast client in our copy of the native player (CASTV2
 over the local network, no Google Cast SDK). Turn it off with
 `enableCast: false`, or with `features.chromecast: false` in a player config.
+
+### Ads
+
+On Android, Android TV and iOS the player plays ads from the player config:
+`features.ads` on **and** a non-empty `ads.adTagUrl` (a VAST or VMAP tag).
+Otherwise no ad request is made at all. Ads play through Google IMA
+(`interactive_media_ads`), which shows the ad, its countdown, the skip button
+when the ad allows one, and the click-through. Tizen plays no ads (there is no
+IMA for it).
+
+When ads play follows the ad break markers on the stream (dashboard: Stream →
+Signals → Ad break), which the backend writes into the manifests as SCTE-35.
+The player reads them from the HLS playlist it loads (`EXT-X-DATERANGE`), the
+same rules as the web player:
+
+- **Stream with markers: the markers win.** A marker at the start is a
+  pre-roll; every other marker is a mid-roll, requested from the tag when
+  playback reaches it, and played once. A marker passed by seeking (or by
+  resuming further on) does not play. A VMAP tag's own schedule is dropped
+  after each break: at a marker only its pre-roll plays, so a VMAP without one
+  gives no ad there. **Streams with markers need a VAST tag.**
+- **Stream without markers: the tag decides.** It is requested once before the
+  content starts: a VAST gives a pre-roll, a VMAP its own pre-roll, mid-rolls
+  and post-roll.
+- At a break the content waits until the ad starts, or until it turns out
+  there is none (empty or failed tag, ad blocker, no answer within 12 s):
+  then it plays on, with no error.
+- During an ad the player's controls are hidden and out of reach (on Android
+  TV the remote cannot focus or seek them), the iOS Cast button is hidden, and
+  playback analytics leave the ad time out: no played, paused or startup time.
+  `onPlaybackEvent` reports `PlaybackAdBreakStarted` and
+  `PlaybackAdBreakEnded` around it.
+- No ads start while the video plays on AirPlay or a Chromecast. When casting
+  hands playback back, the pre-roll and the breaks already played do not play
+  again.
+
+Host setup for ads: see step 7 under [Host setup](#host-setup). The example app
+has an **Ad tag URL** field to try a tag without a config (Google's sample
+tags: <https://developers.google.com/interactive-media-ads/docs/sdks/html5/client-side/tags>).
 
 ### Player configs
 
@@ -166,6 +205,7 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 | `features.airplay` | iOS: false keeps the video off AirPlay | – | – |
 | `features.pip` | Android: false turns picture-in-picture off (iOS has none) | (off on TV) | – |
 | `cast.receiverAppId` | the receiver films cast to, when `castReceiverAppId` is not set | – | – |
+| `features.ads`, `ads.adTagUrl` | ads through Google IMA, see [Ads](#ads) | same | – (no IMA on Tizen) |
 | `drm.parameters` | into the DRM `access-token`; `storefront_id` also opens the playback session | same | same |
 
 Not honoured anywhere in the apps:
@@ -174,8 +214,7 @@ Not honoured anywhere in the apps:
   always starts.
 - `features.muted`: no app route has an unmute control (Media3's controls,
   the TV overlay), so a muted film would stay silent.
-- `features.qualitySelector`, `features.ads`, `ads.adTagUrl`: the app players
-  have neither a quality menu nor ads.
+- `features.qualitySelector`: the app players have no quality menu.
 - `cast.androidReceiverCompatible`, `cast.autoJoinPolicy`: options of the
   web Cast SDK.
 - `isProtected`: the source type decides (`EyzflowFilm` plays with DRM).
@@ -269,6 +308,21 @@ nothing.
 6. Player key from an app: add each app to the key's "Allowed apps"
    as platform plus package name; matching is exact, so the Android TV build
    needs its own `androidtv` entry next to `android`.
+7. Ads (Google IMA): Android apps need core library desugaring, as in
+   `example/android/app/build.gradle.kts` (the `ACCESS_NETWORK_STATE`
+   permission IMA wants comes with the package):
+
+   ```kotlin
+   android {
+       compileOptions { isCoreLibraryDesugaringEnabled = true }
+   }
+   dependencies {
+       coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+   }
+   ```
+
+   Without it the Android build fails, whether ads are used or not. iOS needs
+   nothing extra.
 
 `endpoints` moves the key check, sessions and beats (for a dev backend). Stream
 and DRM licence URLs come from `EyzflowSource` and stay on production, so a dev
@@ -293,6 +347,12 @@ session id would not match the production licence gate.
 - FairPlay (iPhone, AirPlay) was rewritten to Apple's standard flow and is not
   tested on a device yet.
 - Limit and key messages are English only.
+- Ads: not tried on a device yet. On Android TV the skip button may not be
+  reachable with the remote (IMA's own view; the plugin has no TV focus
+  handling). The marker's planned pod length is not sent to the ad server: the
+  tag decides the pod. Companion and overlay (non-linear) ads are not handled.
+  While a VMAP on a stream without markers waits for its next break, IMA's
+  container stays over the content (it lets touches through).
 
 ## Develop
 
