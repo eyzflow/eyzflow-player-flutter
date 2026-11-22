@@ -41,6 +41,7 @@ export 'src/flutter/device_context.dart'
 export 'src/flutter/error_view.dart';
 export 'src/flutter/event_adapter.dart';
 export 'src/flutter/eyzflow_player.dart';
+export 'src/end_screen/end_screen.dart' hide PlayerOverlayScope;
 export 'src/l10n/language_names.dart';
 export 'src/l10n/player_language.dart';
 export 'src/flutter/playback_coordinator.dart';

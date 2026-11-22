@@ -284,6 +284,42 @@ abstract class EYZFlowStreamingLocalizations {
   /// In en, this message translates to:
   /// **'Skip credits'**
   String get skipClosingCredits;
+
+  /// End screen: the heading of the next stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Up next'**
+  String get endScreenUpNext;
+
+  /// End screen: the play button while it counts down to the next stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Next in {seconds}'**
+  String endScreenNextIn(int seconds);
+
+  /// End screen: play the next stream now.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get endScreenPlay;
+
+  /// End screen: stop the countdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get endScreenCancel;
+
+  /// End screen: the heading of the row of films.
+  ///
+  /// In en, this message translates to:
+  /// **'More like this'**
+  String get endScreenMoreLikeThis;
+
+  /// End screen: hide it and watch the credits.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to credits'**
+  String get endScreenBackToCredits;
 }
 
 class _EYZFlowStreamingLocalizationsDelegate

@@ -108,4 +108,24 @@ class EYZFlowStreamingLocalizationsEn extends EYZFlowStreamingLocalizations {
 
   @override
   String get skipClosingCredits => 'Skip credits';
+
+  @override
+  String get endScreenUpNext => 'Up next';
+
+  @override
+  String endScreenNextIn(int seconds) {
+    return 'Next in $seconds';
+  }
+
+  @override
+  String get endScreenPlay => 'Play';
+
+  @override
+  String get endScreenCancel => 'Cancel';
+
+  @override
+  String get endScreenMoreLikeThis => 'More like this';
+
+  @override
+  String get endScreenBackToCredits => 'Back to credits';
 }

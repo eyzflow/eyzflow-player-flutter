@@ -29,5 +29,11 @@
   "skipIntro": "Intro overslaan",
   "skipRecap": "Samenvatting overslaan",
   "skipOpeningCredits": "Begintiteling overslaan",
-  "skipClosingCredits": "Aftiteling overslaan"
+  "skipClosingCredits": "Aftiteling overslaan",
+  "endScreenUpNext": "Hierna",
+  "endScreenNextIn": "Volgende over {seconds}",
+  "endScreenPlay": "Afspelen",
+  "endScreenCancel": "Annuleren",
+  "endScreenMoreLikeThis": "Meer zoals dit",
+  "endScreenBackToCredits": "Terug naar de aftiteling"
 }

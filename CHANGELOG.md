@@ -12,6 +12,14 @@
   the two new cases.
 - The stream's playlist is now read once per playback for its markers even
   without ads; `loadHlsAdBreaks` is replaced by `loadHlsMarkers`.
+- An end screen (EYF-222): `EyzflowPlayer.endScreen` shows "Up next" with a
+  countdown and a row of films the app passes, at the closing credits (the
+  video shrunk into a corner) or after the film; a picked film plays in
+  place with its own key check, session and DRM (`onSelect` can prevent it).
+  On TV it takes the remote's focus. A stream without a closing credits
+  signal gets it `secondsBeforeEnd` seconds before the end (default 20). The
+  config's `features.endScreen` and `endScreen` settings apply. `overlayBuilder` draws the app's own UI
+  instead. Texts in en, de, fr and nl.
 
 ## 0.3.0
 

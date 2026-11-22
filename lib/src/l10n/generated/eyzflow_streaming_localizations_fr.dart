@@ -110,4 +110,24 @@ class EYZFlowStreamingLocalizationsFr extends EYZFlowStreamingLocalizations {
 
   @override
   String get skipClosingCredits => 'Passer le générique';
+
+  @override
+  String get endScreenUpNext => 'À suivre';
+
+  @override
+  String endScreenNextIn(int seconds) {
+    return 'Suite dans $seconds';
+  }
+
+  @override
+  String get endScreenPlay => 'Lecture';
+
+  @override
+  String get endScreenCancel => 'Annuler';
+
+  @override
+  String get endScreenMoreLikeThis => 'Titres similaires';
+
+  @override
+  String get endScreenBackToCredits => 'Revenir au générique';
 }

@@ -29,5 +29,11 @@
   "skipIntro": "Intro überspringen",
   "skipRecap": "Rückblick überspringen",
   "skipOpeningCredits": "Vorspann überspringen",
-  "skipClosingCredits": "Abspann überspringen"
+  "skipClosingCredits": "Abspann überspringen",
+  "endScreenUpNext": "Als Nächstes",
+  "endScreenNextIn": "Weiter in {seconds}",
+  "endScreenPlay": "Abspielen",
+  "endScreenCancel": "Abbrechen",
+  "endScreenMoreLikeThis": "Ähnliche Titel",
+  "endScreenBackToCredits": "Zurück zum Abspann"
 }

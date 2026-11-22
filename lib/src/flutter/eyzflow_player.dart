@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../core/source.dart';
+import '../end_screen/end_screen.dart';
 import '../player/playback_event.dart';
 import '../player/playback_target.dart';
 import '../player/watch_progress_recorder.dart';
@@ -80,6 +81,8 @@ class EyzflowPlayer extends StatefulWidget {
     this.onError,
     this.onReady,
     this.onSignal,
+    this.endScreen,
+    this.overlayBuilder,
     this.onCloseRequested,
     this.onPlaybackEvent,
     this.errorBuilder,
@@ -174,6 +177,19 @@ class EyzflowPlayer extends StatefulWidget {
   /// [PlaybackSignalStarted] and [PlaybackSignalEnded] events.
   final ValueChanged<StreamSignal?>? onSignal;
 
+  /// The built-in end screen: "Up next" with a countdown and a row of films
+  /// you pass, over the closing credits (the video shrunk into a corner) or
+  /// after the film. A picked film plays in place, with its own key check,
+  /// session and DRM; [EyzflowEndScreen.onSelect] hears it and can prevent
+  /// it. The config's `features.endScreen` and `endScreen` settings apply
+  /// where it leaves them out.
+  final EyzflowEndScreen? endScreen;
+
+  /// Your own UI over the player at a signal or after the end, e.g. similar
+  /// films at the closing credits. It wins over [endScreen] when it returns a
+  /// widget.
+  final PlayerOverlayBuilder? overlayBuilder;
+
   /// Closing; [Navigator.pop] when null.
   final VoidCallback? onCloseRequested;
 
@@ -214,8 +230,6 @@ class EyzflowPlayer extends StatefulWidget {
   /// production reads the real platform.
   final String? debugOperatingSystemOverride;
 
-  bool get _isProtected => sourceType is EyzflowFilm;
-
   @override
   State<EyzflowPlayer> createState() => _EyzflowPlayerState();
 }
@@ -238,6 +252,32 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   /// The config playback started with: [EyzflowPlayer.configId]'s, under the
   /// inline [EyzflowPlayer.config].
   PlayerConfig _config = PlayerConfig.defaults;
+
+  /// A film the end screen picked: it plays in place of `widget.streamId`
+  /// until the app passes another one.
+  EyzflowEndScreenItem? _picked;
+
+  String get _streamId => _picked?.streamId ?? widget.streamId;
+
+  EyzflowSourceType? get _sourceType {
+    final EyzflowEndScreenItem? picked = _picked;
+    if (picked == null) return widget.sourceType;
+    return picked.sourceType ??
+        (widget.sourceType is EyzflowFilm
+            ? EyzflowFilm(picked.streamId)
+            : EyzflowTrailer(picked.streamId));
+  }
+
+  bool get _isProtected => _sourceType is EyzflowFilm;
+
+  /// Plays an end screen item in place: a new key check, session and DRM.
+  void _pick(EyzflowEndScreenItem item) {
+    if (!mounted) return;
+    setState(() => _picked = item);
+    _stop();
+    unawaited(_start());
+  }
+
   PlayerOptions _options = const PlayerOptions();
 
   /// The config [EyzflowPlayer.configId] loaded, if any.
@@ -262,6 +302,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   void didUpdateWidget(EyzflowPlayer old) {
     super.didUpdateWidget(old);
     final w = widget;
+    if (w.streamId != old.streamId) _picked = null;
     if (w.streamId != old.streamId ||
         w.playerKey != old.playerKey ||
         w.drmAuthorization != old.drmAuthorization ||
@@ -355,8 +396,8 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
     final String? storefrontId = w.storefrontId ?? config.drm?.storefrontId;
     final coordinator = PlaybackCoordinator(
       config: PlaybackCoordinatorConfig(
-        streamId: w.streamId,
-        isProtected: w._isProtected,
+        streamId: _streamId,
+        isProtected: _isProtected,
         playerKey: w.playerKey,
         configId: w.configId,
         drmAuthorization: w.drmAuthorization,
@@ -403,13 +444,13 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
     )) {
       final w = widget;
       final source = EyzflowSource(
-        id: w.streamId,
-        title: w.title,
-        description: w.description,
-        poster: w.poster,
+        id: _streamId,
+        title: _picked?.title ?? w.title,
+        description: _picked != null ? _picked!.description : w.description,
+        poster: _picked != null ? _picked!.poster : w.poster,
         drmAccessHeader: drmAccessHeader,
-        sourceType: w.sourceType,
-        progressSeconds: w.progressSeconds,
+        sourceType: _sourceType,
+        progressSeconds: _picked != null ? null : w.progressSeconds,
       );
       final store = w.watchProgressStore;
       final firstReady = _source == null;
@@ -427,7 +468,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
       }
       _source = source;
       if (firstReady) unawaited(_cast?.scan());
-      _recorder = store != null && w._isProtected
+      _recorder = store != null && _isProtected
           ? WatchProgressRecorder(
               store: store,
               target: VideoplayerSourceTarget(source),
@@ -450,7 +491,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   bool get _castAvailable {
     final cast = _cast;
     if (cast == null || cast.devices.isEmpty) return false;
-    return !widget._isProtected || _castReceiverAppId != null;
+    return !_isProtected || _castReceiverAppId != null;
   }
 
   void _onCastChanged() {
@@ -630,18 +671,24 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
             onClose: _closeWhileCasting,
           );
         }
-        return VideoplayerFeatureView(
-          key: ValueKey((coordinator, _playerGeneration)),
-          videoSource: source,
-          isTv: widget.isTv,
-          watchProgressRecorder: _recorder,
-          onCloseRequested: _close,
-          onPlaybackEvent: _onEvent,
-          playerBuilder: widget.playerBuilder,
-          debugOperatingSystemOverride: widget.debugOperatingSystemOverride,
-          castAvailable: _castAvailable,
-          onCastRequested: _onCastRequested,
-          options: _options,
+        return PlayerOverlayScope(
+          settings: EndScreenSettings.resolve(_config, widget.endScreen),
+          endScreen: widget.endScreen,
+          overlayBuilder: widget.overlayBuilder,
+          onPick: _pick,
+          child: VideoplayerFeatureView(
+            key: ValueKey((coordinator, _playerGeneration)),
+            videoSource: source,
+            isTv: widget.isTv,
+            watchProgressRecorder: _recorder,
+            onCloseRequested: _close,
+            onPlaybackEvent: _onEvent,
+            playerBuilder: widget.playerBuilder,
+            debugOperatingSystemOverride: widget.debugOperatingSystemOverride,
+            castAvailable: _castAvailable,
+            onCastRequested: _onCastRequested,
+            options: _options,
+          ),
         );
     }
   }

@@ -246,10 +246,21 @@ class _PlayerControlsState extends State<PlayerControls> {
     if (mounted) _nodes.playPause.requestFocus();
   }
 
+  /// Whether focus is the overlay's to move: on one of its controls, or on
+  /// nothing (a scope). Focus elsewhere — the end screen, an app's own
+  /// overlay — is left alone.
+  bool get _focusIsOurs {
+    final FocusNode? focused = FocusManager.instance.primaryFocus;
+    return focused == null ||
+        identical(focused, FocusScope.of(context)) ||
+        _nodes.all.contains(focused) ||
+        identical(focused, _nodes.skipSignal);
+  }
+
   /// Where focus rests while the overlay is hidden: the skip button while
   /// there is a signal to skip, else the transport.
   void _focusWhileHidden() {
-    if (!mounted) return;
+    if (!mounted || !_focusIsOurs) return;
     if (widget._skippable != null && _nodes.skipSignal.context != null) {
       _nodes.skipSignal.requestFocus();
     } else {
@@ -289,7 +300,11 @@ class _PlayerControlsState extends State<PlayerControls> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final FocusNode? settled = FocusManager.instance.primaryFocus;
-      if (settled == null || settled is FocusScopeNode) _focusPlayPause();
+      // Only the scope the controls live in: another scope with focus (the
+      // end screen's, an app overlay's) is not a lost focus.
+      if (settled == null || identical(settled, FocusScope.of(context))) {
+        _focusPlayPause();
+      }
     });
   }
 

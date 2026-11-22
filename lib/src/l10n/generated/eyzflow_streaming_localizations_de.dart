@@ -111,4 +111,24 @@ class EYZFlowStreamingLocalizationsDe extends EYZFlowStreamingLocalizations {
 
   @override
   String get skipClosingCredits => 'Abspann überspringen';
+
+  @override
+  String get endScreenUpNext => 'Als Nächstes';
+
+  @override
+  String endScreenNextIn(int seconds) {
+    return 'Weiter in $seconds';
+  }
+
+  @override
+  String get endScreenPlay => 'Abspielen';
+
+  @override
+  String get endScreenCancel => 'Abbrechen';
+
+  @override
+  String get endScreenMoreLikeThis => 'Ähnliche Titel';
+
+  @override
+  String get endScreenBackToCredits => 'Zurück zum Abspann';
 }
