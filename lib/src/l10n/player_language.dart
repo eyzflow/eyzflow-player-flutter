@@ -21,6 +21,11 @@ void setEyzflowPlayerLanguage(String? languageCode) {
   _language = languageCode == null ? null : _supported(languageCode);
 }
 
+/// [languageCode] as one the player has (English for any other), or
+/// [eyzflowPlayerLanguage] when null.
+String eyzflowPlayerLanguageFor(String? languageCode) =>
+    languageCode == null ? eyzflowPlayerLanguage : _supported(languageCode);
+
 String _supported(String code) {
   final String base = code.split(RegExp('[-_]')).first.toLowerCase();
   return eyzflowPlayerLanguages.contains(base) ? base : 'en';

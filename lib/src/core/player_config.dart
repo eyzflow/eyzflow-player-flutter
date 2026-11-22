@@ -116,6 +116,7 @@ final class PlayerFeatures {
     this.pip = true,
     this.ads = false,
     this.autoHideControls = true,
+    this.adCountdown = true,
   });
 
   final bool controls;
@@ -129,6 +130,10 @@ final class PlayerFeatures {
   final bool pip;
   final bool ads;
   final bool autoHideControls;
+
+  /// Count down the last 5 s before a mid-roll ("Ad in 5" … "Ad in 1"),
+  /// when ads play. Missing (configs saved before it): on.
+  final bool adCountdown;
 
   factory PlayerFeatures.fromJson(
     Map<String, Object?> json, {
@@ -149,6 +154,7 @@ final class PlayerFeatures {
           pip: patch.pip ?? pip,
           ads: patch.ads ?? ads,
           autoHideControls: patch.autoHideControls ?? autoHideControls,
+          adCountdown: patch.adCountdown ?? adCountdown,
         );
 
   Map<String, Object?> toJson() => {
@@ -163,6 +169,7 @@ final class PlayerFeatures {
     'pip': pip,
     'ads': ads,
     'autoHideControls': autoHideControls,
+    'adCountdown': adCountdown,
   };
 
   @override
@@ -178,7 +185,8 @@ final class PlayerFeatures {
       other.captions == captions &&
       other.pip == pip &&
       other.ads == ads &&
-      other.autoHideControls == autoHideControls;
+      other.autoHideControls == autoHideControls &&
+      other.adCountdown == adCountdown;
 
   @override
   int get hashCode => Object.hash(
@@ -193,6 +201,7 @@ final class PlayerFeatures {
     pip,
     ads,
     autoHideControls,
+    adCountdown,
   );
 }
 
@@ -211,6 +220,7 @@ final class PlayerFeaturesOverride {
     this.pip,
     this.ads,
     this.autoHideControls,
+    this.adCountdown,
   });
 
   factory PlayerFeaturesOverride.fromJson(Map<String, Object?> json) =>
@@ -226,6 +236,7 @@ final class PlayerFeaturesOverride {
         pip: _bool(json['pip']),
         ads: _bool(json['ads']),
         autoHideControls: _bool(json['autoHideControls']),
+        adCountdown: _bool(json['adCountdown']),
       );
 
   final bool? controls;
@@ -239,6 +250,7 @@ final class PlayerFeaturesOverride {
   final bool? pip;
   final bool? ads;
   final bool? autoHideControls;
+  final bool? adCountdown;
 }
 
 /// The config's Chromecast settings.
@@ -273,18 +285,49 @@ final class PlayerCastConfig {
   };
 }
 
+/// How many seconds the countdown before a mid-roll shows when the config
+/// does not say.
+const int defaultAdCountdownSeconds = 5;
+
+/// The longest countdown a config can ask for.
+const int maxAdCountdownSeconds = 30;
+
+/// A config's `ads.countdownSeconds` as a length to use: whole seconds from 1
+/// to 30 (rounded, clamped), else [defaultAdCountdownSeconds] for a missing
+/// value or one that is not a number. The web player's `countdownLength`.
+int adCountdownLength(Object? configured) {
+  if (configured is! num || !configured.isFinite) {
+    return defaultAdCountdownSeconds;
+  }
+  return configured.round().clamp(1, maxAdCountdownSeconds);
+}
+
 /// The config's ads: a VAST or VMAP tag, played when `features.ads` is on
 /// (Android and iOS; see [PlayerConfig.adTagUrl]).
 @immutable
 final class PlayerAdsConfig {
-  const PlayerAdsConfig({this.adTagUrl = ''});
+  const PlayerAdsConfig({
+    this.adTagUrl = '',
+    this.countdownSeconds = defaultAdCountdownSeconds,
+  });
 
   factory PlayerAdsConfig.fromJson(Map<String, Object?> json) =>
-      PlayerAdsConfig(adTagUrl: _string(json['adTagUrl']) ?? '');
+      PlayerAdsConfig(
+        adTagUrl: _string(json['adTagUrl']) ?? '',
+        countdownSeconds: adCountdownLength(json['countdownSeconds']),
+      );
 
   final String adTagUrl;
 
-  Map<String, Object?> toJson() => {'adTagUrl': adTagUrl};
+  /// How many seconds the countdown before a mid-roll shows
+  /// (`features.adCountdown`), 1–30. Pass it through [adCountdownLength]
+  /// when it comes from elsewhere than [PlayerAdsConfig.fromJson].
+  final int countdownSeconds;
+
+  Map<String, Object?> toJson() => {
+    'adTagUrl': adTagUrl,
+    'countdownSeconds': countdownSeconds,
+  };
 }
 
 /// Extra DRM access-token parameters, e.g. `{'storefront_id': '…'}`. The
@@ -372,6 +415,11 @@ final class PlayerConfig {
   final PlayerDrmConfig? drm;
 
   /// `cast.receiverAppId`, when set.
+  /// How many seconds the countdown before a mid-roll shows:
+  /// `ads.countdownSeconds`, else [defaultAdCountdownSeconds].
+  int get adCountdownSeconds =>
+      adCountdownLength(ads?.countdownSeconds ?? defaultAdCountdownSeconds);
+
   /// The ad tag to play: set only when `features.ads` is on and
   /// `ads.adTagUrl` is not empty. Null means no ad request at all.
   String? get adTagUrl {

@@ -31,13 +31,14 @@ const Map<String, Object?> _remote = {
     'pip': false,
     'ads': false,
     'autoHideControls': false,
+    'adCountdown': false,
   },
   'cast': {
     'receiverAppId': 'ABCD1234',
     'androidReceiverCompatible': false,
     'autoJoinPolicy': 'origin_scoped',
   },
-  'ads': {'adTagUrl': ''},
+  'ads': {'adTagUrl': '', 'countdownSeconds': 5},
 };
 
 void main() {

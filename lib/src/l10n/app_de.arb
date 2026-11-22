@@ -24,5 +24,6 @@
   "castConnecting": "Verbindung zu {device}…",
   "castPlayingOn": "Wird auf {device} abgespielt",
   "castStop": "Streamen beenden",
-  "castFailed": "Wiedergabe auf {device} nicht möglich."
+  "castFailed": "Wiedergabe auf {device} nicht möglich.",
+  "adCountdown": "Werbung in {seconds}"
 }

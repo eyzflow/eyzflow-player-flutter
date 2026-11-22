@@ -24,5 +24,6 @@
   "castConnecting": "Verbinden met {device}…",
   "castPlayingOn": "Speelt af op {device}",
   "castStop": "Casten stoppen",
-  "castFailed": "Afspelen op {device} is niet gelukt."
+  "castFailed": "Afspelen op {device} is niet gelukt.",
+  "adCountdown": "Reclame over {seconds}"
 }

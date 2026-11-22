@@ -63,5 +63,14 @@
         "type": "String"
       }
     }
+  },
+  "adCountdown": "Ad in {seconds}",
+  "@adCountdown": {
+    "description": "Corner notice for the last seconds before a mid-roll ad break.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
   }
 }

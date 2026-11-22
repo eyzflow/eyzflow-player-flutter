@@ -276,6 +276,15 @@ final class AdBreakSchedule {
     return reached;
   }
 
+  /// The starts of the mid-roll breaks not played yet, in order, for the
+  /// countdown before them. A break passed by seeking is still here: it plays
+  /// when playback reaches it later.
+  List<Duration> get upcomingStarts => <Duration>[
+    for (final AdBreak adBreak in _ordered())
+      if (adBreak.start > prerollWindow && !_played.contains(adBreak.id))
+        adBreak.start,
+  ];
+
   List<AdBreak> _ordered() =>
       _breaks.values.toList()
         ..sort((AdBreak a, AdBreak b) => a.start.compareTo(b.start));

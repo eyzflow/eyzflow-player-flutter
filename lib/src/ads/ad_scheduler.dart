@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'ad_breaks.dart';
+import 'ad_countdown.dart';
 
 /// Ads for one impression: the config's ad tag, and what has been played.
 ///
@@ -116,6 +117,9 @@ final class AdBreakScheduler extends ChangeNotifier {
   var _adPlaying = false;
   var _pausedContent = false;
   var _cuePoints = const <Duration>[];
+
+  /// A VMAP's mid-rolls still to come, on a stream without markers.
+  final CuePointSchedule _vmapMidrolls = CuePointSchedule();
   Timer? _guardTimer;
   Completer<void>? _hold;
   Duration? _lastPosition;
@@ -134,6 +138,16 @@ final class AdBreakScheduler extends ChangeNotifier {
 
   /// A linear ad is on screen.
   bool get adPlaying => _adPlaying;
+
+  /// Where the mid-rolls still to come start, for the countdown before them:
+  /// the stream's markers not played yet (one passed by seeking still plays
+  /// later), else a loaded VMAP's mid-roll cue points not played through.
+  List<Duration> get upcomingMidrolls {
+    if (_disposed) return const <Duration>[];
+    if (ads.schedule.hasBreaks) return ads.schedule.upcomingStarts;
+    if (_mode == _Mode.tag && _managerAlive) return _vmapMidrolls.upcoming;
+    return const <Duration>[];
+  }
 
   /// Awaited before the content first plays: a pre-roll, if there is one,
   /// plays first. Completes when it is over, or at once when there is none.
@@ -160,6 +174,7 @@ final class AdBreakScheduler extends ChangeNotifier {
     final Duration? previous = _lastPosition;
     _lastPosition = position;
     if (_disposed) return;
+    if (previous != null) _vmapMidrolls.pass(previous, position);
     if (_mode == _Mode.tag && _managerAlive) driver.contentProgress(position);
     if (previous == null ||
         !ads.schedule.hasBreaks ||
@@ -207,6 +222,7 @@ final class AdBreakScheduler extends ChangeNotifier {
       return;
     }
     _cuePoints = List<Duration>.unmodifiable(cuePoints);
+    if (_mode == _Mode.tag) _vmapMidrolls.set(cuePoints);
     final bool hasPreroll =
         cuePoints.isEmpty || cuePoints.contains(Duration.zero);
     if (_mode == _Mode.markers && !hasPreroll) {
@@ -327,6 +343,7 @@ final class AdBreakScheduler extends ChangeNotifier {
     _requesting = false;
     _managerAlive = false;
     _cuePoints = const <Duration>[];
+    _vmapMidrolls.clear();
     driver.discardAds();
   }
 

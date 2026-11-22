@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../ads/ad_breaks.dart';
+import '../ads/ad_countdown.dart';
 import '../ads/ad_scheduler.dart';
 import '../ads/ima_ad_driver.dart';
 import '../native/native_video_player.dart';
@@ -12,6 +13,7 @@ import '../core/source.dart';
 
 import '../bloc/player_controls_bloc.dart';
 import '../bloc/videoplayer_feature_bloc.dart';
+import 'ad_countdown_notice.dart';
 import 'hls_renditions.dart';
 import 'playback_event.dart';
 import 'playback_event_emitter.dart';
@@ -118,6 +120,12 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   AdBreakScheduler? _ads;
   ImaAdDriver? _imaDriver;
   var _finishing = false;
+
+  /// Seconds (the countdown's length … 1) until the next mid-roll while its
+  /// notice shows.
+  final ValueNotifier<int?> _adCountdown = ValueNotifier<int?>(null);
+  VideoplaybackValue? _lastValue;
+  Duration? _countdownPosition;
 
   void _checkpoint([Duration? position]) {
     final recorder = _sessionRecorder;
@@ -247,6 +255,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         if (ads != null && position != null && !value.isCompleted) {
           ads.contentPosition(position);
         }
+        _updateAdCountdown(value);
       },
       // Android: the pre-roll plays before the content player loads (below).
       beforePlay: _prerollBeforeLoad ? null : ads?.beforeContent,
@@ -345,10 +354,53 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
 
   void _onAdsChanged() {
     if (mounted) setState(() {});
+    _updateAdCountdown(_lastValue, jumped: false);
+  }
+
+  /// The notice before a mid-roll, from the latest position report. Hidden
+  /// while paused or buffering, when the position jumped (a seek: the native
+  /// controls do not report one otherwise), while scrubbing on TV, during an
+  /// ad break and on AirPlay. A break seeked past is behind the position, so
+  /// it has no notice.
+  void _updateAdCountdown(VideoplaybackValue? value, {bool? jumped}) {
+    final AdBreakScheduler? ads = _ads;
+    _lastValue = value;
+    final Duration? position = value?.position;
+    final Duration? previous = _countdownPosition;
+    if (jumped == null) _countdownPosition = position;
+    final bool seeked =
+        jumped ??
+        (position != null &&
+            previous != null &&
+            (position < previous || position - previous > maxPlayStep));
+    final PlayerControlsBloc? bloc = _controlsBloc;
+    final bool scrubbing =
+        bloc != null &&
+        !bloc.isClosed &&
+        (bloc.state.isScrubbing || bloc.state.isPreviewing);
+    _adCountdown.value = ads == null || value == null
+        ? null
+        : adCountdownFor(
+            enabled: widget.options.adCountdown,
+            playing:
+                value.isPlaying &&
+                !value.isBuffering &&
+                !value.isCompleted &&
+                !seeked &&
+                !scrubbing,
+            inBreak: ads.inBreak || ads.adPlaying,
+            remote: _nativeController?.isAirplayConnected ?? false,
+            position: position,
+            starts: ads.upcomingMidrolls,
+            length: widget.options.adCountdownSeconds,
+          );
   }
 
   void _disposeAds() {
     final AdBreakScheduler? ads = _ads;
+    _adCountdown.value = null;
+    _lastValue = null;
+    _countdownPosition = null;
     _ads = null;
     _imaDriver = null;
     ads?.removeListener(_onAdsChanged);
@@ -503,6 +555,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     // way. NativeVideoPlayerController.dispose() is _isDisposed-guarded and
     // idempotent, so this is safe even when the session's own path succeeds.
     unawaited(_nativeController?.dispose());
+    _adCountdown.dispose();
     super.dispose();
   }
 
@@ -536,6 +589,11 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       ),
       _ => null,
     };
+    // Over the video and the controls, never focusable: on TV it stays up
+    // while the controls are hidden. Switched off without a reload.
+    final Widget? countdown = _ads != null && widget.options.adCountdown
+        ? AdCountdownNotice(seconds: _adCountdown)
+        : null;
 
     if (!widget.useSharedOverlay) {
       if (defaultTargetPlatform != TargetPlatform.iOS &&
@@ -550,6 +608,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         children: <Widget>[
           surface,
           ?adLayer,
+          ?countdown,
           if (widget._showsCast && controller != null && !inAdBreak)
             Positioned(
               top: MediaQuery.paddingOf(context).top + 8,
@@ -583,6 +642,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
             maintainState: true,
             child: ExcludeFocus(excluding: inAdBreak, child: controls),
           ),
+        ?countdown,
         ?adLayer,
       ],
     );
