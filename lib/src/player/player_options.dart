@@ -142,6 +142,19 @@ final class PlayerOptions {
   /// request. Compared by identity: one per impression.
   final PlayerAds? ads;
 
+  /// These options with [ads] in place of the config's, e.g. once the
+  /// viewer's plan has said whether it plays ads.
+  PlayerOptions withAds(PlayerAds? ads) => PlayerOptions(
+    controlsTheme: controlsTheme,
+    controls: controls,
+    autoHideControls: autoHideControls,
+    captions: captions,
+    loop: loop,
+    pictureInPicture: pictureInPicture,
+    airPlay: airPlay,
+    ads: ads,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is PlayerOptions &&

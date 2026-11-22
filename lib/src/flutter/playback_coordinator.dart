@@ -53,9 +53,21 @@ final class EyzflowPlayerLoading extends EyzflowPlayerStatus {
 /// Mount the player with this DRM `access-token` (null for a stream that
 /// plays without DRM).
 final class EyzflowPlayerReady extends EyzflowPlayerStatus {
-  const EyzflowPlayerReady(this.drmAccessHeader);
+  const EyzflowPlayerReady(
+    this.drmAccessHeader, {
+    this.planAds,
+    this.adTargeting = const {},
+  });
 
   final String? drmAccessHeader;
+
+  /// The playback session's answer: whether the viewer's plan plays ads
+  /// ([PlaybackSession.ads]). False plays none; null (no session, an older
+  /// backend, a failed request) leaves it to the player config.
+  final bool? planAds;
+
+  /// [PlaybackSession.adTargeting], for the ad tag's `cust_params`.
+  final Map<String, String> adTargeting;
 }
 
 /// Show the failure; the player is not (or no longer) mounted.
@@ -83,8 +95,9 @@ final class PlaybackCoordinatorConfig {
 
   final String streamId;
 
-  /// A feature-length source: DRM, and so a playback session. Trailers play
-  /// without either.
+  /// A feature-length source: DRM. A trailer plays without it, but a
+  /// storefront viewer's trailer still opens a playback session (for the
+  /// plan's ads answer), and so counts against the plan's limits.
   final bool isProtected;
   final String? playerKey;
   final String? configId;
@@ -182,56 +195,67 @@ final class PlaybackCoordinator extends ChangeNotifier {
       }
     }
 
-    String? accessHeader;
     final String? authorization = config.drmAuthorization;
-    if (config.isProtected &&
-        authorization != null &&
-        authorization.isNotEmpty) {
-      final String? storefrontId = config.storefrontId;
+    final bool signedIn = authorization != null && authorization.isNotEmpty;
+    final String? storefrontId = config.storefrontId;
+    final bool hasStorefront = storefrontId != null && storefrontId.isNotEmpty;
+
+    // A storefront viewer: the session counts this stream against the plan's
+    // limits and says whether the plan plays ads. Opened for clear streams
+    // too, for the ads answer (as the web player does).
+    PlaybackSession? session;
+    if (signedIn && hasStorefront) {
+      final target = PlaybackSessionTarget(
+        storefrontId: storefrontId,
+        authorization: authorization,
+        deviceId: deviceId,
+      );
+      try {
+        session = await _sessionClient.open(
+          target,
+          streamId: config.streamId,
+          platform: config.platform ?? PlayerPlatform.android,
+          deviceName: config.deviceName,
+        );
+        _sessionTarget = target;
+        _sessionId = session.id;
+        if (_disposed) {
+          await _endAll();
+          return;
+        }
+        final String? id = session.id;
+        if (id != null) _startHeartbeat(target, id, session.heartbeatInterval);
+      } on PlaybackLimitException catch (limit) {
+        return _fail(EyzflowLimitFailure(limit.error));
+      } on Object catch (error) {
+        // Not a limit: carry on. The licence request enforces limits, and
+        // ads follow the player config.
+        debugPrint('[eyzflow-player] playback session failed: $error');
+      }
+    }
+
+    String? accessHeader;
+    if (config.isProtected && signedIn) {
+      final String? sessionId = session?.id;
       final parameters = <String, Object?>{
         ...config.drmParameters,
-        if (storefrontId != null && storefrontId.isNotEmpty)
-          'storefront_id': storefrontId,
+        if (hasStorefront) 'storefront_id': storefrontId,
         'device_id': deviceId,
+        'playback_session_id': ?sessionId,
+        // Fixed for this load: the native players take the header once.
+        'player_token': _license?.token,
       };
-      if (storefrontId != null && storefrontId.isNotEmpty) {
-        final target = PlaybackSessionTarget(
-          storefrontId: storefrontId,
-          authorization: authorization,
-          deviceId: deviceId,
-        );
-        try {
-          final session = await _sessionClient.open(
-            target,
-            streamId: config.streamId,
-            platform: config.platform ?? PlayerPlatform.android,
-            deviceName: config.deviceName,
-          );
-          _sessionTarget = target;
-          _sessionId = session.id;
-          if (_disposed) {
-            await _endAll();
-            return;
-          }
-          final String? id = session.id;
-          if (id != null) {
-            parameters['playback_session_id'] = id;
-            _startHeartbeat(target, id, session.heartbeatInterval);
-          }
-        } on PlaybackLimitException catch (limit) {
-          return _fail(EyzflowLimitFailure(limit.error));
-        } on Object catch (error) {
-          // Not a limit: carry on, the licence request enforces limits.
-          debugPrint('[eyzflow-player] playback session failed: $error');
-        }
-      }
-      // Fixed for this load: the native players take the header once.
-      parameters['player_token'] = _license?.token;
       accessHeader = buildAccessToken(authorization, parameters: parameters);
     }
 
     if (_disposed) return _endAll();
-    _setStatus(EyzflowPlayerReady(accessHeader));
+    _setStatus(
+      EyzflowPlayerReady(
+        accessHeader,
+        planAds: session?.ads,
+        adTargeting: session?.adTargeting ?? const {},
+      ),
+    );
   }
 
   /// Every event the player reports.

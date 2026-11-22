@@ -247,25 +247,115 @@ void main() {
     });
   });
 
-  test('a trailer plays with no DRM header and no session', () {
+  test(
+    "a storefront viewer's trailer opens a session but has no DRM header",
+    () {
+      fakeAsync((async) {
+        final backend = _Backend()
+          ..open = (_) => _json({
+            'id': 'ps_1',
+            'ads': false,
+            'ad_targeting': {'plan': 'premium'},
+          }, 201);
+        final coordinator = _coordinator(
+          backend,
+          config: const PlaybackCoordinatorConfig(
+            streamId: 'trailer-1',
+            isProtected: false,
+            drmAuthorization: 'Bearer viewer',
+            storefrontId: 'sf',
+          ),
+        )..start();
+        async.flushMicrotasks();
+
+        expect(backend.calls, [
+          'POST /v1/content/storefront/sf/playback-sessions',
+        ]);
+        expect(
+          jsonDecode(backend.requests.single.body),
+          containsPair('stream_id', 'trailer-1'),
+        );
+        final status = coordinator.status as EyzflowPlayerReady;
+        expect(status.drmAccessHeader, isNull);
+        expect(status.planAds, isFalse);
+        expect(status.adTargeting, {'plan': 'premium'});
+
+        async.elapse(const Duration(seconds: 30));
+        expect(
+          backend.calls.where((c) => c.endsWith('/heartbeat')),
+          hasLength(1),
+        );
+        coordinator.dispose();
+        async.flushMicrotasks();
+        expect(
+          backend.calls.last,
+          'DELETE /v1/content/storefront/sf/playback-sessions/ps_1',
+        );
+      });
+    },
+  );
+
+  test('a trailer without the viewer or a storefront opens no session', () {
+    for (final config in const [
+      PlaybackCoordinatorConfig(
+        streamId: 'trailer-1',
+        isProtected: false,
+        storefrontId: 'sf',
+      ),
+      PlaybackCoordinatorConfig(
+        streamId: 'trailer-1',
+        isProtected: false,
+        drmAuthorization: 'Bearer viewer',
+      ),
+    ]) {
+      fakeAsync((async) {
+        final backend = _Backend();
+        final coordinator = _coordinator(backend, config: config)..start();
+        async.flushMicrotasks();
+
+        expect(backend.calls, isEmpty);
+        final status = coordinator.status as EyzflowPlayerReady;
+        expect(status.drmAccessHeader, isNull);
+        expect(status.planAds, isNull);
+        expect(status.adTargeting, isEmpty);
+        coordinator.dispose();
+      });
+    }
+  });
+
+  test("a film's session passes the plan's ads answer on", () {
     fakeAsync((async) {
-      final backend = _Backend();
-      final coordinator = _coordinator(
-        backend,
-        config: const PlaybackCoordinatorConfig(
-          streamId: 'trailer-1',
-          isProtected: false,
-          drmAuthorization: 'Bearer viewer',
-          storefrontId: 'sf',
-        ),
-      )..start();
+      final backend = _Backend()
+        ..open = (_) => _json({
+          'id': 'ps_1',
+          'ads': true,
+          'ad_targeting': {'plan': 'basic-ads', 'access': 'svod'},
+        }, 201);
+      final coordinator = _coordinator(backend)..start();
       async.flushMicrotasks();
 
-      expect(backend.calls, isEmpty);
+      final status = coordinator.status as EyzflowPlayerReady;
+      expect(status.planAds, isTrue);
+      expect(status.adTargeting, {'plan': 'basic-ads', 'access': 'svod'});
       expect(
-        (coordinator.status as EyzflowPlayerReady).drmAccessHeader,
-        isNull,
+        _decodeHeader(status.drmAccessHeader!)['parameters'],
+        containsPair('playback_session_id', 'ps_1'),
       );
+      coordinator.dispose();
+      async.flushMicrotasks();
+    });
+  });
+
+  test('a failed session leaves ads to the config', () {
+    fakeAsync((async) {
+      final backend = _Backend()..open = (_) => http.Response('', 500);
+      final coordinator = _coordinator(backend)..start();
+      async.flushMicrotasks();
+
+      final status = coordinator.status as EyzflowPlayerReady;
+      expect(status.planAds, isNull);
+      expect(status.adTargeting, isEmpty);
+      expect(status.drmAccessHeader, isNotNull);
       coordinator.dispose();
     });
   });

@@ -90,6 +90,7 @@ MockClient _api({
   Map<String, Object?>? config,
   int configStatus = 200,
   List<http.Request>? requests,
+  Map<String, Object?> session = const {'id': 'ps_1'},
 }) => MockClient((request) async {
   requests?.add(request);
   if (request.url.path.startsWith('/v1/player-configs/')) {
@@ -99,7 +100,7 @@ MockClient _api({
   if (request.url.path.endsWith('/heartbeat')) {
     return http.Response(jsonEncode({'status': 'active'}), 200);
   }
-  return http.Response(jsonEncode({'id': 'ps_1'}), 201);
+  return http.Response(jsonEncode(session), 201);
 });
 
 Future<_Backend> _pump(
@@ -156,6 +157,81 @@ Map<Object?, Object?> _tokenParameters(EyzflowSource source) =>
 void main() {
   setUpAll(() => setEyzflowPlayerLanguage('en'));
   setUp(PlayerConfigClient.clearCache);
+
+  group("EyzflowPlayer ads and the viewer's plan", () {
+    const tag = 'https://ads.example.com/ads?iu=/1/x';
+    Map<String, Object?> adsConfig() => {
+      ..._config(),
+      'features': {'ads': true},
+      'ads': {'adTagUrl': tag},
+    };
+
+    testWidgets('a plan without ads requests none', (tester) async {
+      await _pump(
+        tester,
+        client: _api(
+          config: adsConfig(),
+          session: {'id': 'ps_1', 'ads': false},
+        ),
+        storefrontId: 'sf',
+      );
+
+      expect(_view(tester).options.ads, isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets("a plan with ads plays the config's tag, targeted", (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        client: _api(
+          config: adsConfig(),
+          session: {
+            'id': 'ps_1',
+            'ads': true,
+            'ad_targeting': {'plan': 'basic-ads', 'access': 'svod'},
+          },
+        ),
+        storefrontId: 'sf',
+      );
+
+      expect(
+        _view(tester).options.ads?.adTagUrl,
+        '$tag&cust_params=plan%3Dbasic-ads%26access%3Dsvod',
+      );
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('an older backend or no session: the config decides', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        client: _api(config: adsConfig()),
+        storefrontId: 'sf',
+      );
+      expect(_view(tester).options.ads?.adTagUrl, tag);
+      await tester.pumpWidget(const SizedBox());
+
+      await _pump(tester, client: _api(config: adsConfig()));
+      expect(_view(tester).options.ads?.adTagUrl, tag);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a plan with ads cannot turn on ads the config has off', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        client: _api(config: _config(), session: {'id': 'ps_1', 'ads': true}),
+        storefrontId: 'sf',
+      );
+
+      expect(_view(tester).options.ads, isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
 
   group('EyzflowPlayer with a configId', () {
     testWidgets('hands the config theme and features to the player', (

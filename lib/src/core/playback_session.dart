@@ -74,11 +74,33 @@ final class PlaybackSession {
   const PlaybackSession({
     required this.id,
     this.heartbeatInterval = const Duration(seconds: 30),
+    this.ads,
+    this.adTargeting = const {},
   });
 
   /// Null while the storefront's limits are off: nothing to heartbeat or close.
   final String? id;
   final Duration heartbeatInterval;
+
+  /// Whether the viewer's plan plays ads for this title: its plan asks for
+  /// ads, or the product is AVOD or FAST. False plays no ads at all. Null
+  /// when the backend did not say (an older backend): the player config
+  /// decides.
+  final bool? ads;
+
+  /// Key-values for the ad request's `cust_params`, e.g.
+  /// `{'plan': 'basic-ads', 'access': 'svod'}`. String values only.
+  final Map<String, String> adTargeting;
+}
+
+/// The string values of [value] when it is a JSON object; others are left
+/// out.
+Map<String, String> _stringMap(Object? value) {
+  if (value is! Map) return const {};
+  return Map<String, String>.unmodifiable({
+    for (final MapEntry(:key, value: v) in value.entries)
+      if (key is String && v is String && v.isNotEmpty) key: v,
+  });
 }
 
 /// Whose session it is: the storefront, the viewer and their device.
@@ -166,11 +188,14 @@ final class PlaybackSessionClient {
     final map = body is Map ? body : const {};
     final Object? id = map['id'];
     final Object? interval = map['heartbeat_interval_seconds'];
+    final Object? ads = map['ads'];
     return PlaybackSession(
       id: id is String && id.isNotEmpty ? id : null,
       heartbeatInterval: Duration(
         seconds: interval is num && interval > 0 ? interval.round() : 30,
       ),
+      ads: ads is bool ? ads : null,
+      adTargeting: _stringMap(map['ad_targeting']),
     );
   }
 
