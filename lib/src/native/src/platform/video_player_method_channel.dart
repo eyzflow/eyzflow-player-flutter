@@ -168,6 +168,29 @@ class VideoPlayerMethodChannel {
     }
   }
 
+  /// Android: pauses and releases the video decoder for an ad break.
+  Future<void> releaseForAd() async {
+    try {
+      await _methodChannel.invokeMethod<void>('releaseForAd', <String, Object>{
+        'viewId': primaryPlatformViewId,
+      });
+    } catch (e) {
+      debugPrint('Error calling releaseForAd: $e');
+    }
+  }
+
+  /// Android: prepares the player again after [releaseForAd].
+  Future<void> restoreAfterAd() async {
+    try {
+      await _methodChannel.invokeMethod<void>(
+        'restoreAfterAd',
+        <String, Object>{'viewId': primaryPlatformViewId},
+      );
+    } catch (e) {
+      debugPrint('Error calling restoreAfterAd: $e');
+    }
+  }
+
   /// Seeks to a specific position
   Future<void> seekTo(Duration position) async {
     try {

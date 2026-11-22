@@ -131,6 +131,8 @@ void main() {
       PlaybackError(:final message) => 'error $message',
       PlaybackAudioTrackChanged(:final language) => 'audio $language',
       PlaybackSubtitleTrackChanged(:final language) => 'subtitles $language',
+      PlaybackAdBreakStarted() => 'ad break started',
+      PlaybackAdBreakEnded() => 'ad break ended',
       PlaybackCompleted() => 'completed',
       PlaybackClosed() => 'closed',
     };

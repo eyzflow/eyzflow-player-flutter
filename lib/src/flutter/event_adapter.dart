@@ -47,6 +47,10 @@ final class PlaybackEventAdapter {
         collector.position(position, duration: duration);
       case PlaybackAudioTrackChanged() || PlaybackSubtitleTrackChanged():
         collector.position(position, duration: duration);
+      case PlaybackAdBreakStarted():
+        collector.beginAd();
+      case PlaybackAdBreakEnded():
+        collector.endAd();
     }
   }
 }

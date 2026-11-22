@@ -84,6 +84,7 @@ final class PlaybackEventEmitter {
   var _buffering = false;
   var _completed = false;
   var _closed = false;
+  var _inAdBreak = false;
 
   /// False from [PlaybackStarted] until the position first moves. AVPlay
   /// notifies "playing" before it has polled a position, so a resumed film
@@ -225,6 +226,33 @@ final class PlaybackEventEmitter {
         position: _at,
         duration: _duration,
         language: language,
+      ),
+    );
+  }
+
+  /// An ad break began. Reported once per break, also for one that turns
+  /// out to have no ad.
+  void adBreakStarted() {
+    if (_isSilent || _inAdBreak) return;
+    _inAdBreak = true;
+    _emit(
+      PlaybackAdBreakStarted(
+        sourceId: sourceId,
+        position: _at,
+        duration: _duration,
+      ),
+    );
+  }
+
+  /// The ad break is over.
+  void adBreakEnded() {
+    if (_isSilent || !_inAdBreak) return;
+    _inAdBreak = false;
+    _emit(
+      PlaybackAdBreakEnded(
+        sourceId: sourceId,
+        position: _at,
+        duration: _duration,
       ),
     );
   }

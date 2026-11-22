@@ -50,15 +50,20 @@ class _LoaderPageState extends State<LoaderPage> {
   );
   final _playerKey = TextEditingController();
   final _configId = TextEditingController();
+  // A VAST or VMAP tag, e.g. one of Google's IMA sample tags. Turns ads on
+  // over whatever the player config says.
+  final _adTagUrl = TextEditingController(
+    text: const String.fromEnvironment('EYZFLOW_AD_TAG_URL'),
+  );
   final _apiOrigin = TextEditingController();
   // The EYZFlow Cast receiver (cast-receiver/README.md), published unlisted.
   final _castReceiver = TextEditingController(text: 'A534F914');
   final _startAt = TextEditingController();
 
-  bool _isFeature = true;
+  bool _isFeature = !const bool.fromEnvironment('EYZFLOW_TRAILER');
 
   // Tizen reports itself as Linux.
-  bool _isTv = Platform.isLinux;
+  bool _isTv = Platform.isLinux || const bool.fromEnvironment('EYZFLOW_TV');
   final List<String> _log = [];
 
   void _add(String line) {
@@ -69,6 +74,15 @@ class _LoaderPageState extends State<LoaderPage> {
         '${now.second.toString().padLeft(2, '0')}';
     if (!mounted) return;
     setState(() => _log.insert(0, '$stamp  $line'));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Plays the prefilled stream at once: typing on a TV remote is slow.
+    if (const bool.fromEnvironment('EYZFLOW_AUTOPLAY')) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _play());
+    }
   }
 
   String? _orNull(TextEditingController c) =>
@@ -107,6 +121,13 @@ class _LoaderPageState extends State<LoaderPage> {
           isTv: _isTv,
           playerKey: _orNull(_playerKey),
           configId: _orNull(_configId),
+          config: switch (_orNull(_adTagUrl)) {
+            final String tag => PlayerConfigOverride(
+              features: const PlayerFeaturesOverride(ads: true),
+              ads: PlayerAdsConfig(adTagUrl: tag),
+            ),
+            null => null,
+          },
           castReceiverAppId: _orNull(_castReceiver),
           drmAuthorization: isViewerToken ? 'Bearer $token' : token,
           storefrontId: isViewerToken ? _orNull(_storefrontId) : null,
@@ -147,6 +168,7 @@ class _LoaderPageState extends State<LoaderPage> {
       _storefrontId,
       _playerKey,
       _configId,
+      _adTagUrl,
       _apiOrigin,
       _castReceiver,
       _startAt,
@@ -220,6 +242,12 @@ class _LoaderPageState extends State<LoaderPage> {
             helper:
                 'cfg_… from Player → Configs; theme and features. '
                 'Empty for the defaults',
+          ),
+          _field(
+            _adTagUrl,
+            'Ad tag URL',
+            helper: 'VAST or VMAP; turns ads on. Empty for the config\'s',
+            keyboard: TextInputType.url,
           ),
           _field(
             _apiOrigin,

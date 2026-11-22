@@ -18,7 +18,11 @@ flutter-tizen run -d <device>   # Samsung TV
 ```
 
 To prefill the form, pass `--dart-define=EYZFLOW_STREAM_ID=<stream id>` and
-`--dart-define=EYZFLOW_STOREFRONT_ID=<storefront id>`.
+`--dart-define=EYZFLOW_STOREFRONT_ID=<storefront id>`;
+`EYZFLOW_AD_TAG_URL=<VAST or VMAP tag>` turns ads on with that tag,
+`EYZFLOW_TRAILER=true` plays the stream as a trailer, `EYZFLOW_TV=true`
+starts in the TV layout and `EYZFLOW_AUTOPLAY=true` plays at launch (typing
+on a TV remote is slow).
 
 For an iPhone or iPad, put your Apple team in `ios/Flutter/Team.xcconfig`
 (git-ignored): `DEVELOPMENT_TEAM = <team id>`.

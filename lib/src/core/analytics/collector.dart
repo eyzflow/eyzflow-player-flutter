@@ -23,11 +23,19 @@ final class BeatCollector {
   BeatCollector({MonotonicClock? now}) : _now = now ?? _stopwatchClock() {
     _createdAt = _now();
     _since = _createdAt;
+    _startRef = _createdAt;
   }
 
   final MonotonicClock _now;
   late final int _createdAt;
   late int _since;
+
+  /// Where startup is measured from: creation, moved on by the time a
+  /// pre-roll took (before the player was ready, or before the first frame).
+  late int _startRef;
+
+  /// Since when an ad break has held the content, or null outside one.
+  int? _adSince;
   BeatState _state = BeatState.startup;
   var _ready = false;
   var _everPlayed = false;
@@ -52,21 +60,44 @@ final class BeatCollector {
 
   BeatState get state => _state;
 
+  /// An ad break is holding the content.
+  bool get inAdBreak => _adSince != null;
+
+  /// An ad break began. Until [endAd] the time counts as neither played,
+  /// paused nor stalled, nor towards video startup, and the content's own
+  /// state changes are ignored: the impression measures the content only.
+  void beginAd() {
+    _adSince ??= _now();
+  }
+
+  /// The ad break is over: the content's clock runs again from where it
+  /// stopped.
+  void endAd() {
+    final int? since = _adSince;
+    if (since == null) return;
+    _adSince = null;
+    final int spent = _now() - since;
+    _since += spent;
+    _positionAt += spent;
+    if (!_everPlayed) _startRef += spent;
+  }
+
   /// The player is initialized and can play: its own startup is over.
   void ready({Duration? position, Duration? duration}) {
     _observe(position, duration);
     if (_ready) return;
     _ready = true;
-    _playerStartupMs = _now() - _createdAt;
+    _playerStartupMs = _now() - _startRef;
   }
 
   /// The player reports playing. The first time, that is the first frame.
   void playing({Duration? position, Duration? duration}) {
     _observe(position, duration);
+    if (inAdBreak) return;
     if (!_everPlayed) {
       _everPlayed = true;
       if (!_ready) ready();
-      _videoStartupMs = _now() - _createdAt;
+      _videoStartupMs = _now() - _startRef;
       _enter(BeatState.playing);
       onMilestone?.call();
       return;
@@ -77,6 +108,7 @@ final class BeatCollector {
 
   void paused({Duration? position, Duration? duration}) {
     _observe(position, duration);
+    if (inAdBreak) return;
     if (!_everPlayed) return;
     if (_state == BeatState.ended || _state == BeatState.error) return;
     _enter(BeatState.paused);
@@ -84,6 +116,7 @@ final class BeatCollector {
 
   void bufferingStarted({Duration? position, Duration? duration}) {
     _observe(position, duration);
+    if (inAdBreak) return;
     if (!_everPlayed || _state != BeatState.playing) return;
     final lastSeek = _lastSeekAt;
     if (lastSeek != null && _now() - lastSeek <= _seekSettleMs) {
@@ -101,6 +134,7 @@ final class BeatCollector {
     bool isPlaying = true,
   }) {
     _observe(position, duration);
+    if (inAdBreak) return;
     if (_state != BeatState.buffering && _state != BeatState.seeking) return;
     _enter(isPlaying ? BeatState.playing : BeatState.paused);
   }
@@ -154,7 +188,7 @@ final class BeatCollector {
 
   /// The counters so far, the time in the current state included.
   BeatMetrics metrics() {
-    final open = _now() - _since;
+    final open = (_adSince ?? _now()) - _since;
     var played = _playedMs;
     var paused = _pausedMs;
     var rebuffer = _rebufferMs;
@@ -232,7 +266,7 @@ final class BeatCollector {
     final known = _positionS;
     if (known == null) return null;
     if (_state != BeatState.playing) return known;
-    final estimate = known + (_now() - _positionAt) / 1000;
+    final estimate = known + ((_adSince ?? _now()) - _positionAt) / 1000;
     final duration = _durationS;
     return duration != null && estimate > duration ? duration : estimate;
   }

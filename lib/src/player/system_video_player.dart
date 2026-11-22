@@ -1,9 +1,13 @@
 import 'dart:async';
 
+import '../ads/ad_breaks.dart';
+import '../ads/ad_scheduler.dart';
+import '../ads/ima_ad_driver.dart';
 import '../native/native_video_player.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
 import '../core/source.dart';
 
 import '../bloc/player_controls_bloc.dart';
@@ -46,10 +50,18 @@ class SystemVideoPlayer extends StatefulWidget {
     this.castAvailable = false,
     this.onCastRequested,
     this.options = const PlayerOptions(),
+    this.createAdDriver,
+    this.loadAdBreaks,
   });
 
   final VideoplayerTarget target;
   final VideoplaybackControllerFactory? createController;
+
+  /// Replaces Google IMA. A test seam.
+  final AdDriver Function(SystemPlayerAdHooks hooks)? createAdDriver;
+
+  /// Replaces reading the ad break markers from the manifest. A test seam.
+  final Future<List<AdBreak>> Function(Uri master)? loadAdBreaks;
 
   /// Records what the viewer watched. Absent in previews and tests, and for
   /// a trailer, which is not something a viewer resumes.
@@ -101,6 +113,11 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   StreamSubscription<AndroidPlaybackEvent>? _androidEvents;
   StreamSubscription<bool>? _pipEvents;
   StreamSubscription<Duration>? _castRequests;
+
+  /// Ads for the current session, when the config has an ad tag.
+  AdBreakScheduler? _ads;
+  ImaAdDriver? _imaDriver;
+  var _finishing = false;
 
   void _checkpoint([Duration? position]) {
     final recorder = _sessionRecorder;
@@ -181,6 +198,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
 
   Future<void> _replace(int request) async {
     _closeEvents();
+    _disposeAds();
     _retireNative();
     final VideoplaybackSession? retiredSession = _session;
     await retiredSession?.dispose();
@@ -203,6 +221,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   Future<void> _start() async {
     final WatchProgressRecorder? recorder = widget.watchProgressRecorder;
     _sessionRecorder = recorder;
+    _finishing = false;
     final PlaybackEventEmitter events = PlaybackEventEmitter(
       sourceId: switch (widget.target) {
         VideoplayerTrailerTarget(:final source) => source.id,
@@ -211,6 +230,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       onEvent: widget.onPlaybackEvent,
     );
     _events = events;
+    final AdBreakScheduler? ads = _setUpAds(events);
     final VideoplaybackSession session = VideoplaybackSession(
       target: widget.target,
       createController: _createAndCaptureController,
@@ -221,9 +241,24 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
           : (Duration position, Duration _) => recorder.report(position),
       onInitialized: (VideoplaybackValue value) =>
           events.ready(position: value.position, duration: value.duration),
-      onValue: events.tick,
+      onValue: (VideoplaybackValue value) {
+        events.tick(value);
+        final Duration? position = value.position;
+        if (ads != null && position != null && !value.isCompleted) {
+          ads.contentPosition(position);
+        }
+      },
+      // Android: the pre-roll plays before the content player loads (below).
+      beforePlay: _prerollBeforeLoad ? null : ads?.beforeContent,
     );
     _session = session;
+    if (ads != null && _prerollBeforeLoad) {
+      // TVs (and some phones) have one hardware video decoder: while the
+      // content player holds it, IMA's ad player gets none and shows a black
+      // picture under its countdown. So the pre-roll plays first.
+      await ads.beforeContent();
+      if (!mounted || !identical(_session, session)) return;
+    }
     await session.start();
     // Overlay mode needs a rebuild once the controller exists: unlike the
     // native-controls path, nothing else calls setState on the injected-
@@ -231,6 +266,93 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     if (widget.useSharedOverlay && mounted && identical(_session, session)) {
       setState(() {});
     }
+  }
+
+  bool get _prerollBeforeLoad =>
+      defaultTargetPlatform == TargetPlatform.android;
+
+  /// The ads scheduler for a new session, or null without an ad tag. The
+  /// markers are read from the manifest while the player starts.
+  AdBreakScheduler? _setUpAds(PlaybackEventEmitter events) {
+    _disposeAds();
+    final PlayerAds? ads = widget.options.ads;
+    if (ads == null) return null;
+    final SystemPlayerAdHooks hooks = SystemPlayerAdHooks(
+      adTagUrl: ads.adTagUrl,
+      pauseContent: () => unawaited(_pauseForAd()),
+      resumeContent: () => unawaited(_resumeAfterAd()),
+      contentDuration: () => _playback?.value.duration,
+      scheduler: () => _ads!,
+    );
+    final AdDriver driver;
+    final AdDriver Function(SystemPlayerAdHooks)? create =
+        widget.createAdDriver;
+    if (create != null) {
+      driver = create(hooks);
+    } else {
+      final ImaAdDriver ima = _imaDriver = ImaAdDriver(
+        adTagUrl: hooks.adTagUrl,
+        onPauseContent: hooks.pauseContent,
+        onResumeContent: hooks.resumeContent,
+        contentDuration: hooks.contentDuration,
+      );
+      driver = ima;
+    }
+    final AdBreakScheduler scheduler = AdBreakScheduler(
+      ads: ads,
+      driver: driver,
+      onBreakStarted: events.adBreakStarted,
+      onBreakEnded: events.adBreakEnded,
+      // On AirPlay the video plays on the TV: no ads start then.
+      suppressed: () => _nativeController?.isAirplayConnected ?? false,
+    )..addListener(_onAdsChanged);
+    _imaDriver?.scheduler = scheduler;
+    _ads = scheduler;
+    final Uri master = _masterPlaylist(widget.target);
+    unawaited(
+      ads.loadMarkers(() async {
+        final Future<List<AdBreak>> Function(Uri)? load = widget.loadAdBreaks;
+        if (load != null) return load(master);
+        final http.Client client = http.Client();
+        try {
+          return await loadHlsAdBreaks(client, master);
+        } finally {
+          client.close();
+        }
+      }),
+    );
+    return scheduler;
+  }
+
+  /// The content stops for a mid-roll. On Android its player also lets go
+  /// of the video decoder: on a TV with one, IMA's ad would have no picture.
+  Future<void> _pauseForAd() async {
+    final VideoplaybackController? playback = _playback;
+    if (playback is _SystemPlayerController && _prerollBeforeLoad) {
+      await playback.controller.releaseForAd();
+    } else {
+      await playback?.pause();
+    }
+  }
+
+  Future<void> _resumeAfterAd() async {
+    final VideoplaybackController? playback = _playback;
+    if (playback is _SystemPlayerController && _prerollBeforeLoad) {
+      await playback.controller.restoreAfterAd();
+    }
+    await playback?.play();
+  }
+
+  void _onAdsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _disposeAds() {
+    final AdBreakScheduler? ads = _ads;
+    _ads = null;
+    _imaDriver = null;
+    ads?.removeListener(_onAdsChanged);
+    ads?.dispose();
   }
 
   Future<VideoplaybackController> _createAndCaptureController(
@@ -330,6 +452,18 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     // Recorded before the bloc tears the session down, so the completion is
     // written even though the view is about to go away.
     _sessionRecorder?.finish();
+    final AdBreakScheduler? ads = _ads;
+    if (ads == null) {
+      _close();
+      return;
+    }
+    // A VMAP's post-roll plays before the player closes.
+    if (_finishing) return;
+    _finishing = true;
+    unawaited(ads.contentCompleted().whenComplete(_close));
+  }
+
+  void _close() {
     if (mounted) {
       context.read<VideoplayerFeatureBloc>().add(
         const VideoplayerFeaturePlaybackFinished(),
@@ -354,6 +488,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   @override
   void dispose() {
     _request++;
+    _disposeAds();
     _closeEvents();
     _retireNative();
     unawaited(_session?.dispose() ?? Future<void>.value());
@@ -392,16 +527,30 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
             ),
           );
 
+    final bool inAdBreak = _ads?.inBreak ?? false;
+    // Over the controls: during an ad break it takes the input.
+    final Widget? adLayer = switch ((_ads, _imaDriver)) {
+      (final AdBreakScheduler ads, final ImaAdDriver driver) => AdLayer(
+        scheduler: ads,
+        driver: driver,
+      ),
+      _ => null,
+    };
+
     if (!widget.useSharedOverlay) {
-      if (defaultTargetPlatform != TargetPlatform.iOS) return surface;
+      if (defaultTargetPlatform != TargetPlatform.iOS &&
+          widget.options.ads == null) {
+        return surface;
+      }
       // iOS: the Cast button sits over the native controls (AVKit has no slot
       // for it). One Stack from the first frame, surface at index 0, so the
-      // button appearing never re-parents the platform view.
+      // button or the ads appearing never re-parent the platform view.
       return Stack(
         fit: StackFit.expand,
         children: <Widget>[
           surface,
-          if (widget._showsCast && controller != null)
+          ?adLayer,
+          if (widget._showsCast && controller != null && !inAdBreak)
             Positioned(
               top: MediaQuery.paddingOf(context).top + 8,
               right: 8,
@@ -421,9 +570,21 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     // disposed its platform view and created another, while the plugin
     // controller kept addressing the first view id — every view-routed call
     // after that (subtitle tracks, track selection, dispose) failed NO_VIEW.
+    final Widget? controls = _buildControls(context);
     return Stack(
       fit: StackFit.expand,
-      children: <Widget>[surface, ?_buildControls(context)],
+      children: <Widget>[
+        surface,
+        if (controls != null)
+          // Hidden and out of the remote's reach during an ad break: no
+          // focus, so no seek, no track panel. Kept alive for after it.
+          Visibility(
+            visible: !inAdBreak,
+            maintainState: true,
+            child: ExcludeFocus(excluding: inAdBreak, child: controls),
+          ),
+        ?adLayer,
+      ],
     );
   }
 
@@ -519,6 +680,26 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       ),
     );
   }
+}
+
+/// What [SystemVideoPlayer] gives an ads driver: the tag, and the content
+/// player to pause and resume around an ad break.
+final class SystemPlayerAdHooks {
+  const SystemPlayerAdHooks({
+    required this.adTagUrl,
+    required this.pauseContent,
+    required this.resumeContent,
+    required this.contentDuration,
+    required this.scheduler,
+  });
+
+  final String adTagUrl;
+  final VoidCallback pauseContent;
+  final VoidCallback resumeContent;
+  final Duration? Function() contentDuration;
+
+  /// The scheduler the driver reports the SDK's answers to.
+  final AdBreakScheduler Function() scheduler;
 }
 
 Uri _masterPlaylist(VideoplayerTarget target) => switch (target) {

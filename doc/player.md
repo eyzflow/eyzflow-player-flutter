@@ -98,6 +98,7 @@ once the native player knows it.
 | `PlaybackBufferingStarted` / `PlaybackBufferingEnded` | A stall after the start, and its end. |
 | `PlaybackError` | Playback failed. `message` is the text the failure alert shows. |
 | `PlaybackAudioTrackChanged` / `PlaybackSubtitleTrackChanged` | The viewer switched track. `language` is the stream's tag; `null` on a subtitle change means off. |
+| `PlaybackAdBreakStarted` / `PlaybackAdBreakEnded` | An ad break held the content, and it is over (played, empty, failed or timed out). The content's pause and resume in between are the break's. See [Ads](#ads). |
 | `PlaybackCompleted` | Played to the end. Once. |
 | `PlaybackClosed` | The player was disposed. Once, always last. |
 
@@ -143,6 +144,92 @@ The rules live in `PlaybackEventEmitter`
 `onSeeked`/`onAudioTrackChanged`/`onSubtitleTrackChanged` hooks. It is covered
 without a player in `test/playback_event_emitter_test.dart`. The example app
 lists the events under Play once the player closes.
+
+## Ads
+
+Android, Android TV and iOS (`SystemVideoPlayer`) play the player config's
+ad tag through Google IMA
+(`interactive_media_ads`). Tizen has no IMA and plays none. The rules are the
+web player's (`eyzflow-player`, `src/lib/ad-breaks.ts`).
+
+**Gate.** `PlayerOptions.fromConfig` sets `PlayerOptions.ads` (a `PlayerAds`)
+only when `features.ads` is on and `ads.adTagUrl` is not empty
+(`PlayerConfig.adTagUrl`). Without it nothing below runs: no manifest read for
+markers, no IMA, no ad request. `EyzflowPlayer` makes one `PlayerAds` per
+start, and it outlives the player widget, so a fresh player after casting
+plays neither the pre-roll nor a played break again.
+
+**Markers** (`lib/src/ads/ad_breaks.dart`). The backend
+(`manifest-signal-markers.util.ts`) writes each ad break into every HLS media
+playlist as
+
+```
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
+#EXT-X-DATERANGE:ID="eyz-ad-2",START-DATE="1970-01-01T00:00:08.000Z",PLANNED-DURATION=30.000,SCTE35-OUT=0x…
+```
+
+so `START-DATE` minus the first `PROGRAM-DATE-TIME` is the position in the
+content, and into the MPD as an `urn:scte:scte35:2014:xml+bin` EventStream
+(`presentationTime` in its `timescale`). Intro and credits signals
+(`CLASS="com.eyzflow.signal"`, `urn:eyzflow:signal`) are skipped. The player
+loads `master.m3u8`, so `loadHlsAdBreaks` reads that and its first media
+playlist while the native player starts; a manifest that cannot be read
+counts as a stream without markers. `parseDashAdBreaks` reads an MPD the same
+way, for a DASH route.
+
+**Scheduling** (`AdBreakScheduler`, `lib/src/ads/ad_scheduler.dart`, pure
+Dart; `ImaAdDriver` does the IMA calls):
+
+- Before the first play the pre-roll plays: on iOS through
+  `VideoplaybackSession.beforePlay`, while the content player loads; on
+  Android before `session.start()`, so the content player does not yet hold
+  the video decoder (a Philips Android TV showed IMA's countdown over a black
+  picture otherwise: `MediaPlayer` info 805, video not playing). For a
+  mid-roll Android's content player is paused and stopped (`releaseForAd`,
+  Media3 `stop()`, which releases the decoder but keeps the item and
+  position) and prepared again after the break (`restoreAfterAd`).
+- In `beforeContent()` a stream without markers requests the tag and lets
+  it decide: a VAST pre-roll, or a VMAP's pre-roll; a VMAP without one lets
+  the content start at once and keeps its manager for its own mid-rolls
+  (`ContentProgressProvider` gets the content position) and post-roll
+  (`contentComplete` when the content ends, before the player closes). The
+  wait is outside the 15 s startup timeout; the first `play()` still has it.
+- A stream with markers plays a pre-roll only for a marker at ≤ 0.5 s. Every
+  other marker is a mid-roll: when a position report lands on or past it,
+  having moved forward by at most 2 s since the previous one (the native
+  player reports every 0.5 s while playing), the content pauses and the tag
+  is requested. A bigger move is a seek, and the breaks it passes are not
+  played. Each break plays once.
+- After each marker break the ads manager and its container are dropped, so a
+  VMAP's own mid-rolls and post-roll never play: at a marker only a VMAP's
+  pre-roll plays (cue point 0), and one without a pre-roll gives no ad there.
+- The content waits at a break until IMA asks to pause it for the ad, at most
+  12 s. An empty or failed tag, an ad error, or no answer in time ends the
+  break: the content plays on, with no error shown.
+- No break starts while `isAirplayConnected`. While a Chromecast plays, the
+  phone's player is not mounted.
+
+**On screen.** `AdLayer` stacks IMA's `AdDisplayContainer` (a platform view)
+over the surface and the controls while an ad is requested, playing or (a
+VMAP without markers) still scheduled; IMA draws the ad, countdown, skip and
+click-through. During a break it takes the input (black under a playing ad, a
+spinner while the tag loads); outside one it lets every touch through. On
+Android TV the `PlayerControls` overlay is hidden and wrapped in
+`ExcludeFocus` during a break, so the remote cannot focus, seek or open a
+panel; it keeps its state for after. On iOS the Cast button is hidden.
+
+**Analytics.** The scheduler's break start and end become
+`PlaybackAdBreakStarted` / `PlaybackAdBreakEnded` (`PlaybackEventEmitter`),
+which `PlaybackEventAdapter` turns into `BeatCollector.beginAd` / `endAd`.
+In between the collector ignores the content's state changes and stops its
+clocks, so ad time is neither played, paused nor stalled, and a pre-roll does
+not count towards video startup.
+
+Covered without IMA in `test/ad_breaks_test.dart`,
+`test/ad_scheduler_test.dart` and `test/system_video_player_ads_test.dart`
+(a fake `AdDriver` through `SystemVideoPlayer.createAdDriver`). Not tried on a
+device with ad break markers yet (Google's sample VAST and VMAP tags on an
+iPhone and an Android TV); see the README's known limits.
 
 ## AVPlay: the single Tizen implementation
 

@@ -124,6 +124,8 @@ class VideoPlayerMethodHandler(
             "setAudioTrack" -> handleSetAudioTrack(call, result)
             "play" -> handlePlay(result)
             "pause" -> handlePause(result)
+            "releaseForAd" -> handleReleaseForAd(result)
+            "restoreAfterAd" -> handleRestoreAfterAd(result)
             "seekTo" -> handleSeekTo(call, result)
             "setVolume" -> handleSetVolume(call, result)
             "setSpeed" -> handleSetSpeed(call, result)
@@ -371,6 +373,24 @@ class VideoPlayerMethodHandler(
      */
     private fun handlePause(result: MethodChannel.Result) {
         controlPlayer.pause()
+        result.success(null)
+    }
+
+    /**
+     * EYZFlow patch: pauses and stops the player for an ad break, which
+     * releases its video decoder. TVs often have one, and Google IMA's ad
+     * player gets no picture while the content holds it. The media item and
+     * position are kept; [handleRestoreAfterAd] prepares them again.
+     */
+    private fun handleReleaseForAd(result: MethodChannel.Result) {
+        controlPlayer.pause()
+        player.stop()
+        result.success(null)
+    }
+
+    /** EYZFlow patch: prepares the player again after an ad break. */
+    private fun handleRestoreAfterAd(result: MethodChannel.Result) {
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
         result.success(null)
     }
 
