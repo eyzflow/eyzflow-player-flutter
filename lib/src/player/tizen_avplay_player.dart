@@ -497,7 +497,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
         ? duration
         : signal.end;
     _events?.seeked(playback.value.position ?? signal.start, target);
-    _signals.position(target);
+    _signals.skipped(signal, target);
     unawaited(playback.seekTo(target));
   }
 

@@ -386,7 +386,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         ? duration
         : signal.end;
     _events?.seeked(playback.value.position ?? signal.start, target);
-    _signals.position(target);
+    _signals.skipped(signal, target);
     unawaited(playback.seekTo(target));
   }
 

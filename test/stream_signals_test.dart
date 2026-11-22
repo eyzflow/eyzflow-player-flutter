@@ -212,4 +212,48 @@ void main() {
     expect(tracker.value, isNull);
     tracker.dispose();
   });
+
+  test('SignalTracker: a skip stays done while stale positions come in', () {
+    final List<String> log = <String>[];
+    final SignalTracker tracker = SignalTracker(
+      onStarted: (StreamSignal s) => log.add('start ${s.id}'),
+      onEnded: (StreamSignal s) => log.add('end ${s.id}'),
+    )..signals = parseHlsSignals(_mediaPlaylist);
+    tracker.position(_s(20));
+    final StreamSignal intro = tracker.value!;
+    tracker.skipped(intro, _s(30));
+    expect(tracker.value, isNull);
+    // The native player still reports where it was until the seek lands.
+    tracker
+      ..position(_s(20.5))
+      ..position(_s(21));
+    expect(tracker.value, isNull);
+    // Landed: playing on past the intro.
+    tracker.position(_s(30));
+    expect(tracker.value, isNull);
+    // Seeking back into it later shows it again.
+    tracker.position(_s(16));
+    expect(tracker.value?.id, 'eyz-intro');
+    expect(log, <String>[
+      'start eyz-intro',
+      'end eyz-intro',
+      'start eyz-intro',
+    ]);
+    tracker.dispose();
+  });
+
+  test(
+    'SignalTracker: seeking back before a skipped signal clears the skip',
+    () {
+      final SignalTracker tracker = SignalTracker()
+        ..signals = parseHlsSignals(_mediaPlaylist)
+        ..position(_s(20));
+      tracker.skipped(tracker.value!, _s(30));
+      tracker
+        ..position(_s(1))
+        ..position(_s(15));
+      expect(tracker.value?.id, 'eyz-intro');
+      tracker.dispose();
+    },
+  );
 }

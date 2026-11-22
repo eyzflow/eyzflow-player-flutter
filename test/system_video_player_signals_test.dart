@@ -145,7 +145,14 @@ void main() {
       ]);
       expect(f.events.whereType<PlaybackSeeked>().single.position, _s(65));
 
-      // Seeking back into the intro brings the button back.
+      // A report from before the seek landed does not bring it back.
+      f.content.tick(6);
+      await tester.pump();
+      expect(_button(), findsNothing);
+
+      // Once the seek landed, seeking back into the intro brings it back.
+      f.content.tick(65);
+      await tester.pump();
       f.content.tick(20);
       await tester.pump();
       expect(find.text('Skip intro'), findsOneWidget);

@@ -286,6 +286,11 @@ final class SignalTracker extends ValueNotifier<StreamSignal?> {
   List<StreamSignal> _signals = const <StreamSignal>[];
   Duration? _position;
 
+  /// A signal the viewer skipped, and where the skip goes, until a position
+  /// report shows the seek landed.
+  StreamSignal? _skipped;
+  Duration? _skipTarget;
+
   List<StreamSignal> get signals => _signals;
 
   /// The stream's signals, once read from the manifest.
@@ -298,11 +303,32 @@ final class SignalTracker extends ValueNotifier<StreamSignal?> {
   /// any signal.
   void position(Duration? position) {
     _position = position;
+    final StreamSignal? skipped = _skipped;
+    final Duration? target = _skipTarget;
+    if (skipped != null &&
+        (position == null ||
+            target == null ||
+            position >= target - signalEndSlack ||
+            position < skipped.start)) {
+      _skipped = null;
+      _skipTarget = null;
+    }
+    _update();
+  }
+
+  /// The viewer skipped [signal]: it is left at once, and stays left while
+  /// the native player still reports positions inside it from before the
+  /// seek to [target] landed. A report at [target] (or before the signal's
+  /// start) ends that.
+  void skipped(StreamSignal signal, Duration target) {
+    _skipped = signal;
+    _skipTarget = target;
     _update();
   }
 
   void _update() {
-    final StreamSignal? next = signalAt(_signals, _position);
+    StreamSignal? next = signalAt(_signals, _position);
+    if (next != null && next.id == _skipped?.id) next = null;
     final StreamSignal? previous = value;
     if (next?.id == previous?.id) return;
     value = next;
