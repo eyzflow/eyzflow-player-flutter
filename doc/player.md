@@ -180,8 +180,15 @@ way, for a DASH route.
 **Scheduling** (`AdBreakScheduler`, `lib/src/ads/ad_scheduler.dart`, pure
 Dart; `ImaAdDriver` does the IMA calls):
 
-- Before the first play `VideoplaybackSession.beforePlay` awaits
-  `beforeContent()`. A stream without markers requests the tag there and lets
+- Before the first play the pre-roll plays: on iOS through
+  `VideoplaybackSession.beforePlay`, while the content player loads; on
+  Android before `session.start()`, so the content player does not yet hold
+  the video decoder (a Philips Android TV showed IMA's countdown over a black
+  picture otherwise: `MediaPlayer` info 805, video not playing). For a
+  mid-roll Android's content player is paused and stopped (`releaseForAd`,
+  Media3 `stop()`, which releases the decoder but keeps the item and
+  position) and prepared again after the break (`restoreAfterAd`).
+- In `beforeContent()` a stream without markers requests the tag and lets
   it decide: a VAST pre-roll, or a VMAP's pre-roll; a VMAP without one lets
   the content start at once and keeps its manager for its own mid-rolls
   (`ContentProgressProvider` gets the content position) and post-roll
@@ -221,7 +228,8 @@ not count towards video startup.
 Covered without IMA in `test/ad_breaks_test.dart`,
 `test/ad_scheduler_test.dart` and `test/system_video_player_ads_test.dart`
 (a fake `AdDriver` through `SystemVideoPlayer.createAdDriver`). Not tried on a
-device yet; see the README's known limits.
+device with ad break markers yet (Google's sample VAST and VMAP tags on an
+iPhone and an Android TV); see the README's known limits.
 
 ## AVPlay: the single Tizen implementation
 

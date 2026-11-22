@@ -155,6 +155,11 @@ same rules as the web player:
 - **Stream without markers: the tag decides.** It is requested once before the
   content starts: a VAST gives a pre-roll, a VMAP its own pre-roll, mid-rolls
   and post-roll.
+- Android: the pre-roll plays before the film's player loads, and during a
+  mid-roll the film's player lets go of its video decoder (it reloads at the
+  same position afterwards). TVs often have one hardware decoder, and while
+  the film holds it the ad shows no picture, only IMA's countdown. iOS loads
+  the film while the pre-roll plays.
 - At a break the content waits until the ad starts, or until it turns out
   there is none (empty or failed tag, ad blocker, no answer within 12 s):
   then it plays on, with no error.
@@ -347,9 +352,13 @@ session id would not match the production licence gate.
 - FairPlay (iPhone, AirPlay) was rewritten to Apple's standard flow and is not
   tested on a device yet.
 - Limit and key messages are English only.
-- Ads: not tried on a device yet. On Android TV the skip button may not be
-  reachable with the remote (IMA's own view; the plugin has no TV focus
-  handling). The marker's planned pod length is not sent to the ad server: the
+- Ads: tried with Google's sample VAST and VMAP tags on an iPhone (pre-roll,
+  mid-roll, post-roll) and a Philips Android TV (pre-roll, mid-roll); not on
+  an Android phone, and not with ad break markers (no stream had any yet).
+  After an Android mid-roll the film rebuffers for a few seconds. On Android
+  TV the skip button may not be reachable with the remote (IMA's own view;
+  the plugin has no TV focus handling); the sample ads were not skippable.
+  There is no "ad in 5 s" notice before a mid-roll. The marker's planned pod length is not sent to the ad server: the
   tag decides the pod. Companion and overlay (non-linear) ads are not handled.
   While a VMAP on a stream without markers waits for its next break, IMA's
   container stays over the content (it lets touches through).
