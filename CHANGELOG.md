@@ -1,4 +1,4 @@
-## Unreleased
+## 0.5.0
 
 - Renamed (EYF-225): every public `Eyzflow…` name is now spelled `EYZFlow…`
   to match the product, e.g. `EYZFlowPlayer`, `EYZFlowSource`, `EYZFlowFilm`,
