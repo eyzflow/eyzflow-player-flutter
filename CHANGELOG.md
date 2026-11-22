@@ -1,12 +1,15 @@
-## 0.4.0
+## Unreleased
 
 - Renamed (EYF-225): every public `Eyzflow…` name is now spelled `EYZFlow…`
   to match the product, e.g. `EYZFlowPlayer`, `EYZFlowSource`, `EYZFlowFilm`,
   `EYZFlowEndpoints`, `EYZFlowPlayerStatus` and `setEYZFlowPlayerLanguage`.
-  The old names still work as deprecated aliases and are removed in 0.5.0.
+  The old names still work as deprecated aliases and are removed in 0.6.0.
   The package name `eyzflow_player` is unchanged. The native plugin classes
   are now `EYZFlowPlayerPlugin`; Flutter regenerates the registrant on the
   next build.
+
+## 0.4.0
+
 - Skip intro, recap and credits (EYF-214). The signals marked on a stream
   (Stream → Signals) are read from its HLS playlist, on every route. While
   playback is in one, a "Skip intro", "Skip recap" or "Skip credits" button
