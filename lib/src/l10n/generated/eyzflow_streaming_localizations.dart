@@ -254,6 +254,12 @@ abstract class EYZFlowStreamingLocalizations {
   /// In en, this message translates to:
   /// **'Could not play on {device}.'**
   String castFailed(String device);
+
+  /// Corner notice for the last seconds before a mid-roll ad break.
+  ///
+  /// In en, this message translates to:
+  /// **'Ad in {seconds}'**
+  String adCountdown(int seconds);
 }
 
 class _EYZFlowStreamingLocalizationsDelegate

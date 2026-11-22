@@ -121,7 +121,8 @@ class EyzflowPlayer extends StatefulWidget {
   final String? configId;
 
   /// Inline config, merged over the one [configId] loads: what is given here
-  /// wins, as with the web player's `config` prop. Read when playback starts.
+  /// wins, as with the web player's `config` prop. Read when playback starts,
+  /// except `features.adCountdown`, which switches while playing.
   final PlayerConfigOverride? config;
 
   /// The viewer's `Authorization`, e.g. `Bearer <token>`. Needed for DRM and
@@ -231,6 +232,9 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   PlayerConfig _config = PlayerConfig.defaults;
   PlayerOptions _options = const PlayerOptions();
 
+  /// The config [EyzflowPlayer.configId] loaded, if any.
+  PlayerConfig? _remoteConfig;
+
   /// The receiver films cast to: the widget's, else the config's.
   String? get _castReceiverAppId =>
       widget.castReceiverAppId ?? _config.castReceiverAppId;
@@ -258,6 +262,17 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
         w.sourceType != old.sourceType) {
       _stop();
       unawaited(_start());
+    } else if (w.config?.features?.adCountdown !=
+        old.config?.features?.adCountdown) {
+      // The ad countdown switches while playing; the stream plays on.
+      final PlayerConfig config = mergePlayerConfig(
+        _remoteConfig ?? PlayerConfig.defaults,
+        w.config,
+      );
+      setState(() {
+        _config = config;
+        _options = _options.withAdCountdown(config.features.adCountdown);
+      });
     }
   }
 
@@ -311,6 +326,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
     final PlayerConfig? remote = await remoteConfig;
     final String? appId = await appIdLookup;
     if (!mounted || run != _startRun) return;
+    _remoteConfig = remote;
     final PlayerConfig config = mergePlayerConfig(
       remote ?? PlayerConfig.defaults,
       w.config,

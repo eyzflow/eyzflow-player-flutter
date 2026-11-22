@@ -87,6 +87,7 @@ final class PlayerOptions {
     this.pictureInPicture = true,
     this.airPlay = true,
     this.ads,
+    this.adCountdown = true,
   });
 
   /// [PlayerConfig.features] and [PlayerConfig.theme] as the app players
@@ -110,6 +111,7 @@ final class PlayerOptions {
         final String url => PlayerAds(adTagUrl: url),
         null => null,
       },
+      adCountdown: f.adCountdown,
     );
   }
 
@@ -142,6 +144,11 @@ final class PlayerOptions {
   /// request. Compared by identity: one per impression.
   final PlayerAds? ads;
 
+  /// Counts down the last 5 s before a mid-roll ("Ad in 5"), when [ads]
+  /// play: the config's `features.adCountdown`. Read while playing, so
+  /// changing it does not reload the stream.
+  final bool adCountdown;
+
   /// These options with [ads] in place of the config's, e.g. once the
   /// viewer's plan has said whether it plays ads.
   PlayerOptions withAds(PlayerAds? ads) => PlayerOptions(
@@ -153,6 +160,20 @@ final class PlayerOptions {
     pictureInPicture: pictureInPicture,
     airPlay: airPlay,
     ads: ads,
+    adCountdown: adCountdown,
+  );
+
+  /// These options with [adCountdown] switched; the same [ads].
+  PlayerOptions withAdCountdown(bool adCountdown) => PlayerOptions(
+    controlsTheme: controlsTheme,
+    controls: controls,
+    autoHideControls: autoHideControls,
+    captions: captions,
+    loop: loop,
+    pictureInPicture: pictureInPicture,
+    airPlay: airPlay,
+    ads: ads,
+    adCountdown: adCountdown,
   );
 
   @override
@@ -165,7 +186,8 @@ final class PlayerOptions {
       other.loop == loop &&
       other.pictureInPicture == pictureInPicture &&
       other.airPlay == airPlay &&
-      identical(other.ads, ads);
+      identical(other.ads, ads) &&
+      other.adCountdown == adCountdown;
 
   @override
   int get hashCode => Object.hash(
@@ -177,6 +199,7 @@ final class PlayerOptions {
     pictureInPicture,
     airPlay,
     ads,
+    adCountdown,
   );
 }
 

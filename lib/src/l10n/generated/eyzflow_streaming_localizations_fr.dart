@@ -93,4 +93,9 @@ class EYZFlowStreamingLocalizationsFr extends EYZFlowStreamingLocalizations {
   String castFailed(String device) {
     return 'Impossible de lire sur $device.';
   }
+
+  @override
+  String adCountdown(int seconds) {
+    return 'Publicité dans $seconds';
+  }
 }

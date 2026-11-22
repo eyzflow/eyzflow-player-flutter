@@ -31,6 +31,7 @@ const Map<String, Object?> _remote = {
     'pip': false,
     'ads': false,
     'autoHideControls': false,
+    'adCountdown': false,
   },
   'cast': {
     'receiverAppId': 'ABCD1234',

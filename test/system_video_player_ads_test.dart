@@ -104,6 +104,8 @@ final class _Content implements VideoplaybackController, VideoplaybackTracks {
 final class _Fixture {
   _Fixture(this.tester, {this.markers = const <int>[], this.withAds = true});
 
+  final PlayerAds _ads = PlayerAds(adTagUrl: 'https://ads.example.com/vast');
+
   final WidgetTester tester;
   final List<int> markers;
   final bool withAds;
@@ -112,7 +114,7 @@ final class _Fixture {
   _FakeAds? ads;
   var markerLoads = 0;
 
-  Future<void> mount({bool tv = false}) async {
+  Future<void> mount({bool tv = false, bool adCountdown = true}) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -124,9 +126,8 @@ final class _Fixture {
               createController: (_) async => content,
               onPlaybackEvent: events.add,
               options: PlayerOptions(
-                ads: withAds
-                    ? PlayerAds(adTagUrl: 'https://ads.example.com/vast')
-                    : null,
+                ads: withAds ? _ads : null,
+                adCountdown: adCountdown,
               ),
               createAdDriver: (SystemPlayerAdHooks hooks) =>
                   ads = _FakeAds(hooks),
@@ -285,5 +286,177 @@ void main() {
     await tester.pump();
     expect(tester.widget<Visibility>(hidden.first).visible, isTrue);
     expect(f.content.playCount, 2, reason: 'no ad: the content plays on');
+  });
+
+  group('the countdown before a mid-roll', () {
+    Finder notice() =>
+        find.byKey(const ValueKey<String>('eyzflow-ad-countdown'));
+
+    testWidgets('counts down the last 5 s, hides while paused and seeking', (
+      tester,
+    ) async {
+      final _Fixture f = _Fixture(tester, markers: <int>[30]);
+      await f.mount();
+      for (num t = 20; t <= 24.5; t += 0.5) {
+        f.content.tick(t);
+      }
+      await tester.pump();
+      expect(notice(), findsNothing);
+
+      f.content.tick(25);
+      await tester.pump();
+      expect(find.text('Ad in 5'), findsOneWidget);
+      f.content.tick(25.5);
+      f.content.tick(26);
+      f.content.tick(26.5);
+      f.content.tick(27);
+      f.content.tick(27.5);
+      await tester.pump();
+      expect(find.text('Ad in 3'), findsOneWidget);
+
+      f.content.tick(27.5, playing: false);
+      await tester.pump();
+      expect(notice(), findsNothing, reason: 'paused');
+      f.content.tick(28);
+      await tester.pump();
+      expect(find.text('Ad in 2'), findsOneWidget);
+
+      // Seeking past the break: no notice, and no ad.
+      f.content.tick(40);
+      await tester.pump();
+      expect(notice(), findsNothing);
+      f.content.tick(40.5);
+      await tester.pump();
+      expect(notice(), findsNothing);
+      expect(f.ads!.requests, 0);
+
+      // Back before it: the marker still plays, and counts down again.
+      f.content.tick(26);
+      await tester.pump();
+      expect(notice(), findsNothing, reason: 'the seek itself');
+      f.content.tick(26.5);
+      await tester.pump();
+      expect(find.text('Ad in 4'), findsOneWidget);
+      for (num t = 27; t <= 29.5; t += 0.5) {
+        f.content.tick(t);
+      }
+      await tester.pump();
+      expect(find.text('Ad in 1'), findsOneWidget);
+
+      f.content.tick(30);
+      await tester.pump();
+      expect(f.ads!.requests, 1);
+      expect(notice(), findsNothing, reason: 'the ad break is under way');
+    });
+
+    testWidgets('adCountdown: false shows nothing', (tester) async {
+      final _Fixture f = _Fixture(tester, markers: <int>[30]);
+      await f.mount(adCountdown: false);
+      for (num t = 25; t <= 29.5; t += 0.5) {
+        f.content.tick(t);
+        await tester.pump();
+        expect(notice(), findsNothing);
+      }
+      f.content.tick(30);
+      expect(f.ads!.requests, 1, reason: 'the ad itself still plays');
+    });
+
+    testWidgets('switching it does not reload the stream', (tester) async {
+      final _Fixture f = _Fixture(tester, markers: <int>[30]);
+      await f.mount();
+      f.content.tick(26.5);
+      f.content.tick(27);
+      await tester.pump();
+      expect(find.text('Ad in 3'), findsOneWidget);
+
+      await f.mount(adCountdown: false);
+      expect(notice(), findsNothing);
+      await f.mount();
+      f.content.tick(27.5);
+      await tester.pump();
+      expect(find.text('Ad in 3'), findsOneWidget);
+      expect(f.content.initializeCount, 1);
+      expect(f.markerLoads, 1);
+    });
+
+    testWidgets('none without ad break markers or VMAP cue points', (
+      tester,
+    ) async {
+      final _Fixture f = _Fixture(tester);
+      await f.mount();
+      f.ads!.playAd();
+      await tester.pump();
+      f.content.tick(26.5);
+      f.content.tick(27);
+      await tester.pump();
+      expect(notice(), findsNothing);
+    });
+
+    testWidgets('a VMAP without markers: before its mid-roll cue points', (
+      tester,
+    ) async {
+      final _Fixture f = _Fixture(tester);
+      await f.mount();
+      final AdBreakScheduler scheduler = f.ads!.scheduler;
+      scheduler.adsLoaded(const <Duration>[
+        Duration.zero,
+        Duration(seconds: 30),
+        Duration(seconds: -1),
+      ]);
+      scheduler.contentPauseRequested();
+      scheduler.contentResumeRequested();
+      await tester.pump();
+      for (num t = 20; t <= 27; t += 0.5) {
+        f.content.tick(t);
+      }
+      await tester.pump();
+      expect(find.text('Ad in 3'), findsOneWidget);
+
+      for (num t = 27.5; t <= 30; t += 0.5) {
+        f.content.tick(t);
+      }
+      scheduler.contentPauseRequested();
+      await tester.pump();
+      expect(notice(), findsNothing, reason: 'IMA plays the mid-roll');
+      scheduler.contentResumeRequested();
+
+      // Played through: a rewind does not count it down again.
+      f.content.tick(26);
+      f.content.tick(26.5);
+      f.content.tick(27);
+      await tester.pump();
+      expect(notice(), findsNothing);
+    });
+
+    testWidgets('on TV it shows with the controls hidden, unfocusable', (
+      tester,
+    ) async {
+      final _Fixture f = _Fixture(tester, markers: <int>[30]);
+      await f.mount(tv: true);
+      f.content.tick(26.5);
+      f.content.tick(27);
+      await tester.pump();
+      expect(find.text('Ad in 3'), findsOneWidget);
+      expect(
+        find.ancestor(of: notice(), matching: find.byType(IgnorePointer)),
+        findsWidgets,
+      );
+      expect(
+        tester
+            .widget<ExcludeFocus>(
+              find
+                  .ancestor(of: notice(), matching: find.byType(ExcludeFocus))
+                  .first,
+            )
+            .excluding,
+        isTrue,
+      );
+      // Not inside the controls, which hide when idle.
+      expect(
+        find.ancestor(of: notice(), matching: find.byType(PlayerControls)),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 }

@@ -116,6 +116,7 @@ final class PlayerFeatures {
     this.pip = true,
     this.ads = false,
     this.autoHideControls = true,
+    this.adCountdown = true,
   });
 
   final bool controls;
@@ -129,6 +130,10 @@ final class PlayerFeatures {
   final bool pip;
   final bool ads;
   final bool autoHideControls;
+
+  /// Count down the last 5 s before a mid-roll ("Ad in 5" … "Ad in 1"),
+  /// when ads play. Missing (configs saved before it): on.
+  final bool adCountdown;
 
   factory PlayerFeatures.fromJson(
     Map<String, Object?> json, {
@@ -149,6 +154,7 @@ final class PlayerFeatures {
           pip: patch.pip ?? pip,
           ads: patch.ads ?? ads,
           autoHideControls: patch.autoHideControls ?? autoHideControls,
+          adCountdown: patch.adCountdown ?? adCountdown,
         );
 
   Map<String, Object?> toJson() => {
@@ -163,6 +169,7 @@ final class PlayerFeatures {
     'pip': pip,
     'ads': ads,
     'autoHideControls': autoHideControls,
+    'adCountdown': adCountdown,
   };
 
   @override
@@ -178,7 +185,8 @@ final class PlayerFeatures {
       other.captions == captions &&
       other.pip == pip &&
       other.ads == ads &&
-      other.autoHideControls == autoHideControls;
+      other.autoHideControls == autoHideControls &&
+      other.adCountdown == adCountdown;
 
   @override
   int get hashCode => Object.hash(
@@ -193,6 +201,7 @@ final class PlayerFeatures {
     pip,
     ads,
     autoHideControls,
+    adCountdown,
   );
 }
 
@@ -211,6 +220,7 @@ final class PlayerFeaturesOverride {
     this.pip,
     this.ads,
     this.autoHideControls,
+    this.adCountdown,
   });
 
   factory PlayerFeaturesOverride.fromJson(Map<String, Object?> json) =>
@@ -226,6 +236,7 @@ final class PlayerFeaturesOverride {
         pip: _bool(json['pip']),
         ads: _bool(json['ads']),
         autoHideControls: _bool(json['autoHideControls']),
+        adCountdown: _bool(json['adCountdown']),
       );
 
   final bool? controls;
@@ -239,6 +250,7 @@ final class PlayerFeaturesOverride {
   final bool? pip;
   final bool? ads;
   final bool? autoHideControls;
+  final bool? adCountdown;
 }
 
 /// The config's Chromecast settings.

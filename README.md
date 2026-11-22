@@ -184,6 +184,17 @@ same rules as the web player:
 - No ads start while the video plays on AirPlay or a Chromecast. When casting
   hands playback back, the pre-roll and the breaks already played do not play
   again.
+- **Countdown before a mid-roll** (`features.adCountdown`, on when missing):
+  a small corner notice, "Ad in 5" … "Ad in 1", for the last 5 s before a
+  mid-roll, in the player's language (en, de, fr, nl; English otherwise). It
+  counts down to the stream's markers, else to a VMAP's mid-roll cue points
+  (never a pre-roll or post-roll). A marker passed by seeking counts down
+  again when playback nears it later; a VMAP cue point played through does
+  not after a rewind. It hides while paused, buffering or seeking, during an
+  ad, on AirPlay, and once the viewer seeks past the break. It takes no touch
+  or focus; on Android TV it stays up while the overlay is hidden.
+  `false` turns it off; an inline `config` change switches it without
+  reloading the stream.
 
 Host setup for ads: see step 7 under [Host setup](#host-setup). The example app
 has an **Ad tag URL** field to try a tag without a config (Google's sample
@@ -224,6 +235,7 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 | `features.pip` | Android: false turns picture-in-picture off (iOS has none) | (off on TV) | – |
 | `cast.receiverAppId` | the receiver films cast to, when `castReceiverAppId` is not set | – | – |
 | `features.ads`, `ads.adTagUrl` | ads through Google IMA, see [Ads](#ads) | same | – (no IMA on Tizen) |
+| `features.adCountdown` | false: no "Ad in 5" notice before a mid-roll | same | – |
 | `drm.parameters` | into the DRM `access-token`; `storefront_id` also opens the playback session | same | same |
 
 Not honoured anywhere in the apps:

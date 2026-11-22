@@ -24,5 +24,6 @@
   "castConnecting": "Connexion à {device}…",
   "castPlayingOn": "Lecture sur {device}",
   "castStop": "Arrêter la diffusion",
-  "castFailed": "Impossible de lire sur {device}."
+  "castFailed": "Impossible de lire sur {device}.",
+  "adCountdown": "Publicité dans {seconds}"
 }
