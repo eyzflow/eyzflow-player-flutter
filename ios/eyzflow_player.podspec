@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'eyzflow_player'
-  s.version          = '0.6.1'
+  s.version          = '0.6.2'
   s.summary          = 'Native playback for the EYZFlow player.'
   s.description      = <<-DESC
 AVPlayer-based playback for eyzflow_player: HLS, FairPlay, AirPlay, Picture-in-Picture
