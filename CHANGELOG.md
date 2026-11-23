@@ -1,4 +1,4 @@
-## Unreleased
+## 0.6.1
 
 - Playback sessions (EYF-466): the heartbeat and the close no longer send
   `Content-Type: application/json` without a body. The API refused them (400),
