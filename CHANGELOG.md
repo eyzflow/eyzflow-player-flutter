@@ -1,3 +1,14 @@
+## Unreleased
+
+- Royalty usage (EYF-231): with `offerId`, `drmAuthorization` and a
+  storefront, a film reports the seconds the viewer watched to
+  `playback-events` for licensor royalties: every 30 s while playing, on a
+  pause, at the end, when the app goes to the background and when the player
+  closes. Ads, pauses, seeks and stalls don't count, and it works with or
+  without a player key. `PlaybackCoordinatorConfig` takes `offerId` and
+  `catalogueId`; `UsageReporter`, `HttpUsageSender` and `usageSender` are
+  public.
+
 ## 0.5.0
 
 - Renamed (EYF-225): every public `Eyzflow…` name is now spelled `EYZFlow…`

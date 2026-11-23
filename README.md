@@ -31,6 +31,7 @@ Navigator.of(context).push(MaterialPageRoute<void>(
     drmAuthorization: 'Bearer $cognitoAccessToken',
     storefrontId: storefront.id,
     drmParameters: const {'source': 'internal'},
+    offerId: offer.id,                        // royalties: see below
     playerKey: 'pk_…',                        // optional
     configId: 'cfg_…',                        // optional: dashboard player config
     watchProgressStore: myWatchHistory,       // optional: see below
@@ -336,6 +337,25 @@ final class MyWatchHistory implements WatchProgressStore {
 
 A failed save is logged and never interrupts playback. Trailers record
 nothing.
+
+### Royalties
+
+Licensor royalties are counted from the seconds viewers watch. With
+`offerId` (the film or episode played), `drmAuthorization` and a storefront,
+the player reports them itself to
+`POST /v1/content/storefront/{storefrontId}/playback-events`: every 30
+seconds while the film plays, at once on a pause, at the end and when the app
+goes to the background, and a last time when the player closes. Only time
+spent playing the film counts: not ads, pauses, seeks or stalls. Each report
+carries the seconds since the previous one (at most 120) and one session id
+per playback; seconds a report could not deliver go with the next one. The
+film's catalogue id goes with it.
+
+Trailers, and a film the end screen picked, report nothing. It works with or
+without a player key and analytics, on every platform (Tizen included). An
+app that sends these events itself should stop once it passes `offerId`, or
+the seconds are counted twice. `usageSender` replaces the upload, e.g. to log
+reports in a test app.
 
 ## Host setup
 

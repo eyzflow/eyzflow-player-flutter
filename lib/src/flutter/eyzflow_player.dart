@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../core/source.dart';
+import '../core/usage_reporter.dart';
 import '../end_screen/end_screen.dart';
 import '../player/playback_event.dart';
 import '../player/playback_target.dart';
@@ -71,6 +72,7 @@ class EYZFlowPlayer extends StatefulWidget {
     this.drmAuthorization,
     this.storefrontId,
     this.drmParameters = const {},
+    this.offerId,
     this.deviceName,
     this.appId,
     this.analytics = true,
@@ -90,6 +92,7 @@ class EYZFlowPlayer extends StatefulWidget {
     this.httpClient,
     this.deviceIdStore,
     this.beatSender,
+    this.usageSender,
     this.playerBuilder,
     this.castReceiverAppId,
     this.enableCast = true,
@@ -142,6 +145,12 @@ class EYZFlowPlayer extends StatefulWidget {
   /// Extra DRM access-token parameters, e.g. `{'source': 'internal'}`. Merged
   /// over the config's `drm.parameters`; these win.
   final Map<String, Object?> drmParameters;
+
+  /// The offer (film or episode) [streamId] plays. With [drmAuthorization]
+  /// and a storefront, the player reports the seconds the viewer watched for
+  /// licensor royalties. Trailers, and a film the end screen picked, report
+  /// nothing.
+  final String? offerId;
 
   /// Shown in the viewer's device list, e.g. "Living room TV".
   final String? deviceName;
@@ -207,6 +216,9 @@ class EYZFlowPlayer extends StatefulWidget {
 
   /// Replaces the beat upload, e.g. to log beats in a test app.
   final BeatSender? beatSender;
+
+  /// Replaces the royalty report upload, e.g. to log reports in a test app.
+  final UsageSender? usageSender;
 
   /// Replaces the player surface, as [VideoplayerFeatureView.playerBuilder]
   /// does. A test seam.
@@ -307,6 +319,7 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
         w.playerKey != old.playerKey ||
         w.drmAuthorization != old.drmAuthorization ||
         w.storefrontId != old.storefrontId ||
+        w.offerId != old.offerId ||
         w.configId != old.configId ||
         w.sourceType != old.sourceType) {
       _stop();
@@ -409,6 +422,9 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
             ? PlayerApp(platform: platform, id: appId)
             : null,
         analytics: w.analytics,
+        // A film the end screen picked is another offer: it reports nothing.
+        offerId: _isProtected && _picked == null ? w.offerId : null,
+        catalogueId: _sourceType?.catalogueId,
       ),
       licenseClient: PlayerLicenseClient(
         client: client,
@@ -421,6 +437,9 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
       beatSender:
           w.beatSender ??
           HttpBeatSender(client: client, endpoints: w.endpoints).call,
+      usageSender:
+          w.usageSender ??
+          HttpUsageSender(client: client, endpoints: w.endpoints).call,
       deviceIdStore: w.deviceIdStore ?? SharedPreferencesDeviceIdStore(),
       onLimitReached: (error) => widget.onLimitReached?.call(error),
       onLicenseError: (error) => widget.onLicenseError?.call(error),
