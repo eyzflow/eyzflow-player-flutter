@@ -119,6 +119,76 @@ void main() {
   setUp(() => setEYZFlowPlayerLanguage('en'));
   tearDown(() => setEYZFlowPlayerLanguage(null));
 
+  group('captions', () {
+    const Key caption = Key('caption');
+    late double inset;
+
+    Widget captions(BuildContext context, double bottomInset) {
+      inset = bottomInset;
+      return Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: const Text('Hallo', key: caption),
+        ),
+      );
+    }
+
+    Widget harness(PlayerControlsBloc bloc, {bool showControls = true}) =>
+        MaterialApp(
+          home: Scaffold(
+            body: BlocProvider<PlayerControlsBloc>.value(
+              value: bloc,
+              child: PlayerControls(
+                title: 'Film A',
+                showControls: showControls,
+                captionsBuilder: captions,
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('stay above the bottom bar while the overlay shows', (
+      tester,
+    ) async {
+      final bloc = _bloc(_FakePlayback());
+      _loadTracks(bloc);
+      await tester.pumpWidget(harness(bloc));
+      // A frame for the bar's height to be reported, then the lift's ease.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(inset, greaterThan(0));
+      final Rect text = tester.getRect(find.byKey(caption));
+      expect(
+        text.bottom,
+        lessThanOrEqualTo(
+          tester
+              .getRect(find.byKey(const Key('player_controls_subtitles')))
+              .top,
+        ),
+      );
+      expect(
+        text.bottom,
+        lessThanOrEqualTo(tester.getRect(find.byType(Slider)).top),
+      );
+
+      // Hidden, they drop back to the bottom.
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(inset, 0);
+    });
+
+    testWidgets('are drawn, unlifted, with controls off', (tester) async {
+      final bloc = _bloc(_FakePlayback());
+      await tester.pumpWidget(harness(bloc, showControls: false));
+      await tester.pump();
+
+      expect(find.byKey(caption), findsOneWidget);
+      expect(inset, 0);
+    });
+  });
+
   testWidgets('renders transport controls and the title', (tester) async {
     final bloc = _bloc(_FakePlayback());
     await tester.pumpWidget(_harness(bloc));

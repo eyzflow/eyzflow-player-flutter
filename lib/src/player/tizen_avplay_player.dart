@@ -129,6 +129,39 @@ final class AvplaySubtitleOverlay extends StatelessWidget {
   }
 }
 
+/// Lays [child] out over the video's picture — the same centred, letterboxed
+/// rect the video surface fills — lifted just enough to clear [bottomInset],
+/// the controls' bottom bar measured from the bottom of the screen. Black
+/// bars under the picture count towards it, so a wide film's subtitles move
+/// only as far as they must.
+@visibleForTesting
+Widget captionsOverVideo({
+  required double aspectRatio,
+  required double bottomInset,
+  required Widget child,
+}) {
+  return LayoutBuilder(
+    builder: (BuildContext context, BoxConstraints constraints) {
+      final double width = constraints.maxWidth;
+      final double height = constraints.maxHeight;
+      final double pictureHeight = aspectRatio > 0
+          ? (width / aspectRatio).clamp(0, height)
+          : height;
+      final double barBelow = (height - pictureHeight) / 2;
+      final double lift = (bottomInset - barBelow).clamp(0, pictureHeight);
+      return Center(
+        child: AspectRatio(
+          aspectRatio: aspectRatio > 0 ? aspectRatio : width / height,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: lift),
+            child: child,
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// The single Tizen player. Owns one native controller per target.
 class TizenAvplayPlayer extends StatefulWidget {
   const TizenAvplayPlayer({
@@ -682,6 +715,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
                 onSkipSignal: _skipSignal,
                 skipButton: widget.options.skipButtons && !_overlay.active,
                 skipButtonTypes: widget.options.skipButtonTypes,
+                captionsBuilder: _buildCaptions,
               ),
             ),
           ),
@@ -702,26 +736,35 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     return Center(
       child: AspectRatio(
         aspectRatio: controller.value.aspectRatio,
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            VideoPlayer(controller),
-            // AVPlay paints no subtitles of its own — the plugin pushes
-            // caption text up to Dart and this overlay draws it — so not
-            // drawing it is what "Off" means here. There is no native
-            // "disable text" call to make instead: the plugin's only lever is
-            // `setTrackSelection`, which needs a track to select.
-            BlocSelector<PlayerControlsBloc, PlayerControlsState, bool>(
-              selector: (PlayerControlsState state) =>
-                  state.selectedTextTrackId != null,
-              builder: (BuildContext context, bool isEnabled) =>
-                  AvplaySubtitleOverlay(
-                    controller: controller,
-                    isEnabled: isEnabled,
-                  ),
-            ),
-          ],
-        ),
+        child: VideoPlayer(controller),
+      ),
+    );
+  }
+
+  /// The subtitles, which the controls draw over the video and keep above
+  /// their bottom bar while they show (see [captionsOverVideo]). None while
+  /// the end screen or the app's overlay has the video shrunk into a corner,
+  /// as on the web player.
+  Widget _buildCaptions(BuildContext context, double bottomInset) {
+    final VideoPlayerController? controller = _controller?.controller;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        _overlay.active) {
+      return const SizedBox.shrink();
+    }
+    return captionsOverVideo(
+      aspectRatio: controller.value.aspectRatio,
+      bottomInset: bottomInset,
+      // AVPlay paints no subtitles of its own — the plugin pushes caption
+      // text up to Dart and this overlay draws it — so not drawing it is what
+      // "Off" means here. There is no native "disable text" call to make
+      // instead: the plugin's only lever is `setTrackSelection`, which needs
+      // a track to select.
+      child: BlocSelector<PlayerControlsBloc, PlayerControlsState, bool>(
+        selector: (PlayerControlsState state) =>
+            state.selectedTextTrackId != null,
+        builder: (BuildContext context, bool isEnabled) =>
+            AvplaySubtitleOverlay(controller: controller, isEnabled: isEnabled),
       ),
     );
   }

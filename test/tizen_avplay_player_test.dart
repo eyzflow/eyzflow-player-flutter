@@ -131,6 +131,87 @@ void main() {
     await controller.dispose();
   });
 
+  group('captionsOverVideo', () {
+    const Key caption = Key('caption');
+
+    Future<Rect> layOut(
+      WidgetTester tester, {
+      required double aspectRatio,
+      required double bottomInset,
+    }) async {
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: SizedBox(
+              width: 1920,
+              height: 1080,
+              child: captionsOverVideo(
+                aspectRatio: aspectRatio,
+                bottomInset: bottomInset,
+                child: const SizedBox.expand(key: caption),
+              ),
+            ),
+          ),
+        ),
+      );
+      return tester.getRect(find.byKey(caption));
+    }
+
+    testWidgets('sit on the picture when nothing is in the way', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final Rect box = await layOut(
+        tester,
+        aspectRatio: 16 / 9,
+        bottomInset: 0,
+      );
+      expect(box, const Rect.fromLTWH(0, 0, 1920, 1080));
+    });
+
+    testWidgets('lift a full-screen picture by the whole bar', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final Rect box = await layOut(
+        tester,
+        aspectRatio: 16 / 9,
+        bottomInset: 150,
+      );
+      expect(box.bottom, 1080 - 150);
+    });
+
+    testWidgets('count the black bar under a wide film towards the lift', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      // 2.4:1 in 16:9: an 800 px picture with a 140 px bar under it.
+      final Rect lifted = await layOut(
+        tester,
+        aspectRatio: 2.4,
+        bottomInset: 150,
+      );
+      expect(lifted.bottom, 1080 - 150);
+      expect(lifted.top, 140);
+
+      // A bar shorter than the black one does not move them.
+      final Rect still = await layOut(
+        tester,
+        aspectRatio: 2.4,
+        bottomInset: 100,
+      );
+      expect(still.bottom, 1080 - 140);
+    });
+  });
+
   // Moved from player_policy_test.dart in Task 1: startup must not
   // preflight connectivity, it just creates one controller.
   testWidgets('startup creates exactly one controller and no preflight', (
