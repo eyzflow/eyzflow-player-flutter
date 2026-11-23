@@ -157,8 +157,11 @@ void main() {
       await tester.pump();
       expect(_button(), findsNothing);
 
-      // Once the seek landed, seeking back into the intro brings it back.
+      // Once the seek landed (two reports past it), seeking back into the
+      // intro brings it back.
       f.content.tick(65);
+      await tester.pump();
+      f.content.tick(65.5);
       await tester.pump();
       f.content.tick(20);
       await tester.pump();

@@ -286,10 +286,21 @@ final class SignalTracker extends ValueNotifier<StreamSignal?> {
   List<StreamSignal> _signals = const <StreamSignal>[];
   Duration? _position;
 
-  /// A signal the viewer skipped, and where the skip goes, until a position
-  /// report shows the seek landed.
+  /// A signal the viewer skipped, and where the skip goes, until position
+  /// reports show the seek landed.
   StreamSignal? _skipped;
   Duration? _skipTarget;
+
+  /// Position reports in a row at or past [_skipTarget]. One is not enough:
+  /// Tizen's AVPlay reports the target itself the moment `seekTo` returns,
+  /// then goes on polling the old position (inside the signal) until
+  /// PlusPlayer has landed, which takes seconds on a DRM stream. Counting
+  /// only from the first report kept the button away for that one report and
+  /// brought it back for those seconds.
+  var _landedReports = 0;
+
+  /// How many reports in a row past the target mean the seek has landed.
+  static const int _landedAfter = 2;
 
   List<StreamSignal> get signals => _signals;
 
@@ -305,24 +316,32 @@ final class SignalTracker extends ValueNotifier<StreamSignal?> {
     _position = position;
     final StreamSignal? skipped = _skipped;
     final Duration? target = _skipTarget;
-    if (skipped != null &&
-        (position == null ||
-            target == null ||
-            position >= target - signalEndSlack ||
-            position < skipped.start)) {
-      _skipped = null;
-      _skipTarget = null;
+    if (skipped != null) {
+      final bool atTarget =
+          position != null &&
+          target != null &&
+          position >= target - signalEndSlack;
+      _landedReports = atTarget ? _landedReports + 1 : 0;
+      if (position == null ||
+          target == null ||
+          _landedReports >= _landedAfter ||
+          position < skipped.start) {
+        _skipped = null;
+        _skipTarget = null;
+        _landedReports = 0;
+      }
     }
     _update();
   }
 
   /// The viewer skipped [signal]: it is left at once, and stays left while
   /// the native player still reports positions inside it from before the
-  /// seek to [target] landed. A report at [target] (or before the signal's
-  /// start) ends that.
+  /// seek to [target] landed. Two reports in a row at [target] or past it
+  /// (or one before the signal's start) end that.
   void skipped(StreamSignal signal, Duration target) {
     _skipped = signal;
     _skipTarget = target;
+    _landedReports = 0;
     _update();
   }
 
