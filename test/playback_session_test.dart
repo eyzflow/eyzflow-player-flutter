@@ -41,6 +41,7 @@ void main() {
       );
       expect(sent.headers['Authorization'], 'Bearer viewer');
       expect(sent.headers['X-Device-Id'], 'device-1');
+      expect(sent.headers['Content-Type'], startsWith('application/json'));
       expect(jsonDecode(sent.body), {
         'stream_id': 'stream-1',
         'platform': 'tizen',
@@ -146,6 +147,29 @@ void main() {
       );
       expect(await offline.heartbeat(_target, 'ps_1'), isTrue);
     });
+  });
+
+  // The API answers 400 to an empty body sent as application/json, which
+  // failed every heartbeat and close.
+  test('heartbeat and close send no JSON Content-Type and no body', () async {
+    final sent = <http.Request>[];
+    final client = PlaybackSessionClient(
+      client: MockClient((request) async {
+        sent.add(request);
+        return http.Response(jsonEncode({'status': 'active'}), 200);
+      }),
+    );
+
+    await client.heartbeat(_target, 'ps_1');
+    await client.close(_target, 'ps_1');
+
+    expect(sent, hasLength(2));
+    for (final request in sent) {
+      expect(request.headers.containsKey('Content-Type'), isFalse);
+      expect(request.body, isEmpty);
+      expect(request.headers['Authorization'], 'Bearer viewer');
+      expect(request.headers['X-Device-Id'], 'device-1');
+    }
   });
 
   test('close deletes the session and never throws', () async {

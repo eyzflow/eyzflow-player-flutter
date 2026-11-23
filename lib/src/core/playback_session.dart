@@ -152,8 +152,13 @@ final class PlaybackSessionClient {
     '/playback-sessions$path',
   );
 
-  Map<String, String> _headers(PlaybackSessionTarget target) => {
-    'Content-Type': 'application/json',
+  /// Content-Type only with a JSON body: the API refuses an empty body sent
+  /// as application/json (400), which failed every heartbeat and close.
+  Map<String, String> _headers(
+    PlaybackSessionTarget target, {
+    bool json = false,
+  }) => {
+    if (json) 'Content-Type': 'application/json',
     'Authorization': target.authorization,
     'X-Device-Id': target.deviceId,
   };
@@ -169,7 +174,7 @@ final class PlaybackSessionClient {
   }) async {
     final response = await _client.post(
       _url(target.storefrontId),
-      headers: _headers(target),
+      headers: _headers(target, json: true),
       body: jsonEncode({
         'stream_id': streamId,
         'platform': platform.wireName,
