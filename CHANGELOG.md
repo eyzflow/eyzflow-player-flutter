@@ -1,5 +1,8 @@
-## Unreleased
+## 0.6.0
 
+- Removed (EYF-225): the deprecated `Eyzflow…` aliases from 0.5.0
+  (`EyzflowPlayer`, `EyzflowSource`, `setEyzflowPlayerLanguage` and the
+  rest). Use the `EYZFlow…` names.
 - Ads on Tizen (EYF-216). There is no IMA for Tizen, so the player reads the
   config's ad tag itself and plays the ads in AVPlay, with the same rules as
   the other platforms: the stream's ad break markers, the viewer's plan, the
