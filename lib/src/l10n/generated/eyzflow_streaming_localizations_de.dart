@@ -131,4 +131,17 @@ class EYZFlowStreamingLocalizationsDe extends EYZFlowStreamingLocalizations {
 
   @override
   String get endScreenBackToCredits => 'Zurück zum Abspann';
+
+  @override
+  String adPosition(int index, int count) {
+    return 'Werbung $index von $count';
+  }
+
+  @override
+  String get adSkip => 'Werbung überspringen';
+
+  @override
+  String adSkipIn(int seconds) {
+    return 'Überspringen in $seconds';
+  }
 }

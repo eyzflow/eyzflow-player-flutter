@@ -149,8 +149,10 @@ lists the events under Play once the player closes.
 
 Android, Android TV and iOS (`SystemVideoPlayer`) play the player config's
 ad tag through Google IMA
-(`interactive_media_ads`). Tizen has no IMA and plays none. The rules are the
-web player's (`eyzflow-player`, `src/lib/ad-breaks.ts`).
+(`interactive_media_ads`). Tizen has no IMA: `TizenAvplayPlayer` reads the tag
+and plays the ads itself (see [Tizen](#tizen-vast-in-dart) below). The rules
+are the web player's (`eyzflow-player`, `src/lib/ad-breaks.ts`), through the
+same `AdBreakScheduler` on every platform.
 
 **Gate.** `PlayerOptions.fromConfig` sets `PlayerOptions.ads` (a `PlayerAds`)
 only when `features.ads` is on and `ads.adTagUrl` is not empty
@@ -225,6 +227,50 @@ which `PlaybackEventAdapter` turns into `BeatCollector.beginAd` / `endAd`.
 In between the collector ignores the content's state changes and stops its
 clocks, so ad time is neither played, paused nor stalled, and a pre-roll does
 not count towards video startup.
+
+### Tizen: VAST in Dart
+
+`VastAdDriver` (`lib/src/ads/vast_ad_driver.dart`) is the `AdDriver` on
+Tizen, in place of `ImaAdDriver`, and answers the scheduler the way IMA
+does: `adsLoaded` (a VMAP's breaks as cue points: 0 the pre-roll, -1 s the
+post-roll) or `adsFailed`, then `contentPauseRequested` /
+`contentResumeRequested` around each break and `allAdsCompleted` after the
+last.
+
+- `parseAdTag` (`vast.dart`, `package:xml`) reads VAST 2–4 and VMAP by local
+  element name. `VastLoader` (`vast_loader.dart`) fetches tags, follows
+  wrappers (5 deep), merges each wrapper's impressions, errors and tracking
+  into the ad it leads to, and picks the media file (`pickMediaFile`: MP4 up
+  to 1080p, else HLS, never VPAID). A pod plays in `sequence` order; without
+  one, the first standalone ad that resolves.
+- A VMAP break's ads are fetched 8 s before its cue point and played when the
+  content plays through it (a forward step of at most 2 s); one seeked past
+  is dropped. The post-roll plays from `contentComplete`.
+- Each ad gets its own `AdMediaPlayer` (`AvplayAdMediaPlayer`, a second
+  `VideoPlayerController`). Before it is created the scheduler has paused the
+  film, and `TizenAvplayPlayer` deactivates the film's PlusPlayer
+  (`releaseForAd`), so the two never need the decoder at once; after the
+  break it is activated (`restoreAfterAd`) and played. The pre-roll plays
+  before `session.start()`, before the film's player exists.
+- `VastAdTracker` pings impression, `creativeView`, `start`, quartiles,
+  `progress` offsets, `complete`, `skip` and error URLs, each once, with
+  `[ERRORCODE]`, `[ADPLAYHEAD]`, `[CACHEBUSTING]` and `[TIMESTAMP]` filled in.
+- An ad that does not initialize in 10 s (402), stops moving for 10 s, or
+  reports an error (405) ends and the next plays.
+- `TvAdLayer` (`lib/src/player/tv_ad_layer.dart`) covers the film during a
+  break: the ad's picture, "Ad 1 of 2 · 0:12", "Skip in 3" and then a Skip
+  button that takes the focus (OK skips). It swallows every other key; Back
+  closes the player. The controls are hidden and wrapped in `ExcludeFocus`, as
+  on Android TV. The countdown before a mid-roll is the shared
+  `AdCountdownNotice`.
+
+Covered in `test/vast_test.dart`, `test/vast_loader_test.dart`,
+`test/vast_ad_driver_test.dart` (the real scheduler with fake ad players)
+and `test/tizen_avplay_player_ads_test.dart`. Not tried on a Samsung TV yet:
+whether every model frees and takes back the decoder with
+`deactivate()` / `activate()` is the open question for hardware.
+
+### Other platforms: tests
 
 Covered without IMA in `test/ad_breaks_test.dart`,
 `test/ad_scheduler_test.dart` and `test/system_video_player_ads_test.dart`

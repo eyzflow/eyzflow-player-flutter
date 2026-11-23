@@ -130,4 +130,17 @@ class EYZFlowStreamingLocalizationsNl extends EYZFlowStreamingLocalizations {
 
   @override
   String get endScreenBackToCredits => 'Terug naar de aftiteling';
+
+  @override
+  String adPosition(int index, int count) {
+    return 'Reclame $index van $count';
+  }
+
+  @override
+  String get adSkip => 'Reclame overslaan';
+
+  @override
+  String adSkipIn(int seconds) {
+    return 'Overslaan over $seconds';
+  }
 }

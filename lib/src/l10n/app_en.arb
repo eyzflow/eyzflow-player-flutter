@@ -117,5 +117,30 @@
   "endScreenBackToCredits": "Back to credits",
   "@endScreenBackToCredits": {
     "description": "End screen: hide it and watch the credits."
+  },
+  "adPosition": "Ad {index} of {count}",
+  "@adPosition": {
+    "description": "Label over a playing ad on TV: its place in the ad break.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "adSkip": "Skip ad",
+  "@adSkip": {
+    "description": "Button on TV that skips a skippable ad."
+  },
+  "adSkipIn": "Skip in {seconds}",
+  "@adSkipIn": {
+    "description": "Shown on TV in place of the skip button until the ad may be skipped.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
   }
 }

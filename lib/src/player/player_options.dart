@@ -145,7 +145,7 @@ final class PlayerOptions {
   /// False keeps the video off AirPlay on iOS.
   final bool airPlay;
 
-  /// The ads to play (Android, Android TV and iOS), from the config's
+  /// The ads to play (Android, Android TV, iOS and Tizen), from the config's
   /// `features.ads` and `ads.adTagUrl`. Null plays no ads and makes no ad
   /// request. Compared by identity: one per impression.
   final PlayerAds? ads;

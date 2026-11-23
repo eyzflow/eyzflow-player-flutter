@@ -35,5 +35,8 @@
   "endScreenPlay": "Lecture",
   "endScreenCancel": "Annuler",
   "endScreenMoreLikeThis": "Titres similaires",
-  "endScreenBackToCredits": "Revenir au générique"
+  "endScreenBackToCredits": "Revenir au générique",
+  "adPosition": "Publicité {index} sur {count}",
+  "adSkip": "Ignorer la publicité",
+  "adSkipIn": "Ignorer dans {seconds}"
 }

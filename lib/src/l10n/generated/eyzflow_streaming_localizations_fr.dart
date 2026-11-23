@@ -130,4 +130,17 @@ class EYZFlowStreamingLocalizationsFr extends EYZFlowStreamingLocalizations {
 
   @override
   String get endScreenBackToCredits => 'Revenir au générique';
+
+  @override
+  String adPosition(int index, int count) {
+    return 'Publicité $index sur $count';
+  }
+
+  @override
+  String get adSkip => 'Ignorer la publicité';
+
+  @override
+  String adSkipIn(int seconds) {
+    return 'Ignorer dans $seconds';
+  }
 }

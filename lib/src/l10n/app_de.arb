@@ -35,5 +35,8 @@
   "endScreenPlay": "Abspielen",
   "endScreenCancel": "Abbrechen",
   "endScreenMoreLikeThis": "Ähnliche Titel",
-  "endScreenBackToCredits": "Zurück zum Abspann"
+  "endScreenBackToCredits": "Zurück zum Abspann",
+  "adPosition": "Werbung {index} von {count}",
+  "adSkip": "Werbung überspringen",
+  "adSkipIn": "Überspringen in {seconds}"
 }

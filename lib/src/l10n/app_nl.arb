@@ -35,5 +35,8 @@
   "endScreenPlay": "Afspelen",
   "endScreenCancel": "Annuleren",
   "endScreenMoreLikeThis": "Meer zoals dit",
-  "endScreenBackToCredits": "Terug naar de aftiteling"
+  "endScreenBackToCredits": "Terug naar de aftiteling",
+  "adPosition": "Reclame {index} van {count}",
+  "adSkip": "Reclame overslaan",
+  "adSkipIn": "Overslaan over {seconds}"
 }
