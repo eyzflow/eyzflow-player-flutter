@@ -48,4 +48,3 @@ export 'src/l10n/player_language.dart';
 export 'src/flutter/playback_coordinator.dart';
 
 // The pre-EYF-225 spellings, deprecated.
-export 'src/deprecated_names.dart';
