@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 /// The failure screen for a refused key or a limit: the message and an OK
 /// that closes the player. Black, like the player around it; the OK button is
 /// focused so a TV remote can press it.
-class EyzflowErrorView extends StatelessWidget {
-  const EyzflowErrorView({
+class EYZFlowErrorView extends StatelessWidget {
+  const EYZFlowErrorView({
     super.key,
     required this.message,
     required this.onClose,

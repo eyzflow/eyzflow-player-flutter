@@ -100,6 +100,38 @@ class EYZFlowStreamingLocalizationsFr extends EYZFlowStreamingLocalizations {
   }
 
   @override
+  String get skipIntro => 'Passer l’intro';
+
+  @override
+  String get skipRecap => 'Passer le récap';
+
+  @override
+  String get skipOpeningCredits => 'Passer le générique';
+
+  @override
+  String get skipClosingCredits => 'Passer le générique';
+
+  @override
+  String get endScreenUpNext => 'À suivre';
+
+  @override
+  String endScreenNextIn(int seconds) {
+    return 'Suite dans $seconds';
+  }
+
+  @override
+  String get endScreenPlay => 'Lecture';
+
+  @override
+  String get endScreenCancel => 'Annuler';
+
+  @override
+  String get endScreenMoreLikeThis => 'Titres similaires';
+
+  @override
+  String get endScreenBackToCredits => 'Revenir au générique';
+
+  @override
   String adPosition(int index, int count) {
     return 'Publicité $index sur $count';
   }

@@ -73,6 +73,51 @@
       }
     }
   },
+  "skipIntro": "Skip intro",
+  "@skipIntro": {
+    "description": "Button that jumps past the intro marked on the stream."
+  },
+  "skipRecap": "Skip recap",
+  "@skipRecap": {
+    "description": "Button that jumps past the recap (\"previously on\") marked on the stream."
+  },
+  "skipOpeningCredits": "Skip credits",
+  "@skipOpeningCredits": {
+    "description": "Button that jumps past the opening credits marked on the stream."
+  },
+  "skipClosingCredits": "Skip credits",
+  "@skipClosingCredits": {
+    "description": "Button that jumps past the closing credits marked on the stream."
+  },
+  "endScreenUpNext": "Up next",
+  "@endScreenUpNext": {
+    "description": "End screen: the heading of the next stream."
+  },
+  "endScreenNextIn": "Next in {seconds}",
+  "@endScreenNextIn": {
+    "description": "End screen: the play button while it counts down to the next stream.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "endScreenPlay": "Play",
+  "@endScreenPlay": {
+    "description": "End screen: play the next stream now."
+  },
+  "endScreenCancel": "Cancel",
+  "@endScreenCancel": {
+    "description": "End screen: stop the countdown."
+  },
+  "endScreenMoreLikeThis": "More like this",
+  "@endScreenMoreLikeThis": {
+    "description": "End screen: the heading of the row of films."
+  },
+  "endScreenBackToCredits": "Back to credits",
+  "@endScreenBackToCredits": {
+    "description": "End screen: hide it and watch the credits."
+  },
   "adPosition": "Ad {index} of {count}",
   "@adPosition": {
     "description": "Label over a playing ad on TV: its place in the ad break.",

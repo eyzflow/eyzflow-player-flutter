@@ -86,7 +86,7 @@ VideoplayerFeatureView(
 
 `PlaybackEvent` is sealed, so a `switch` with no `default` is checked for
 exhaustiveness. Every event carries `sourceId`
-(`EyzflowSource.id`), the playback `position`, and the `duration`
+(`EYZFlowSource.id`), the playback `position`, and the `duration`
 once the native player knows it.
 
 | Event | When |
@@ -157,7 +157,7 @@ same `AdBreakScheduler` on every platform.
 **Gate.** `PlayerOptions.fromConfig` sets `PlayerOptions.ads` (a `PlayerAds`)
 only when `features.ads` is on and `ads.adTagUrl` is not empty
 (`PlayerConfig.adTagUrl`). Without it nothing below runs: no manifest read for
-markers, no IMA, no ad request. `EyzflowPlayer` makes one `PlayerAds` per
+markers, no IMA, no ad request. `EYZFlowPlayer` makes one `PlayerAds` per
 start, and it outlives the player widget, so a fresh player after casting
 plays neither the pre-roll nor a played break again.
 
@@ -173,11 +173,12 @@ playlist as
 so `START-DATE` minus the first `PROGRAM-DATE-TIME` is the position in the
 content, and into the MPD as an `urn:scte:scte35:2014:xml+bin` EventStream
 (`presentationTime` in its `timescale`). Intro and credits signals
-(`CLASS="com.eyzflow.signal"`, `urn:eyzflow:signal`) are skipped. The player
-loads `master.m3u8`, so `loadHlsAdBreaks` reads that and its first media
-playlist while the native player starts; a manifest that cannot be read
-counts as a stream without markers. `parseDashAdBreaks` reads an MPD the same
-way, for a DASH route.
+(`CLASS="com.eyzflow.signal"`, `urn:eyzflow:signal`) are skipped here and
+read as signals (below). The player loads `master.m3u8`, so `loadHlsMarkers`
+(`lib/src/signals/stream_signals.dart`) reads that and its first media
+playlist once while the native player starts, for both the ad breaks and the
+signals; a manifest that cannot be read counts as a stream without markers.
+`parseDashAdBreaks` reads an MPD the same way, for a DASH route.
 
 **Scheduling** (`AdBreakScheduler`, `lib/src/ads/ad_scheduler.dart`, pure
 Dart; `ImaAdDriver` does the IMA calls):
@@ -277,6 +278,101 @@ Covered without IMA in `test/ad_breaks_test.dart`,
 device with ad break markers yet (Google's sample VAST and VMAP tags on an
 iPhone and an Android TV); see the README's known limits.
 
+## Skip intro, recap and credits
+
+The intro, recap, opening and closing credits marked on a stream in the
+dashboard (Stream → Signals) are written by the backend into every HLS media
+playlist next to the ad breaks:
+
+```
+#EXT-X-DATERANGE:ID="eyz-intro",CLASS="com.eyzflow.signal",START-DATE="1970-01-01T00:00:15.000Z",DURATION=15.000,X-EYZ-TYPE="intro",X-EYZ-LABEL="Main titles"
+```
+
+`loadHlsMarkers` reads them with the ad breaks, on every route and with or
+without ads (`parseHlsSignals`; `parseDashSignals` reads the MPD's
+`urn:eyzflow:signal` EventStream, for a DASH route). A `SignalTracker` in
+each player follows the position reports: inside a span (until 0.25 s before
+its end; with overlapping spans, the one that started last) it holds that
+signal.
+
+- **Phones and tablets** (`SystemVideoPlayer` with the native controls): a
+  "Skip intro" / "Skip recap" / "Skip credits" button (`SkipSignalButton`),
+  bottom right over the native player. A tap seeks to the span's end, or to
+  the end of the content, which ends it. Hidden during an ad break; the ad
+  countdown moves up above it when both show.
+- **TV** (Android TV overlay and Tizen, `PlayerControls`): while the overlay
+  is hidden the button shows as the focused control and holds focus
+  (`controls.skipSignal`, in no row), so OK skips. Any other key wakes the
+  overlay as before, with focus on the transport; with the overlay up the
+  button hides and OK is the focused control's. After a skip, focus goes back
+  to the transport. With `controls: false` OK skips while there is a signal
+  and plays or pauses otherwise.
+- **Events.** Entering and leaving a span is reported as
+  `PlaybackSignalStarted` / `PlaybackSignalEnded` (with the `StreamSignal`),
+  and `EYZFlowPlayer.onSignal` gets the signal, then null. A skip is also a
+  `PlaybackSeeked`.
+- **Config.** `features.skipButtons: false` hides the button; the events
+  still come. `skipButtonTypes` (`intro`, `recap`, `openingCredits`,
+  `closingCredits`) picks the types with a button: by default all but the
+  closing credits, where skipping only ends the film. The button takes the config's theme: the bar colour and text
+  colour, the accent when focused, the radius.
+- The dashboard's `label` is passed on (`StreamSignal.label`) but not shown.
+
+Covered in `test/stream_signals_test.dart`,
+`test/system_video_player_signals_test.dart` and
+`test/tizen_avplay_player_signals_test.dart` (signals through the
+`loadSignals` seam). Not tried on a device yet.
+
+## End screen and overlays
+
+`EYZFlowPlayer.endScreen` (`EYZFlowEndScreen`) is a Netflix-style end screen
+from the films the app passes (`EYZFlowEndScreenItem`: `streamId`, `title`,
+`poster`, `description`, `duration`, `badge`, `sourceType`, `data`), and
+`EYZFlowPlayer.overlayBuilder` draws the app's own UI instead.
+
+- **Where.** `PlayerOverlayLayer` (`lib/src/end_screen/end_screen_view.dart`)
+  wraps the video surface on every route (phones, Android TV, Tizen), from
+  the first frame, so the native platform view is never re-parented. It reads
+  `PlayerOverlayScope`, which `EYZFlowPlayer` puts around the player, and the
+  player's `SignalTracker` and position reports (`PlaybackFacts`).
+- **When.** From the closing credits signal. A stream without one gets it
+  `secondsBeforeEnd` seconds before the end (default 20, 0–120; 0: only when
+  the film ends), as at the credits. The last second counts as the end:
+  credits that run to the end leave their signal a moment before
+  `isCompleted`. `showAt: end`: only when the film ends.
+  Not during an ad break. `EndScreenSettings.resolve` puts the app's values
+  over the config's `features.endScreen` and `endScreen` section.
+- **Full screen.** AVKit's and Android's native full screen cover everything
+  Flutter draws, so when the end screen (or the app's overlay) appears the
+  player leaves native full screen. At the end of the film the player stays
+  open on the end screen instead of closing; without one it closes as before.
+  The skip buttons do not leave full screen and are not seen there.
+- **Shrinking.** At the credits the surface is resized (not transformed:
+  native platform views do not always follow a transform) into the top-right
+  corner; a tap on it, or "Back to credits", hides the end screen until the
+  end of the film.
+- **Up next.** A countdown (`autoplaySeconds`, default 10; 0: none) that
+  runs while the credits play or after the end, then picks the next stream.
+  Cancel stops it.
+- **Picking.** `onSelect(EndScreenSelection)` hears it first;
+  `preventDefault()` leaves it to the app. Otherwise `EYZFlowPlayer` plays the
+  item in place: a new key check, playback session and DRM for its stream
+  (`sourceType`, else the same kind as the stream playing). A new `streamId`
+  from the app wins over a picked one.
+- **TV.** The end screen is its own focus scope with Play focused (or the
+  first film without a next stream); the D-pad moves between its buttons and
+  films and OK activates. `PlayerControls` leaves focus that is not on its
+  own controls or its scope alone, and its skip button stays away while the
+  layer shows something (`PlayerOverlayState`).
+- **App overlay.** `overlayBuilder(context, PlayerOverlayContext)` is asked at
+  a signal or after the end with `signal`, `ended` and `controls` (`skip`,
+  `seek`, `play`, `pause`, `dismiss`); a widget it returns wins over the end
+  screen. `dismiss()` hides it for that moment.
+
+Covered in `test/end_screen_test.dart` (settings, phases, the phone layer
+with shrink, countdown, pick, prevent, cancel and back, the config switch,
+the app overlay's precedence, TV focus and Select).
+
 ## AVPlay: the single Tizen implementation
 
 AVPlay (`video_player_avplay`, backed by Samsung's plusplayer) is the only Tizen
@@ -325,7 +421,7 @@ This section describes the Tizen/AVPlay path specifically — the section
 above covers Android/iOS, which take `hlsStreamUrl` through
 the native player instead of `avplay.VideoFormat`.
 
-Every target resolves to `EyzflowSource.hlsStreamUrl` and the constant
+Every target resolves to `EYZFlowSource.hlsStreamUrl` and the constant
 `avplay.VideoFormat.hls`. There is no format to choose.
 
 HLS is not Apple's private path. Both manifests address the **same** encrypted
@@ -337,7 +433,7 @@ DASH path could not follow: on hardware, DASH played no full-length film and HLS
 plays them.
 
 FairPlay is not merely unused, it is inexpressible — the plugin's `DrmType` is
-`{none, playready, widevine}`. `EyzflowSource` exposes
+`{none, playready, widevine}`. `EYZFlowSource` exposes
 `fairplayCertificateUrl` and `fairplayLicenseUrl` for iOS, which plays through
 the native player instead.
 
@@ -448,7 +544,7 @@ latest target.
 
 While a skip burst is open or the bar is dragged, the overlay shows the frame
 of the previewed time above the thumb, from the stream's WebVTT thumbnail
-track (`EyzflowSource.thumbnailsUrl`, `thumbnails/thumbnail.vtt`: a
+track (`EYZFlowSource.thumbnailsUrl`, `thumbnails/thumbnail.vtt`: a
 199×112 tile per 5 seconds, cut from sprite images with `#xywh=`). The track
 is loaded once per stream by `ThumbnailLoader.shared`
 (`lib/src/core/thumbnails.dart`); the sprites go through Flutter's image
@@ -495,7 +591,8 @@ The same mapping serves the Samsung remote and an Android TV D-pad. Key
 handling follows the `flutter-tizen-tv-remote-input` pattern
 (`FocusableActionDetector`/`Focus`, not raw key listeners):
 
-- OK (`select` and `enter`) activates the focused control.
+- OK (`select` and `enter`) activates the focused control. While the overlay
+  is hidden during an intro, recap or credits, that is the skip button.
 - Back (`goBack` and `escape`) closes an open track panel first, then hides a
   visible overlay, then pops the player.
 - Media keys drive playback directly: `mediaPlay`/`mediaPause`/`mediaPlayPause`
@@ -559,17 +656,17 @@ sensitive. URL log statements are guarded by `#if DEBUG` on Apple and
 
 Player controls, dialogs and playback errors are localized in this package
 (`lib/src/l10n`, `gen_l10n`) through `streamingL10n`, in
-`eyzflowPlayerLanguage` (set by `EyzflowPlayer(language:)` or
-`setEyzflowPlayerLanguage`, else the device's language), falling back to
+`eyzflowPlayerLanguage` (set by `EYZFlowPlayer(language:)` or
+`setEYZFlowPlayerLanguage`, else the device's language), falling back to
 English. After editing an ARB, run `flutter gen-l10n` here and commit
 `lib/src/l10n/generated`.
 
-Track language names come from `EyzflowLanguageNames`
+Track language names come from `EYZFlowLanguageNames`
 (`lib/src/l10n/language_names.dart`): a table generated from the Unicode CLDR
 display names for the two-letter codes and their regional variants, in the
 player's four languages, plus the ISO 639-2 aliases (`deu`, `ger` → `de`).
 Lookup order: the exact code, without its region, the alias, an English
-language name, the code itself. Apps can set `EyzflowLanguageNames.resolver`.
+language name, the code itself. Apps can set `EYZFlowLanguageNames.resolver`.
 
 ## Fullscreen orientation
 

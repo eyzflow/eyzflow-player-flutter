@@ -176,7 +176,7 @@ class TextureVideoPlayer(
         isDisposed = true
         NpLog.d(TAG, "TextureVideoPlayer dispose (viewId $backendViewId)")
 
-        EyzflowPlayerPlugin.unregisterView(backendViewId)
+        EYZFlowPlayerPlugin.unregisterView(backendViewId)
         player.removeListener(videoSizeListener)
 
         session.disposeCommon(detachOutput = {

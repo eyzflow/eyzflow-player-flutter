@@ -1,4 +1,6 @@
 import 'package:eyzflow_player/src/ads/ad_breaks.dart';
+import 'package:eyzflow_player/src/signals/stream_signals.dart'
+    show loadHlsMarkers;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -112,10 +114,10 @@ seg-0.ts
           _ => http.Response('', 404),
         };
       });
-      final List<AdBreak> breaks = await loadHlsAdBreaks(
+      final List<AdBreak> breaks = (await loadHlsMarkers(
         client,
         Uri.parse('https://stream.eyzflow.com/s1/master.m3u8'),
-      );
+      )).adBreaks;
       expect(breaks.map((AdBreak b) => b.start), const <Duration>[
         Duration.zero,
         Duration(seconds: 8),
@@ -128,20 +130,20 @@ seg-0.ts
         (http.Request request) async => throw http.ClientException('offline'),
       );
       expect(
-        await loadHlsAdBreaks(
+        (await loadHlsMarkers(
           failing,
           Uri.parse('https://stream.eyzflow.com/s1/master.m3u8'),
-        ),
+        )).adBreaks,
         isEmpty,
       );
       final MockClient missing = MockClient(
         (http.Request request) async => http.Response('', 403),
       );
       expect(
-        await loadHlsAdBreaks(
+        (await loadHlsMarkers(
           missing,
           Uri.parse('https://stream.eyzflow.com/s1/master.m3u8'),
-        ),
+        )).adBreaks,
         isEmpty,
       );
     });

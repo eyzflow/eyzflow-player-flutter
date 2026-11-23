@@ -15,7 +15,7 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import com.eyzflow.player.EyzflowPlayerPlugin
+import com.eyzflow.player.EYZFlowPlayerPlugin
 import com.eyzflow.player.NpLog
 import com.eyzflow.player.manager.SharedPlayerManager
 
@@ -88,7 +88,7 @@ object AndroidPlaybackHost {
         if (!state.inPip) {
             // Also recover controls if an entering PiP transition was cancelled.
             pipControllerId?.let { id ->
-                EyzflowPlayerPlugin.getAllViews().filter { it.playbackControllerId == id }
+                EYZFlowPlayerPlugin.getAllViews().filter { it.playbackControllerId == id }
                     .forEach { it.setPictureInPictureMode(false) }
             }
             pipControllerId = null
@@ -114,7 +114,7 @@ object AndroidPlaybackHost {
         pipControllerId = id
         // Android 15+ calls this at animation start; modeChanged arrives too late.
         // Only change native UI here, not playback eligibility or Flutter state.
-        EyzflowPlayerPlugin.getAllViews().filter { it.playbackControllerId == id }
+        EYZFlowPlayerPlugin.getAllViews().filter { it.playbackControllerId == id }
             .forEach { it.setPictureInPictureMode(true) }
     }
 
@@ -125,7 +125,7 @@ object AndroidPlaybackHost {
         state.screenInteractive = isScreenInteractive(activity)
         val dismissed = state.pipChanged(inPip)
         id?.let {
-            EyzflowPlayerPlugin.getAllViews().filter { view -> view.playbackControllerId == it }
+            EYZFlowPlayerPlugin.getAllViews().filter { view -> view.playbackControllerId == it }
                 .forEach { view -> view.setPictureInPictureMode(inPip) }
             SharedPlayerManager.sendControllerEvent(it, if (inPip) "pipStart" else "pipStop")
         }
@@ -242,7 +242,7 @@ object AndroidPlaybackHost {
         val aspect = if (size.width > 0 && size.height > 0) size.width.toFloat() * size.pixelWidthHeightRatio / size.height else 16f / 9f
         val ratio = aspect.coerceIn(1f / 2.39f, 2.39f)
         return PictureInPictureParams.Builder().setAspectRatio(Rational((ratio * 1000).toInt(), 1000)).apply {
-            EyzflowPlayerPlugin.getAllViews().firstOrNull { it.playbackControllerId == id }
+            EYZFlowPlayerPlugin.getAllViews().firstOrNull { it.playbackControllerId == id }
                 ?.videoBounds()?.let { setSourceRectHint(it) }
             if (Build.VERSION.SDK_INT >= 31) setAutoEnterEnabled(autoEnter)
         }.build()

@@ -1,4 +1,3 @@
-import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
 /// The ad breaks marked on a stream in the dashboard (Stream → Signals → Ad
@@ -196,33 +195,6 @@ List<AdBreak> parseDashAdBreaks(String mpd) {
   }
   breaks.sort((AdBreak a, AdBreak b) => a.start.compareTo(b.start));
   return breaks;
-}
-
-/// Reads the ad breaks of the HLS stream at [master], the playlist the native
-/// player loads: from the master itself and from its first media playlist.
-/// A manifest that cannot be loaded gives no breaks; the caller then treats
-/// the stream as one without markers.
-Future<List<AdBreak>> loadHlsAdBreaks(
-  http.Client client,
-  Uri master, {
-  Duration timeout = const Duration(seconds: 5),
-}) async {
-  try {
-    final http.Response response = await client.get(master).timeout(timeout);
-    if (response.statusCode != 200) return const <AdBreak>[];
-    final String body = response.body;
-    final List<AdBreak> own = parseHlsAdBreaks(body);
-    if (own.isNotEmpty || !body.contains('#EXT-X-STREAM-INF')) return own;
-    final List<Uri> media = hlsMediaPlaylistUris(body, master);
-    if (media.isEmpty) return const <AdBreak>[];
-    final http.Response playlist = await client
-        .get(media.first)
-        .timeout(timeout);
-    if (playlist.statusCode != 200) return const <AdBreak>[];
-    return parseHlsAdBreaks(playlist.body);
-  } on Object {
-    return const <AdBreak>[];
-  }
 }
 
 /// The stream's ad breaks, each played at most once per impression.

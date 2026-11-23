@@ -7,7 +7,7 @@ import 'ad_countdown.dart';
 
 /// Ads for one impression: the config's ad tag, and what has been played.
 ///
-/// [EyzflowPlayer] makes one each time playback starts and passes it to the
+/// [EYZFlowPlayer] makes one each time playback starts and passes it to the
 /// player through [PlayerOptions.ads]. It outlives the player widget, so when
 /// casting hands playback back to the phone (a fresh player), the pre-roll and
 /// the breaks already played do not play again.

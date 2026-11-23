@@ -1,10 +1,10 @@
 /// The EYZFlow player for Flutter apps.
 ///
-/// [EyzflowPlayer] plays an EYZFlow stream (AVPlay on Tizen, the native
+/// [EYZFlowPlayer] plays an EYZFlow stream (AVPlay on Tizen, the native
 /// player on Android and iOS) with the player key check, stream and device
 /// limits, and playback quality analytics. [VideoplayerFeatureView] is the
 /// player alone, for hosts that handle those themselves; the clients under
-/// [EyzflowPlayer] are exported too.
+/// [EYZFlowPlayer] are exported too.
 library;
 
 // The player.
@@ -36,11 +36,16 @@ export 'src/core/playback_session.dart';
 export 'src/core/player_config.dart';
 export 'src/core/player_license.dart';
 export 'src/core/thumbnails.dart';
+export 'src/core/usage_reporter.dart';
 export 'src/flutter/device_context.dart'
     show SharedPreferencesDeviceIdStore, resolvePlayerPlatform;
 export 'src/flutter/error_view.dart';
 export 'src/flutter/event_adapter.dart';
 export 'src/flutter/eyzflow_player.dart';
+export 'src/end_screen/end_screen.dart' hide PlayerOverlayScope;
 export 'src/l10n/language_names.dart';
 export 'src/l10n/player_language.dart';
 export 'src/flutter/playback_coordinator.dart';
+
+// The pre-EYF-225 spellings, deprecated.
+export 'src/deprecated_names.dart';

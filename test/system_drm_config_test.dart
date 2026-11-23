@@ -6,7 +6,7 @@ void main() {
   group('systemDrmConfigForTarget', () {
     test('a trailer never gets a DRM config, even with an access header', () {
       const VideoplayerTarget target = VideoplayerTrailerTarget(
-        EyzflowSource(
+        EYZFlowSource(
           id: 'trailer-a',
           title: 'Trailer A',
           drmAccessHeader: 'token',
@@ -19,7 +19,7 @@ void main() {
 
     test('a source with no access header gets no DRM config', () {
       const VideoplayerTarget target = VideoplayerSourceTarget(
-        EyzflowSource(id: 'film-a', title: 'Film A'),
+        EYZFlowSource(id: 'film-a', title: 'Film A'),
       );
 
       expect(systemDrmConfigForTarget(target, isIOS: false), isNull);
@@ -30,7 +30,7 @@ void main() {
       'an Android source builds a Widevine config with the access header',
       () {
         const VideoplayerTarget target = VideoplayerSourceTarget(
-          EyzflowSource(
+          EYZFlowSource(
             id: 'film-a',
             title: 'Film A',
             drmAccessHeader: 'secret-token',
@@ -55,7 +55,7 @@ void main() {
       'an iOS source builds a FairPlay config with cert and access header',
       () {
         const VideoplayerTarget target = VideoplayerSourceTarget(
-          EyzflowSource(
+          EYZFlowSource(
             id: 'film-a',
             title: 'Film A',
             drmAccessHeader: 'secret-token',

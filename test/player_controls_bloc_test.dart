@@ -31,11 +31,11 @@ PlayerControlsBloc _bloc({
 
 /// Shows the player in German, so the remembered-language match runs against
 /// German names the way it does in the app.
-Future<void> _loadGermanNames() async => setEyzflowPlayerLanguage('de');
+Future<void> _loadGermanNames() async => setEYZFlowPlayerLanguage('de');
 
 void main() {
-  setUp(() => setEyzflowPlayerLanguage('en'));
-  tearDown(() => setEyzflowPlayerLanguage(null));
+  setUp(() => setEYZFlowPlayerLanguage('en'));
+  tearDown(() => setEYZFlowPlayerLanguage(null));
 
   test(
     'a burst of skips never overlaps native seeks and lands on the last',

@@ -141,11 +141,11 @@ PlaybackLimitError? readLimitError(String body) {
 final class PlaybackSessionClient {
   PlaybackSessionClient({
     http.Client? client,
-    this.endpoints = const EyzflowEndpoints(),
+    this.endpoints = const EYZFlowEndpoints(),
   }) : _client = client ?? http.Client();
 
   final http.Client _client;
-  final EyzflowEndpoints endpoints;
+  final EYZFlowEndpoints endpoints;
 
   Uri _url(String storefrontId, [String path = '']) => endpoints.apiUri(
     '/v1/content/storefront/${Uri.encodeComponent(storefrontId)}'

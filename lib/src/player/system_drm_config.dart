@@ -16,7 +16,7 @@ Map<String, dynamic>? systemDrmConfigForTarget(
   VideoplayerTarget target, {
   required bool isIOS,
 }) {
-  final EyzflowSource? source = switch (target) {
+  final EYZFlowSource? source = switch (target) {
     VideoplayerTrailerTarget() => null,
     VideoplayerSourceTarget(:final source) => source,
   };

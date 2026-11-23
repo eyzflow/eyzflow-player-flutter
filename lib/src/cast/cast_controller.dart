@@ -60,8 +60,8 @@ typedef CastEnded = void Function(CastEndReason reason, Duration position);
 /// The player shows a Cast button once [devices] is not empty, hands playback
 /// to the TV with [cast], and takes it back on [onEnded] at the TV's
 /// position.
-final class EyzflowCastController extends ChangeNotifier {
-  EyzflowCastController({
+final class EYZFlowCastController extends ChangeNotifier {
+  EYZFlowCastController({
     this._backend = const NativeCastBackend(),
     this.onPlayback,
     this.onEnded,

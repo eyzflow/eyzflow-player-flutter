@@ -100,6 +100,38 @@ class EYZFlowStreamingLocalizationsNl extends EYZFlowStreamingLocalizations {
   }
 
   @override
+  String get skipIntro => 'Intro overslaan';
+
+  @override
+  String get skipRecap => 'Samenvatting overslaan';
+
+  @override
+  String get skipOpeningCredits => 'Begintiteling overslaan';
+
+  @override
+  String get skipClosingCredits => 'Aftiteling overslaan';
+
+  @override
+  String get endScreenUpNext => 'Hierna';
+
+  @override
+  String endScreenNextIn(int seconds) {
+    return 'Volgende over $seconds';
+  }
+
+  @override
+  String get endScreenPlay => 'Afspelen';
+
+  @override
+  String get endScreenCancel => 'Annuleren';
+
+  @override
+  String get endScreenMoreLikeThis => 'Meer zoals dit';
+
+  @override
+  String get endScreenBackToCredits => 'Terug naar de aftiteling';
+
+  @override
   String adPosition(int index, int count) {
     return 'Reclame $index van $count';
   }

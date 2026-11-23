@@ -235,7 +235,7 @@ class PlayerControlsBloc
         // code names no determinate language, which no panel row can
         // produce — treated as no match rather than matching the `und`
         // tracks, whose names are also null.
-        final String? preferredName = EyzflowLanguageNames.languageName(
+        final String? preferredName = EYZFlowLanguageNames.languageName(
           preferred,
         );
         final PlayerTextTrack? match = preferredName == null
@@ -243,7 +243,7 @@ class PlayerControlsBloc
             : event.textTracks.cast<PlayerTextTrack?>().firstWhere(
                 (PlayerTextTrack? t) =>
                     t != null &&
-                    EyzflowLanguageNames.languageName(t.language) ==
+                    EYZFlowLanguageNames.languageName(t.language) ==
                         preferredName,
                 orElse: () => null,
               );

@@ -25,9 +25,9 @@ import io.flutter.plugin.platform.PlatformViewFactory
  * Implements ActivityAware to get access to the Activity for fullscreen dialogs
  */
 @UnstableApi
-class EyzflowPlayerPlugin : FlutterPlugin, ActivityAware {
+class EYZFlowPlayerPlugin : FlutterPlugin, ActivityAware {
     companion object {
-        private const val TAG = "EyzflowPlayerPlugin"
+        private const val TAG = "EYZFlowPlayerPlugin"
         private const val VIEW_TYPE = "eyzflow_player_native"
 
         // Store registered views
@@ -169,7 +169,7 @@ class EyzflowPlayerPlugin : FlutterPlugin, ActivityAware {
         NpLog.enabled = (binding.applicationContext.applicationInfo.flags and
             ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
-        NpLog.d(TAG, "Registering EyzflowPlayerPlugin")
+        NpLog.d(TAG, "Registering EYZFlowPlayerPlugin")
 
         messenger = binding.binaryMessenger
         textureRegistry = binding.textureRegistry
@@ -399,11 +399,11 @@ class EyzflowPlayerPlugin : FlutterPlugin, ActivityAware {
             }
         }
 
-        NpLog.d(TAG, "EyzflowPlayerPlugin registered with id: $VIEW_TYPE")
+        NpLog.d(TAG, "EYZFlowPlayerPlugin registered with id: $VIEW_TYPE")
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        NpLog.d(TAG, "EyzflowPlayerPlugin detached - cleaning up all players")
+        NpLog.d(TAG, "EYZFlowPlayerPlugin detached - cleaning up all players")
 
         // Stop in-flight precache downloads. The disk cache itself stays
         // open: SimpleCache is process-lifetime (it throws if the same
@@ -476,7 +476,7 @@ class VideoPlayerViewFactory(
             binaryMessenger = messenger
         )
 
-        EyzflowPlayerPlugin.registerView(view, viewId.toLong())
+        EYZFlowPlayerPlugin.registerView(view, viewId.toLong())
         return view
     }
 }

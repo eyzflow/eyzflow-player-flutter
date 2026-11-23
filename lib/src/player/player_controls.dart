@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
+import 'package:flutter/foundation.dart' show ValueListenable;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -14,6 +15,9 @@ import 'player_policy.dart';
 import '../l10n/streaming_l10n.dart';
 import 'player_loading_indicator.dart';
 import 'player_options.dart';
+import '../core/player_config.dart' show PlayerSkipButtonTypes;
+import '../signals/stream_signals.dart';
+import 'skip_signal_button.dart';
 
 /// How long the overlay takes to fade in or out.
 const Duration _fadeDuration = Duration(milliseconds: 250);
@@ -23,7 +27,7 @@ const Duration _fadeDuration = Duration(milliseconds: 250);
 typedef _NamedTrack = ({int? trackId, String label});
 
 /// The audio tracks a panel can offer: those whose language code resolves to
-/// a name a viewer can read (see [EyzflowLanguageNames.languageName], which
+/// a name a viewer can read (see [EYZFlowLanguageNames.languageName], which
 /// answers `null` for `und`, `zxx` and the untagged renditions EYZFlow emits
 /// as `un`).
 ///
@@ -34,7 +38,7 @@ List<_NamedTrack> _namedAudioTracks(
   List<PlayerAudioTrack> tracks,
 ) => <_NamedTrack>[
   for (final PlayerAudioTrack t in tracks)
-    if (EyzflowLanguageNames.languageName(t.language) case final String name)
+    if (EYZFlowLanguageNames.languageName(t.language) case final String name)
       (trackId: t.trackId, label: _audioLabel(name, t)),
 ];
 
@@ -57,7 +61,7 @@ List<_NamedTrack> _namedTextTracks(
   List<PlayerTextTrack> tracks,
 ) => <_NamedTrack>[
   for (final PlayerTextTrack t in tracks)
-    if (EyzflowLanguageNames.languageName(t.language) case final String name)
+    if (EYZFlowLanguageNames.languageName(t.language) case final String name)
       (trackId: t.trackId, label: t.isSdh ? '$name (SDH)' : name),
 ];
 
@@ -92,6 +96,10 @@ final class _ControlNodes {
   final FocusNode audio = FocusNode(debugLabel: 'controls.audio');
   final FocusNode subtitles = FocusNode(debugLabel: 'controls.subtitles');
   final FocusNode progress = FocusNode(debugLabel: 'controls.progress');
+
+  /// The skip button, focusable only while the overlay is hidden. Not in a
+  /// row: the D-pad never walks onto it.
+  final FocusNode skipSignal = FocusNode(debugLabel: 'controls.skipSignal');
 
   late final List<FocusNode> all = <FocusNode>[
     back,
@@ -131,6 +139,7 @@ final class _ControlNodes {
     for (final FocusNode node in all) {
       node.dispose();
     }
+    skipSignal.dispose();
   }
 }
 
@@ -147,6 +156,10 @@ class PlayerControls extends StatefulWidget {
     this.thumbnailLoader,
     this.theme = const PlayerControlsTheme(),
     this.showControls = true,
+    this.signal,
+    this.onSkipSignal,
+    this.skipButton = true,
+    this.skipButtonTypes = const PlayerSkipButtonTypes(),
   });
 
   final String title;
@@ -167,6 +180,31 @@ class PlayerControls extends StatefulWidget {
   /// closes the player, media keys play, pause and skip, and left/right skip.
   final bool showControls;
 
+  /// The intro, recap or credits signal playback is in. While there is one
+  /// and the overlay is hidden, a "Skip …" button shows and holds focus, so OK
+  /// sends [onSkipSignal]; any other key wakes the overlay as before, with
+  /// focus back on the transport.
+  final ValueListenable<StreamSignal?>? signal;
+  final VoidCallback? onSkipSignal;
+
+  /// False shows no skip button and leaves OK as it was (a player config's
+  /// `skipButtons: false`).
+  final bool skipButton;
+
+  /// Which signal types get the button (a player config's
+  /// `skipButtonTypes`): by default all but the closing credits.
+  final PlayerSkipButtonTypes skipButtonTypes;
+
+  /// The signal OK skips right now, if any.
+  StreamSignal? get _skippable {
+    final StreamSignal? current = skipButton && onSkipSignal != null
+        ? signal?.value
+        : null;
+    return current != null && skipButtonTypes.allows(current.type)
+        ? current
+        : null;
+  }
+
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
 }
@@ -186,12 +224,23 @@ class _PlayerControlsState extends State<PlayerControls> {
     _previous = context.read<PlayerControlsBloc>().state;
     unawaited(_loadThumbnails());
     FocusManager.instance.addListener(_onFocusChanged);
+    widget.signal?.addListener(_onSignalChanged);
     // The first frame has no render objects to focus yet.
     WidgetsBinding.instance.addPostFrameCallback((_) => _focusPlayPause());
   }
 
   @override
+  void didUpdateWidget(PlayerControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.signal, widget.signal)) {
+      oldWidget.signal?.removeListener(_onSignalChanged);
+      widget.signal?.addListener(_onSignalChanged);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.signal?.removeListener(_onSignalChanged);
     FocusManager.instance.removeListener(_onFocusChanged);
     _nodes.dispose();
     super.dispose();
@@ -207,6 +256,38 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   void _focusPlayPause() {
     if (mounted) _nodes.playPause.requestFocus();
+  }
+
+  /// Whether focus is the overlay's to move: on one of its controls, or on
+  /// nothing (a scope). Focus elsewhere — the end screen, an app's own
+  /// overlay — is left alone.
+  bool get _focusIsOurs {
+    final FocusNode? focused = FocusManager.instance.primaryFocus;
+    return focused == null ||
+        identical(focused, FocusScope.of(context)) ||
+        _nodes.all.contains(focused) ||
+        identical(focused, _nodes.skipSignal);
+  }
+
+  /// Where focus rests while the overlay is hidden: the skip button while
+  /// there is a signal to skip, else the transport.
+  void _focusWhileHidden() {
+    if (!mounted || !_focusIsOurs) return;
+    if (widget._skippable != null && _nodes.skipSignal.context != null) {
+      _nodes.skipSignal.requestFocus();
+    } else {
+      _focusPlayPause();
+    }
+  }
+
+  /// A signal starting or ending while the overlay is hidden moves focus onto
+  /// the skip button or back to the transport, once the button is (or is no
+  /// longer) in the tree.
+  void _onSignalChanged() {
+    if (!mounted || !_fullyHidden) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _fullyHidden) _focusWhileHidden();
+    });
   }
 
   /// Puts focus back on a control whenever it lands nowhere.
@@ -231,7 +312,11 @@ class _PlayerControlsState extends State<PlayerControls> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final FocusNode? settled = FocusManager.instance.primaryFocus;
-      if (settled == null || settled is FocusScopeNode) _focusPlayPause();
+      // Only the scope the controls live in: another scope with focus (the
+      // end screen's, an app overlay's) is not a lost focus.
+      if (settled == null || identical(settled, FocusScope.of(context))) {
+        _focusPlayPause();
+      }
     });
   }
 
@@ -351,7 +436,12 @@ class _PlayerControlsState extends State<PlayerControls> {
   Widget build(BuildContext context) {
     final bloc = context.read<PlayerControlsBloc>();
     if (!widget.showControls) {
-      return _BareRemote(bloc: bloc, onBack: () => _leave(context));
+      return _BareRemote(
+        bloc: bloc,
+        onBack: () => _leave(context),
+        skipSignal: _skipSignalWhileHidden,
+        skipButton: _skipButton(),
+      );
     }
     return _ThemeScope(theme: widget.theme, child: _buildOverlay(bloc));
   }
@@ -403,7 +493,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                       setState(() => _fullyHidden = true);
                       // Only now: the overlay is off screen, so the focus
                       // move cannot be seen.
-                      _focusPlayPause();
+                      _focusWhileHidden();
                     },
                     child: _ControlsScaffold(
                       title: widget.title,
@@ -415,6 +505,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                 ),
                 if (state.activePanel != PlayerPanel.none)
                   _TrackPanel(panel: state.activePanel),
+                if (!state.visible) ?_skipButton(),
               ],
             ),
           ),
@@ -426,6 +517,30 @@ class _PlayerControlsState extends State<PlayerControls> {
   /// True once the overlay has finished fading out — not merely once the
   /// state says hidden. Anything that would be seen mid-fade waits for this.
   bool _fullyHidden = false;
+
+  /// OK while the overlay is hidden: skips the signal playback is in, and
+  /// reports whether there was one.
+  bool _skipSignalWhileHidden() {
+    if (widget._skippable == null) return false;
+    widget.onSkipSignal!();
+    return true;
+  }
+
+  /// The skip button as the focused control, for while the overlay is
+  /// hidden; null without a signal source or with the button switched off.
+  Widget? _skipButton() {
+    final ValueListenable<StreamSignal?>? signal = widget.signal;
+    final VoidCallback? onSkip = widget.onSkipSignal;
+    if (!widget.skipButton || signal == null || onSkip == null) return null;
+    return SkipSignalButton(
+      signal: signal,
+      onSkip: onSkip,
+      theme: widget.theme,
+      remote: true,
+      focusNode: _nodes.skipSignal,
+      types: widget.skipButtonTypes,
+    );
+  }
 
   /// Set while a Back press is being served, and cleared on the next frame,
   /// so the second delivery of the same press is ignored.
@@ -489,10 +604,21 @@ class _ThemeScope extends InheritedWidget {
 
 /// The remote without an overlay, for a config with `controls: false`.
 class _BareRemote extends StatelessWidget {
-  const _BareRemote({required this.bloc, required this.onBack});
+  const _BareRemote({
+    required this.bloc,
+    required this.onBack,
+    required this.skipSignal,
+    this.skipButton,
+  });
 
   final PlayerControlsBloc bloc;
   final VoidCallback onBack;
+
+  /// OK first offers this the press: true when it skipped a signal.
+  final bool Function() skipSignal;
+
+  /// Shown over the video, where the overlay would be.
+  final Widget? skipButton;
 
   @override
   Widget build(BuildContext context) {
@@ -511,6 +637,11 @@ class _BareRemote extends StatelessWidget {
           if (key == LogicalKeyboardKey.goBack ||
               key == LogicalKeyboardKey.escape) {
             onBack();
+            return KeyEventResult.handled;
+          }
+          if ((key == LogicalKeyboardKey.select ||
+                  key == LogicalKeyboardKey.enter) &&
+              skipSignal()) {
             return KeyEventResult.handled;
           }
           if (key == LogicalKeyboardKey.mediaPlay ||
@@ -533,7 +664,10 @@ class _BareRemote extends StatelessWidget {
           }
           return KeyEventResult.ignored;
         },
-        child: const SizedBox.expand(),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[const SizedBox.expand(), ?skipButton],
+        ),
       ),
     );
   }

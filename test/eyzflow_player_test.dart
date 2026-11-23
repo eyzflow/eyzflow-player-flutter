@@ -6,17 +6,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-Widget _app(EyzflowPlayer player) => MaterialApp(home: player);
+Widget _app(EYZFlowPlayer player) => MaterialApp(home: player);
 
-EyzflowPlayer _player({
+EYZFlowPlayer _player({
   required MockClient client,
-  required List<EyzflowSource> mounted,
+  required List<EYZFlowSource> mounted,
   List<PlaybackLimitError>? limits,
   VoidCallback? onClose,
-}) => EyzflowPlayer(
+}) => EYZFlowPlayer(
   streamId: 'stream-1',
   title: 'Film',
-  sourceType: const EyzflowFilm('cat-1'),
+  sourceType: const EYZFlowFilm('cat-1'),
   drmAuthorization: 'Bearer viewer',
   storefrontId: 'sf',
   httpClient: client,
@@ -33,10 +33,10 @@ EyzflowPlayer _player({
 );
 
 void main() {
-  setUpAll(() => setEyzflowPlayerLanguage('en'));
+  setUpAll(() => setEYZFlowPlayerLanguage('en'));
 
   testWidgets('mounts the player with the built access token', (tester) async {
-    final mounted = <EyzflowSource>[];
+    final mounted = <EYZFlowSource>[];
     final client = MockClient((request) async {
       if (request.method == 'DELETE') return http.Response('', 204);
       return http.Response(jsonEncode({'id': 'ps_1'}), 201);
@@ -54,7 +54,7 @@ void main() {
       'device_id': 'device-1',
       'playback_session_id': 'ps_1',
     });
-    expect(mounted.last.sourceType, const EyzflowFilm('cat-1'));
+    expect(mounted.last.sourceType, const EYZFlowFilm('cat-1'));
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
@@ -63,7 +63,7 @@ void main() {
   testWidgets('a stream limit shows its message instead of the player', (
     tester,
   ) async {
-    final mounted = <EyzflowSource>[];
+    final mounted = <EYZFlowSource>[];
     final limits = <PlaybackLimitError>[];
     var closed = 0;
     final client = MockClient(

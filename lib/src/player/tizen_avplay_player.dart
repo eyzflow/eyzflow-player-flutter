@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
 import '../core/source.dart';
+import '../end_screen/end_screen.dart' show PlayerOverlayControls;
+import '../end_screen/end_screen_view.dart';
+import '../signals/stream_signals.dart';
 import 'package:video_player_avplay/video_player.dart';
 import 'package:video_player_avplay/video_player_platform_interface.dart'
     as avplay;
@@ -140,11 +143,16 @@ class TizenAvplayPlayer extends StatefulWidget {
     this.createAdPlayer,
     this.adClient,
     this.loadAdBreaks,
+    this.loadSignals,
   });
 
   final VideoplayerTarget target;
   final VideoplaybackControllerFactory? createController;
   final TizenDeviceDiagnostics? diagnostics;
+
+  /// Replaces reading the intro, recap and credits signals from the manifest.
+  /// A test seam.
+  final Future<List<StreamSignal>> Function(Uri master)? loadSignals;
   final WidevineLicenseClient? licenseClient;
 
   /// Replaces the AVPlay player an ad plays in. A test seam.
@@ -214,12 +222,28 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   http.Client get _adClient =>
       widget.adClient ?? (_ownedAdClient ??= http.Client());
 
+  /// The intro, recap or credits signal playback is in.
+  final SignalTracker _signals = SignalTracker();
+
+  /// Where playback is, for the overlay layer (end screen, app overlay).
+  final ValueNotifier<PlaybackFacts> _facts = ValueNotifier<PlaybackFacts>(
+    const PlaybackFacts(),
+  );
+
+  /// Whether the overlay layer shows something: the skip button stays away.
+  final PlayerOverlayState _overlay = PlayerOverlayState();
+
+  void _onOverlayChanged() {
+    if (mounted) setState(() {});
+  }
+
   WidevineLicenseClient get _licenseClient =>
       widget.licenseClient ?? (_ownedLicenseClient ??= WidevineLicenseClient());
 
   @override
   void initState() {
     super.initState();
+    _overlay.addListener(_onOverlayChanged);
     unawaited(_start());
   }
 
@@ -281,7 +305,21 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     );
     _events = events;
     _finishing = false;
-    final AdBreakScheduler? ads = _setUpAds(events);
+    final Future<HlsMarkers> markers = _loadMarkers(_hlsMaster(widget.target));
+    _signals
+      ..onStarted = events.signalStarted
+      ..onEnded = events.signalEnded
+      ..position(null)
+      ..signals = const <StreamSignal>[];
+    _facts.value = const PlaybackFacts();
+    unawaited(
+      markers.then((HlsMarkers found) {
+        if (mounted && identical(_events, events)) {
+          _signals.signals = found.signals;
+        }
+      }),
+    );
+    final AdBreakScheduler? ads = _setUpAds(events, markers);
     final VideoplaybackSession session = VideoplaybackSession(
       target: widget.target,
       createController: _createAndCaptureController,
@@ -299,6 +337,13 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
           ads.contentPosition(position);
         }
         _updateAdCountdown(value);
+        _signals.position(value.isCompleted ? null : value.position);
+        _facts.value = PlaybackFacts(
+          position: value.position,
+          duration: value.duration,
+          playing: value.isPlaying,
+          ended: value.isCompleted,
+        );
       },
       // The controller opens at the resume position itself; see
       // [_createAvplayController].
@@ -319,7 +364,10 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
 
   /// The ads scheduler for a new session, or null without an ad tag. The
   /// markers are read from the manifest while the player starts.
-  AdBreakScheduler? _setUpAds(PlaybackEventEmitter events) {
+  AdBreakScheduler? _setUpAds(
+    PlaybackEventEmitter events,
+    Future<HlsMarkers> markers,
+  ) {
     _disposeAds();
     final PlayerAds? ads = widget.options.ads;
     if (ads == null) return null;
@@ -343,15 +391,12 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     )..addListener(_onAdsChanged);
     driver.scheduler = scheduler;
     _ads = scheduler;
-    final Uri master = switch (widget.target) {
-      VideoplayerTrailerTarget(:final source) => source.hlsStreamUrl,
-      VideoplayerSourceTarget(:final source) => source.hlsStreamUrl,
-    };
+    final Uri master = _hlsMaster(widget.target);
     unawaited(
       ads.loadMarkers(() async {
         final Future<List<AdBreak>> Function(Uri)? load = widget.loadAdBreaks;
         if (load != null) return load(master);
-        return loadHlsAdBreaks(client, master);
+        return (await markers).adBreaks;
       }),
     );
     return scheduler;
@@ -463,7 +508,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     //
     // See docs/superpowers/specs/
     // 2026-08-19-flutter-tizen-avplay-widevine-findings.md.
-    final EyzflowSource source = switch (target) {
+    final EYZFlowSource source = switch (target) {
       VideoplayerTrailerTarget(:final source) => source,
       VideoplayerSourceTarget(:final source) => source,
     };
@@ -512,7 +557,8 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   }
 
   void _close() {
-    if (mounted) {
+    // The player stays on the end screen when there is one.
+    if (mounted && !endScreenAtTheEnd(context)) {
       context.read<VideoplayerFeatureBloc>().add(
         const VideoplayerFeaturePlaybackFinished(),
       );
@@ -535,6 +581,10 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   void dispose() {
     _request++;
     _disposeAds();
+    _signals.dispose();
+    _overlay.removeListener(_onOverlayChanged);
+    _overlay.dispose();
+    _facts.dispose();
     _closeEvents();
     unawaited(_session?.dispose() ?? Future<void>.value());
     unawaited(_controlsBloc?.close() ?? Future<void>.value());
@@ -559,7 +609,13 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
         // Over the video and the controls, never focusable: it stays up
         // while the controls are hidden.
         if (ads != null && widget.options.adCountdown)
-          AdCountdownNotice(seconds: _adCountdown),
+          AdCountdownNotice(
+            seconds: _adCountdown,
+            // Up out of the skip button's way while one shows.
+            liftedBy: widget.options.skipButtons && !_overlay.active
+                ? _signals
+                : null,
+          ),
         if (ads != null && driver != null)
           TvAdLayer(
             scheduler: ads,
@@ -581,7 +637,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     final PlayerControlsBloc bloc = _ensureControlsBloc(playback, tracks);
     _loadTracksOnce(tracks, bloc);
 
-    final EyzflowSource source = switch (widget.target) {
+    final EYZFlowSource source = switch (widget.target) {
       VideoplayerTrailerTarget(:final source) => source,
       VideoplayerSourceTarget(:final source) => source,
     };
@@ -593,7 +649,22 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          _buildVideoSurface(bloc),
+          PlayerOverlayLayer(
+            surface: _buildVideoSurface(bloc),
+            signal: _signals,
+            facts: _facts,
+            inAdBreak: inAdBreak,
+            state: _overlay,
+            theme: widget.options.controlsTheme,
+            remote: true,
+            controls: PlayerOverlayControls(
+              skip: _skipSignal,
+              seek: (Duration position) => unawaited(playback.seekTo(position)),
+              play: () => unawaited(playback.play()),
+              pause: () => unawaited(playback.pause()),
+              dismiss: () {},
+            ),
+          ),
           // Hidden and out of the remote's reach during an ad break: no
           // focus, so no seek, no track panel. Kept alive for after it.
           Visibility(
@@ -607,6 +678,10 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
                 onBack: () => _closeFromControls(context),
                 theme: widget.options.controlsTheme,
                 showControls: widget.options.controls,
+                signal: _signals,
+                onSkipSignal: _skipSignal,
+                skipButton: widget.options.skipButtons && !_overlay.active,
+                skipButtonTypes: widget.options.skipButtonTypes,
               ),
             ),
           ),
@@ -671,6 +746,37 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   /// `isBuffering` come only from the plugin's `VideoPlayerValue`, so this runs
   /// on the real path only. Separate from the `VideoplaybackSession` listener
   /// that records watch progress, so neither disturbs the other.
+  /// The stream's ad break markers and signals, read once per session from
+  /// the playlist AVPlay loads. None when it cannot be read.
+  Future<HlsMarkers> _loadMarkers(Uri master) async {
+    final Future<List<StreamSignal>> Function(Uri)? loadSignals =
+        widget.loadSignals;
+    if (loadSignals != null) {
+      return (adBreaks: const <AdBreak>[], signals: await loadSignals(master));
+    }
+    final http.Client client = http.Client();
+    try {
+      return await loadHlsMarkers(client, master);
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Jumps to the end of the signal playback is in (the end of the content
+  /// at most, which ends it).
+  void _skipSignal() {
+    final StreamSignal? signal = _signals.value;
+    final VideoplaybackController? playback = _playback;
+    if (signal == null || playback == null) return;
+    final Duration? duration = playback.value.duration;
+    final Duration target = duration != null && signal.end > duration
+        ? duration
+        : signal.end;
+    _events?.seeked(playback.value.position ?? signal.start, target);
+    _signals.skipped(signal, target);
+    unawaited(playback.seekTo(target));
+  }
+
   void _bridgeTick(VideoPlayerController controller, PlayerControlsBloc bloc) {
     if (_tickBridged) return;
     _tickBridged = true;
@@ -1000,3 +1106,8 @@ final class _AvplayController
     );
   }
 }
+
+Uri _hlsMaster(VideoplayerTarget target) => switch (target) {
+  VideoplayerTrailerTarget(:final source) => source.hlsStreamUrl,
+  VideoplayerSourceTarget(:final source) => source.hlsStreamUrl,
+};

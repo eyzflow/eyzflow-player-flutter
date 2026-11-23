@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 
 void main() {
   // The language of the player's own text; the device's when not set.
-  setEyzflowPlayerLanguage('en');
+  setEYZFlowPlayerLanguage('en');
   runApp(const ExampleApp());
 }
 
@@ -29,7 +29,7 @@ class ExampleApp extends StatelessWidget {
   );
 }
 
-/// A form for what [EyzflowPlayer] takes, and a log of what it did: every
+/// A form for what [EYZFlowPlayer] takes, and a log of what it did: every
 /// playback event, every beat it sent, and every limit or key refusal.
 class LoaderPage extends StatefulWidget {
   const LoaderPage({super.key});
@@ -59,6 +59,11 @@ class _LoaderPageState extends State<LoaderPage> {
   // The EYZFlow Cast receiver (cast-receiver/README.md), published unlisted.
   final _castReceiver = TextEditingController(text: 'A534F914');
   final _startAt = TextEditingController();
+  // Stream ids for the end screen: the first is "Up next", the rest the row
+  // of films. Empty: no end screen.
+  final _endScreenIds = TextEditingController(
+    text: const String.fromEnvironment('EYZFLOW_END_SCREEN_IDS'),
+  );
 
   bool _isFeature = !const bool.fromEnvironment('EYZFLOW_TRAILER');
 
@@ -103,20 +108,20 @@ class _LoaderPageState extends State<LoaderPage> {
     final bool isViewerToken = token != null && token.startsWith('eyJ');
     final String? apiOrigin = _orNull(_apiOrigin);
     final endpoints = apiOrigin == null
-        ? const EyzflowEndpoints()
-        : EyzflowEndpoints(api: apiOrigin);
+        ? const EYZFlowEndpoints()
+        : EYZFlowEndpoints(api: apiOrigin);
     final upload = HttpBeatSender(endpoints: endpoints);
     _add('▶ $id (${_isFeature ? 'film' : 'trailer'})');
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => EyzflowPlayer(
+        builder: (_) => EYZFlowPlayer(
           streamId: id,
           title: _orNull(_title) ?? id,
           sourceType: _isFeature
-              ? EyzflowFilm(_orNull(_catalogueId) ?? id)
-              : EyzflowTrailer(id),
+              ? EYZFlowFilm(_orNull(_catalogueId) ?? id)
+              : EYZFlowTrailer(id),
           progressSeconds: double.tryParse(_startAt.text.trim()),
           isTv: _isTv,
           playerKey: _orNull(_playerKey),
@@ -146,6 +151,7 @@ class _LoaderPageState extends State<LoaderPage> {
             );
             return upload(beat);
           },
+          endScreen: _endScreen(),
           onPlaybackEvent: (event) => _add(event.toString()),
           onLimitReached: (limit) => _add(
             'limit ${limit.code.wireName}: '
@@ -154,6 +160,38 @@ class _LoaderPageState extends State<LoaderPage> {
           onLicenseError: (error) => _add('key refused ${error.code.wireName}'),
           onError: (message) => _add('error: $message'),
         ),
+      ),
+    );
+  }
+
+  String _short(String id) => id.length > 8 ? id.substring(0, 8) : id;
+
+  /// The end screen from the ids in the form: placeholder titles, no
+  /// posters. Picks are logged; the player plays them in place.
+  EYZFlowEndScreen? _endScreen() {
+    final List<String> ids = _endScreenIds.text
+        .split(',')
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toList();
+    if (ids.isEmpty) return null;
+    return EYZFlowEndScreen(
+      nextUp: EYZFlowEndScreenItem(
+        streamId: ids.first,
+        title: 'Up next: ${_short(ids.first)}',
+        badge: 'Next',
+      ),
+      items: [
+        for (final (i, id) in ids.skip(1).indexed)
+          EYZFlowEndScreenItem(
+            streamId: id,
+            title: 'Film ${i + 1} (${_short(id)})',
+            duration: Duration(minutes: 80 + i * 12),
+          ),
+      ],
+      onSelect: (selection) => _add(
+        'end screen picked ${selection.item.streamId}'
+        '${selection.autoplay ? ' (autoplay)' : ''}',
       ),
     );
   }
@@ -172,6 +210,7 @@ class _LoaderPageState extends State<LoaderPage> {
       _apiOrigin,
       _castReceiver,
       _startAt,
+      _endScreenIds,
     ]) {
       c.dispose();
     }
@@ -259,6 +298,11 @@ class _LoaderPageState extends State<LoaderPage> {
             _castReceiver,
             'Cast receiver app id',
             helper: 'Google Cast console; else the config\'s. Films need one',
+          ),
+          _field(
+            _endScreenIds,
+            'End screen stream IDs',
+            helper: 'Comma-separated: the first is Up next, the rest the row',
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,

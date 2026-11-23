@@ -36,7 +36,7 @@ final class PlaybackEventEmitter {
     this.explicitSeekGrace = const Duration(seconds: 10),
   }) : _clock = clock ?? _monotonicClock();
 
-  /// `EyzflowSource.id`, stamped on every event.
+  /// `EYZFlowSource.id`, stamped on every event.
   final String sourceId;
 
   /// Where events go. While this is `null` the emitter does nothing at all —
@@ -253,6 +253,32 @@ final class PlaybackEventEmitter {
         sourceId: sourceId,
         position: _at,
         duration: _duration,
+      ),
+    );
+  }
+
+  /// Playback entered [signal].
+  void signalStarted(StreamSignal signal) {
+    if (_isSilent) return;
+    _emit(
+      PlaybackSignalStarted(
+        sourceId: sourceId,
+        position: _at,
+        duration: _duration,
+        signal: signal,
+      ),
+    );
+  }
+
+  /// Playback left [signal].
+  void signalEnded(StreamSignal signal) {
+    if (_isSilent) return;
+    _emit(
+      PlaybackSignalEnded(
+        sourceId: sourceId,
+        position: _at,
+        duration: _duration,
+        signal: signal,
       ),
     );
   }

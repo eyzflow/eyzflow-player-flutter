@@ -16,7 +16,7 @@ import 'package:http/testing.dart';
 import 'support/fake_ad_player.dart';
 
 const VideoplayerTarget _film = VideoplayerTrailerTarget(
-  EyzflowSource(id: 'film', title: 'Film'),
+  EYZFlowSource(id: 'film', title: 'Film'),
 );
 const String _tag = 'https://ads.example/tag';
 

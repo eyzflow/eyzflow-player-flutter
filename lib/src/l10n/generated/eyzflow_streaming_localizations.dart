@@ -261,6 +261,66 @@ abstract class EYZFlowStreamingLocalizations {
   /// **'Ad in {seconds}'**
   String adCountdown(int seconds);
 
+  /// Button that jumps past the intro marked on the stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip intro'**
+  String get skipIntro;
+
+  /// Button that jumps past the recap ("previously on") marked on the stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip recap'**
+  String get skipRecap;
+
+  /// Button that jumps past the opening credits marked on the stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip credits'**
+  String get skipOpeningCredits;
+
+  /// Button that jumps past the closing credits marked on the stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip credits'**
+  String get skipClosingCredits;
+
+  /// End screen: the heading of the next stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Up next'**
+  String get endScreenUpNext;
+
+  /// End screen: the play button while it counts down to the next stream.
+  ///
+  /// In en, this message translates to:
+  /// **'Next in {seconds}'**
+  String endScreenNextIn(int seconds);
+
+  /// End screen: play the next stream now.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get endScreenPlay;
+
+  /// End screen: stop the countdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get endScreenCancel;
+
+  /// End screen: the heading of the row of films.
+  ///
+  /// In en, this message translates to:
+  /// **'More like this'**
+  String get endScreenMoreLikeThis;
+
+  /// End screen: hide it and watch the credits.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to credits'**
+  String get endScreenBackToCredits;
+
   /// Label over a playing ad on TV: its place in the ad break.
   ///
   /// In en, this message translates to:

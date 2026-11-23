@@ -8,7 +8,7 @@ import 'cast_controller.dart';
 /// to do when there are none. Returns the picked TV, or null.
 Future<CastTarget?> showCastPicker(
   BuildContext context,
-  EyzflowCastController cast,
+  EYZFlowCastController cast,
 ) {
   if (!cast.scanning) cast.scan();
   return showModalBottomSheet<CastTarget>(

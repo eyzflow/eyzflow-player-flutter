@@ -99,7 +99,7 @@ String? focusedRow(WidgetTester tester, List<String> labels) {
 }
 
 /// Shows the player in German: track names come from its built-in table.
-Future<void> _loadGermanNames() async => setEyzflowPlayerLanguage('de');
+Future<void> _loadGermanNames() async => setEYZFlowPlayerLanguage('de');
 
 /// Dispatches the tracks that put the audio and subtitle buttons on screen.
 /// Each button hides when its panel would have nothing to offer, so a test
@@ -116,8 +116,8 @@ void _loadTracks(PlayerControlsBloc bloc) => bloc.add(
 void main() {
   // Static tables, so a test that loads them would otherwise change what the
   // tests after it render.
-  setUp(() => setEyzflowPlayerLanguage('en'));
-  tearDown(() => setEyzflowPlayerLanguage(null));
+  setUp(() => setEYZFlowPlayerLanguage('en'));
+  tearDown(() => setEYZFlowPlayerLanguage(null));
 
   testWidgets('renders transport controls and the title', (tester) async {
     final bloc = _bloc(_FakePlayback());

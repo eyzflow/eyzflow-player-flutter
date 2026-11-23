@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import '../core/source.dart';
+import '../core/usage_reporter.dart';
+import '../end_screen/end_screen.dart';
 import '../player/playback_event.dart';
 import '../player/playback_target.dart';
 import '../player/watch_progress_recorder.dart';
@@ -27,10 +29,10 @@ import 'device_context.dart';
 import 'error_view.dart';
 import 'playback_coordinator.dart';
 
-typedef EyzflowPlayerErrorBuilder =
+typedef EYZFlowPlayerErrorBuilder =
     Widget Function(
       BuildContext context,
-      EyzflowPlayerFailure failure,
+      EYZFlowPlayerFailure failure,
       VoidCallback close,
     );
 
@@ -43,10 +45,10 @@ typedef EyzflowPlayerErrorBuilder =
 /// ```dart
 /// Navigator.of(context).push(MaterialPageRoute<void>(
 ///   fullscreenDialog: true,
-///   builder: (_) => EyzflowPlayer(
+///   builder: (_) => EYZFlowPlayer(
 ///     streamId: streamId,
 ///     title: title,
-///     sourceType: EyzflowFilm(catalogueId),
+///     sourceType: EYZFlowFilm(catalogueId),
 ///     drmAuthorization: 'Bearer $accessToken',
 ///     storefrontId: storefrontId,
 ///     playerKey: 'pk_…',
@@ -54,8 +56,8 @@ typedef EyzflowPlayerErrorBuilder =
 ///   ),
 /// ));
 /// ```
-class EyzflowPlayer extends StatefulWidget {
-  const EyzflowPlayer({
+class EYZFlowPlayer extends StatefulWidget {
+  const EYZFlowPlayer({
     super.key,
     required this.streamId,
     required this.title,
@@ -70,6 +72,7 @@ class EyzflowPlayer extends StatefulWidget {
     this.drmAuthorization,
     this.storefrontId,
     this.drmParameters = const {},
+    this.offerId,
     this.deviceName,
     this.appId,
     this.analytics = true,
@@ -79,13 +82,17 @@ class EyzflowPlayer extends StatefulWidget {
     this.onLicenseError,
     this.onError,
     this.onReady,
+    this.onSignal,
+    this.endScreen,
+    this.overlayBuilder,
     this.onCloseRequested,
     this.onPlaybackEvent,
     this.errorBuilder,
-    this.endpoints = const EyzflowEndpoints(),
+    this.endpoints = const EYZFlowEndpoints(),
     this.httpClient,
     this.deviceIdStore,
     this.beatSender,
+    this.usageSender,
     this.playerBuilder,
     this.castReceiverAppId,
     this.enableCast = true,
@@ -99,9 +106,9 @@ class EyzflowPlayer extends StatefulWidget {
   final String? description;
   final Uri? poster;
 
-  /// [EyzflowFilm] plays with DRM and a playback session;
-  /// [EyzflowTrailer] (or null) plays without either.
-  final EyzflowSourceType? sourceType;
+  /// [EYZFlowFilm] plays with DRM and a playback session;
+  /// [EYZFlowTrailer] (or null) plays without either.
+  final EYZFlowSourceType? sourceType;
 
   /// Where to resume, in seconds.
   final double? progressSeconds;
@@ -139,6 +146,12 @@ class EyzflowPlayer extends StatefulWidget {
   /// over the config's `drm.parameters`; these win.
   final Map<String, Object?> drmParameters;
 
+  /// The offer (film or episode) [streamId] plays. With [drmAuthorization]
+  /// and a storefront, the player reports the seconds the viewer watched for
+  /// licensor royalties. Trailers, and a film the end screen picked, report
+  /// nothing.
+  final String? offerId;
+
   /// Shown in the viewer's device list, e.g. "Living room TV".
   final String? deviceName;
 
@@ -155,7 +168,7 @@ class EyzflowPlayer extends StatefulWidget {
 
   /// The language of the player's own text (`en`, `de`, `fr`, `nl`), e.g.
   /// the storefront's. Null keeps [eyzflowPlayerLanguage]: the one set with
-  /// [setEyzflowPlayerLanguage], else the device's.
+  /// [setEYZFlowPlayerLanguage], else the device's.
   final String? language;
 
   final ValueChanged<PlaybackLimitError>? onLimitReached;
@@ -167,6 +180,25 @@ class EyzflowPlayer extends StatefulWidget {
   /// The player is initialized.
   final VoidCallback? onReady;
 
+  /// Playback entered an intro, recap or credits signal marked on the stream
+  /// (Stream → Signals), or left one (null). For example, offer the next
+  /// episode when [StreamSignalType.closingCredits] starts. The same as the
+  /// [PlaybackSignalStarted] and [PlaybackSignalEnded] events.
+  final ValueChanged<StreamSignal?>? onSignal;
+
+  /// The built-in end screen: "Up next" with a countdown and a row of films
+  /// you pass, over the closing credits (the video shrunk into a corner) or
+  /// after the film. A picked film plays in place, with its own key check,
+  /// session and DRM; [EYZFlowEndScreen.onSelect] hears it and can prevent
+  /// it. The config's `features.endScreen` and `endScreen` settings apply
+  /// where it leaves them out.
+  final EYZFlowEndScreen? endScreen;
+
+  /// Your own UI over the player at a signal or after the end, e.g. similar
+  /// films at the closing credits. It wins over [endScreen] when it returns a
+  /// widget.
+  final PlayerOverlayBuilder? overlayBuilder;
+
   /// Closing; [Navigator.pop] when null.
   final VoidCallback? onCloseRequested;
 
@@ -174,16 +206,19 @@ class EyzflowPlayer extends StatefulWidget {
   final PlaybackEventCallback? onPlaybackEvent;
 
   /// Replaces the built-in failure screen.
-  final EyzflowPlayerErrorBuilder? errorBuilder;
+  final EYZFlowPlayerErrorBuilder? errorBuilder;
 
   /// Moves the key check, sessions and beats. Stream and DRM licence URLs come
-  /// from [EyzflowSource] and stay on production.
-  final EyzflowEndpoints endpoints;
+  /// from [EYZFlowSource] and stay on production.
+  final EYZFlowEndpoints endpoints;
   final http.Client? httpClient;
   final DeviceIdStore? deviceIdStore;
 
   /// Replaces the beat upload, e.g. to log beats in a test app.
   final BeatSender? beatSender;
+
+  /// Replaces the royalty report upload, e.g. to log reports in a test app.
+  final UsageSender? usageSender;
 
   /// Replaces the player surface, as [VideoplayerFeatureView.playerBuilder]
   /// does. A test seam.
@@ -207,33 +242,57 @@ class EyzflowPlayer extends StatefulWidget {
   /// production reads the real platform.
   final String? debugOperatingSystemOverride;
 
-  bool get _isProtected => sourceType is EyzflowFilm;
-
   @override
-  State<EyzflowPlayer> createState() => _EyzflowPlayerState();
+  State<EYZFlowPlayer> createState() => _EYZFlowPlayerState();
 }
 
-class _EyzflowPlayerState extends State<EyzflowPlayer> {
+class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
   PlaybackCoordinator? _coordinator;
   http.Client? _ownedClient;
   WatchProgressRecorder? _recorder;
-  EyzflowSource? _source;
+  EYZFlowSource? _source;
   late final AppLifecycleListener _lifecycle;
 
   /// Chromecast, on phones and tablets.
-  EyzflowCastController? _cast;
+  EYZFlowCastController? _cast;
 
   /// Bumped to mount a fresh player, e.g. when casting hands playback back.
   var _playerGeneration = 0;
   CastPlayerState? _castPlayerState;
   var _closing = false;
 
-  /// The config playback started with: [EyzflowPlayer.configId]'s, under the
-  /// inline [EyzflowPlayer.config].
+  /// The config playback started with: [EYZFlowPlayer.configId]'s, under the
+  /// inline [EYZFlowPlayer.config].
   PlayerConfig _config = PlayerConfig.defaults;
+
+  /// A film the end screen picked: it plays in place of `widget.streamId`
+  /// until the app passes another one.
+  EYZFlowEndScreenItem? _picked;
+
+  String get _streamId => _picked?.streamId ?? widget.streamId;
+
+  EYZFlowSourceType? get _sourceType {
+    final EYZFlowEndScreenItem? picked = _picked;
+    if (picked == null) return widget.sourceType;
+    return picked.sourceType ??
+        (widget.sourceType is EYZFlowFilm
+            ? EYZFlowFilm(picked.streamId)
+            : EYZFlowTrailer(picked.streamId));
+  }
+
+  bool get _isProtected => _sourceType is EYZFlowFilm;
+
+  /// Plays an end screen item in place: a new key check, session and DRM.
+  void _pick(EYZFlowEndScreenItem item) {
+    if (!mounted) return;
+    setState(() => _picked = item);
+    _stop();
+    unawaited(_start());
+  }
+
   PlayerOptions _options = const PlayerOptions();
 
-  /// The config [EyzflowPlayer.configId] loaded, if any.
+  /// The config [EYZFlowPlayer.configId] loaded, if any.
   PlayerConfig? _remoteConfig;
 
   /// The receiver films cast to: the widget's, else the config's.
@@ -244,7 +303,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   void initState() {
     super.initState();
     final String? language = widget.language;
-    if (language != null) setEyzflowPlayerLanguage(language);
+    if (language != null) setEYZFlowPlayerLanguage(language);
     _lifecycle = AppLifecycleListener(
       onHide: () => _coordinator?.onBackgrounded(),
     );
@@ -252,13 +311,15 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   }
 
   @override
-  void didUpdateWidget(EyzflowPlayer old) {
+  void didUpdateWidget(EYZFlowPlayer old) {
     super.didUpdateWidget(old);
     final w = widget;
+    if (w.streamId != old.streamId) _picked = null;
     if (w.streamId != old.streamId ||
         w.playerKey != old.playerKey ||
         w.drmAuthorization != old.drmAuthorization ||
         w.storefrontId != old.storefrontId ||
+        w.offerId != old.offerId ||
         w.configId != old.configId ||
         w.sourceType != old.sourceType) {
       _stop();
@@ -298,7 +359,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
       os: widget.debugOperatingSystemOverride,
     );
     if (platform == PlayerPlatform.android || platform == PlayerPlatform.ios) {
-      _cast = EyzflowCastController(
+      _cast = EYZFlowCastController(
         backend: widget.castBackend ?? const NativeCastBackend(),
         onPlayback: _onCastPlayback,
         onEnded: _onCastEnded,
@@ -348,8 +409,8 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
     final String? storefrontId = w.storefrontId ?? config.drm?.storefrontId;
     final coordinator = PlaybackCoordinator(
       config: PlaybackCoordinatorConfig(
-        streamId: w.streamId,
-        isProtected: w._isProtected,
+        streamId: _streamId,
+        isProtected: _isProtected,
         playerKey: w.playerKey,
         configId: w.configId,
         drmAuthorization: w.drmAuthorization,
@@ -361,6 +422,9 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
             ? PlayerApp(platform: platform, id: appId)
             : null,
         analytics: w.analytics,
+        // A film the end screen picked is another offer: it reports nothing.
+        offerId: _isProtected && _picked == null ? w.offerId : null,
+        catalogueId: _sourceType?.catalogueId,
       ),
       licenseClient: PlayerLicenseClient(
         client: client,
@@ -373,6 +437,9 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
       beatSender:
           w.beatSender ??
           HttpBeatSender(client: client, endpoints: w.endpoints).call,
+      usageSender:
+          w.usageSender ??
+          HttpUsageSender(client: client, endpoints: w.endpoints).call,
       deviceIdStore: w.deviceIdStore ?? SharedPreferencesDeviceIdStore(),
       onLimitReached: (error) => widget.onLimitReached?.call(error),
       onLicenseError: (error) => widget.onLicenseError?.call(error),
@@ -389,20 +456,20 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   void _onStatus() {
     final coordinator = _coordinator;
     if (coordinator == null || !mounted) return;
-    if (coordinator.status case EyzflowPlayerReady(
+    if (coordinator.status case EYZFlowPlayerReady(
       :final drmAccessHeader,
       :final planAds,
       :final adTargeting,
     )) {
       final w = widget;
-      final source = EyzflowSource(
-        id: w.streamId,
-        title: w.title,
-        description: w.description,
-        poster: w.poster,
+      final source = EYZFlowSource(
+        id: _streamId,
+        title: _picked?.title ?? w.title,
+        description: _picked != null ? _picked!.description : w.description,
+        poster: _picked != null ? _picked!.poster : w.poster,
         drmAccessHeader: drmAccessHeader,
-        sourceType: w.sourceType,
-        progressSeconds: w.progressSeconds,
+        sourceType: _sourceType,
+        progressSeconds: _picked != null ? null : w.progressSeconds,
       );
       final store = w.watchProgressStore;
       final firstReady = _source == null;
@@ -420,7 +487,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
       }
       _source = source;
       if (firstReady) unawaited(_cast?.scan());
-      _recorder = store != null && w._isProtected
+      _recorder = store != null && _isProtected
           ? WatchProgressRecorder(
               store: store,
               target: VideoplayerSourceTarget(source),
@@ -433,6 +500,8 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   void _onEvent(PlaybackEvent event) {
     _coordinator?.onPlaybackEvent(event);
     if (event is PlaybackReady) widget.onReady?.call();
+    if (event is PlaybackSignalEnded) widget.onSignal?.call(null);
+    if (event is PlaybackSignalStarted) widget.onSignal?.call(event.signal);
     widget.onPlaybackEvent?.call(event);
   }
 
@@ -441,7 +510,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   bool get _castAvailable {
     final cast = _cast;
     if (cast == null || cast.devices.isEmpty) return false;
-    return !widget._isProtected || _castReceiverAppId != null;
+    return !_isProtected || _castReceiverAppId != null;
   }
 
   void _onCastChanged() {
@@ -541,7 +610,7 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
     if (_closing) return;
     // The phone takes over where the TV was.
     setState(() {
-      _source = EyzflowSource(
+      _source = EYZFlowSource(
         id: source.id,
         title: source.title,
         description: source.description,
@@ -598,18 +667,18 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
   @override
   Widget build(BuildContext context) {
     final coordinator = _coordinator;
-    final status = coordinator?.status ?? const EyzflowPlayerLoading();
+    final status = coordinator?.status ?? const EYZFlowPlayerLoading();
     switch (status) {
-      case EyzflowPlayerLoading():
+      case EYZFlowPlayerLoading():
         return const _Loading();
-      case EyzflowPlayerFailed(:final failure):
+      case EYZFlowPlayerFailed(:final failure):
         return widget.errorBuilder?.call(context, failure, _close) ??
-            EyzflowErrorView(
+            EYZFlowErrorView(
               message: failure.message,
               isTv: widget.isTv,
               onClose: _close,
             );
-      case EyzflowPlayerReady():
+      case EYZFlowPlayerReady():
         final source = _source;
         if (source == null) return const _Loading();
         final cast = _cast;
@@ -621,18 +690,24 @@ class _EyzflowPlayerState extends State<EyzflowPlayer> {
             onClose: _closeWhileCasting,
           );
         }
-        return VideoplayerFeatureView(
-          key: ValueKey((coordinator, _playerGeneration)),
-          videoSource: source,
-          isTv: widget.isTv,
-          watchProgressRecorder: _recorder,
-          onCloseRequested: _close,
-          onPlaybackEvent: _onEvent,
-          playerBuilder: widget.playerBuilder,
-          debugOperatingSystemOverride: widget.debugOperatingSystemOverride,
-          castAvailable: _castAvailable,
-          onCastRequested: _onCastRequested,
-          options: _options,
+        return PlayerOverlayScope(
+          settings: EndScreenSettings.resolve(_config, widget.endScreen),
+          endScreen: widget.endScreen,
+          overlayBuilder: widget.overlayBuilder,
+          onPick: _pick,
+          child: VideoplayerFeatureView(
+            key: ValueKey((coordinator, _playerGeneration)),
+            videoSource: source,
+            isTv: widget.isTv,
+            watchProgressRecorder: _recorder,
+            onCloseRequested: _close,
+            onPlaybackEvent: _onEvent,
+            playerBuilder: widget.playerBuilder,
+            debugOperatingSystemOverride: widget.debugOperatingSystemOverride,
+            castAvailable: _castAvailable,
+            onCastRequested: _onCastRequested,
+            options: _options,
+          ),
         );
     }
   }

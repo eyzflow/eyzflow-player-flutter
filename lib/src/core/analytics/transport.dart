@@ -17,11 +17,11 @@ typedef BeatSender = Future<bool> Function(Beat beat);
 final class HttpBeatSender {
   HttpBeatSender({
     http.Client? client,
-    this.endpoints = const EyzflowEndpoints(),
+    this.endpoints = const EYZFlowEndpoints(),
   }) : _client = client ?? http.Client();
 
   final http.Client _client;
-  final EyzflowEndpoints endpoints;
+  final EYZFlowEndpoints endpoints;
 
   Future<bool> call(Beat beat) async {
     try {

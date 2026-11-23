@@ -13,6 +13,55 @@
     mid-roll or post-roll, and the pre-roll plays before the film loads.
   - New dependency: `xml`.
 
+## 0.5.1
+
+- Royalty usage (EYF-231): with `offerId`, `drmAuthorization` and a
+  storefront, a film reports the seconds the viewer watched to
+  `playback-events` for licensor royalties: every 30 s while playing, on a
+  pause, at the end, when the app goes to the background and when the player
+  closes. Ads, pauses, seeks and stalls don't count, and it works with or
+  without a player key. `PlaybackCoordinatorConfig` takes `offerId` and
+  `catalogueId`; `UsageReporter`, `HttpUsageSender` and `usageSender` are
+  public.
+
+## 0.5.0
+
+- Renamed (EYF-225): every public `Eyzflow…` name is now spelled `EYZFlow…`
+  to match the product, e.g. `EYZFlowPlayer`, `EYZFlowSource`, `EYZFlowFilm`,
+  `EYZFlowEndpoints`, `EYZFlowPlayerStatus` and `setEYZFlowPlayerLanguage`.
+  The old names still work as deprecated aliases and are removed in 0.6.0.
+  The package name `eyzflow_player` is unchanged. The native plugin classes
+  are now `EYZFlowPlayerPlugin`; Flutter regenerates the registrant on the
+  next build.
+
+## 0.4.0
+
+- Skip intro, recap and credits (EYF-214). The signals marked on a stream
+  (Stream → Signals) are read from its HLS playlist, on every route. While
+  playback is in one, a "Skip intro", "Skip recap" or "Skip credits" button
+  shows: tapped on phones and tablets; on TV it holds focus while the
+  controls are hidden, so OK skips. `features.skipButtons: false` hides it.
+  The button takes the config's theme. Text in en, de, fr and nl.
+- New playback events `PlaybackSignalStarted` and `PlaybackSignalEnded`, and
+  `EYZFlowPlayer.onSignal`, for offering the next episode at the closing
+  credits. `PlaybackEvent` is sealed: an exhaustive `switch` over it needs
+  the two new cases.
+- The stream's playlist is now read once per playback for its markers even
+  without ads; `loadHlsAdBreaks` is replaced by `loadHlsMarkers`.
+- `skipButtonTypes` (EYF-223): the skip button per signal type, from the
+  player config or inline. By default intro, recap and opening credits; no
+  "Skip credits" over the closing credits unless `closingCredits: true`.
+- An end screen (EYF-222): `EYZFlowPlayer.endScreen` shows "Up next" with a
+  countdown and a row of films the app passes, at the closing credits (the
+  video shrunk into a corner) or after the film; a picked film plays in
+  place with its own key check, session and DRM (`onSelect` can prevent it).
+  On TV it takes the remote's focus. A stream without a closing credits
+  signal gets it `secondsBeforeEnd` seconds before the end (default 20). The
+  config's `features.endScreen` and `endScreen` settings apply.
+  `overlayBuilder` draws the app's own UI instead. When it appears in native
+  full screen the player leaves full screen, and at the end of the film it
+  stays open on the end screen. Texts in en, de, fr and nl.
+
 ## 0.3.0
 
 - Ads follow the viewer's plan (EYF-210). The playback session's `ads` and

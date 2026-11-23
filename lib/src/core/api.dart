@@ -3,8 +3,8 @@ library;
 
 /// The EYZFlow origins the player talks to. Production by default; a host
 /// points them at a dev or staging stack for testing.
-final class EyzflowEndpoints {
-  const EyzflowEndpoints({
+final class EYZFlowEndpoints {
+  const EYZFlowEndpoints({
     this.api = 'https://api.eyzflow.com',
     this.streamCdn = 'https://stream.eyzflow.com',
   });
@@ -13,7 +13,7 @@ final class EyzflowEndpoints {
   final String api;
 
   /// Manifests, segments and the FairPlay certificate. Kept for parity with
-  /// the web player; the player builds its stream URLs from `EyzflowSource`.
+  /// the web player; the player builds its stream URLs from `EYZFlowSource`.
   final String streamCdn;
 
   Uri apiUri(String path) => Uri.parse('${_trim(api)}$path');
@@ -23,8 +23,8 @@ final class EyzflowEndpoints {
 }
 
 /// This library's version, sent with licence checks and beats. Prefixed so
-/// the backend can tell app players from the web player (`0.3.0`).
-const String eyzflowPlayerVersion = 'flutter/0.3.0';
+/// the backend can tell app players from the web player (`0.5.1`).
+const String eyzflowPlayerVersion = 'flutter/0.5.1';
 
 /// Where the player runs, as playback sessions, licence checks and beats name
 /// it. The wire values are the backend's (`playback-sessions.controller.ts`).

@@ -22,15 +22,16 @@ import 'package:eyzflow_player/eyzflow_player.dart';
 
 Navigator.of(context).push(MaterialPageRoute<void>(
   fullscreenDialog: true,
-  builder: (_) => EyzflowPlayer(
+  builder: (_) => EYZFlowPlayer(
     streamId: streamId,                       // not the catalogue id
     title: title,
-    sourceType: EyzflowFilm(catalogueId),     // or EyzflowTrailer(…)
+    sourceType: EYZFlowFilm(catalogueId),     // or EYZFlowTrailer(…)
     progressSeconds: resumeAt,
     isTv: isTv,
     drmAuthorization: 'Bearer $cognitoAccessToken',
     storefrontId: storefront.id,
     drmParameters: const {'source': 'internal'},
+    offerId: offer.id,                        // royalties: see below
     playerKey: 'pk_…',                        // optional
     configId: 'cfg_…',                        // optional: dashboard player config
     watchProgressStore: myWatchHistory,       // optional: see below
@@ -80,10 +81,10 @@ Without `playerKey` there is no key check and no beats. Without `storefrontId`
 ### Viewer messages
 
 The player's own copy (controls, playback errors) is localized in en, de, fr
-and nl (`EyzflowPlayer(language:)` or `setEyzflowPlayerLanguage`, else the
+and nl (`EYZFlowPlayer(language:)` or `setEYZFlowPlayerLanguage`, else the
 device's language). Track names in the TV audio and subtitle panels come from
 a built-in table (Unicode CLDR) in the same language: "Deutsch" for `de`,
-`deu`, `ger` or `de_DE`; set `EyzflowLanguageNames.resolver` to use your own.
+`deu`, `ger` or `de_DE`; set `EYZFlowLanguageNames.resolver` to use your own.
 The limit and key messages are the web
 player's, in English; replace the error screen with `errorBuilder` to show
 your own (the failure carries its code).
@@ -241,11 +242,11 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 
 | Field | Phones | Android TV | Tizen |
 |---|---|---|---|
-| `theme.accentColor` | – | focused control, progress bar | same |
-| `theme.textColor` | – | title, times, icons, track rows | same |
+| `theme.accentColor` | – | focused control (the skip button too), progress bar | same |
+| `theme.textColor` | skip button text | title, times, icons, track rows | same |
 | `theme.backgroundColor` | – | audio/subtitle panel | same |
-| `theme.controlsBarColor` | – | shade behind the controls | same |
-| `theme.borderRadius` (px) | – | track rows, focused progress bar | same |
+| `theme.controlsBarColor` | skip button | shade behind the controls | same |
+| `theme.borderRadius` (px) | skip button | track rows, focused progress bar, skip button | same |
 | `features.controls` | – (the native controls hold Close) | false: no overlay; Back closes, OK plays/pauses, left/right and media keys skip | same |
 | `features.autoHideControls` | – | false: the overlay stays up | same |
 | `features.captions` | – (the native menu offers subtitles) | false: no subtitles, none offered | same |
@@ -257,6 +258,9 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 | `features.ads`, `ads.adTagUrl` | ads through Google IMA, see [Ads](#ads) | same | ads played by the player itself, see [Ads](#ads) |
 | `features.adCountdown` | false: no "Ad in 5" notice before a mid-roll | same | same |
 | `ads.countdownSeconds` | the notice's length, 1–30 s (default 5) | same | same |
+| `features.skipButtons` | false: no "Skip intro / recap / credits" button (the signal events still come) | same | same |
+| `skipButtonTypes.*` | `intro`, `recap`, `openingCredits`, `closingCredits`: which signals get a skip button (default: all but closing credits) | same | same |
+| `features.endScreen`, `endScreen.*` | false: no end screen; `autoplaySeconds` (0–30), `showAt` (`credits`/`end`), `shrinkVideo`, `secondsBeforeEnd` (0–120, without closing credits) tune it | same | same |
 | `drm.parameters` | into the DRM `access-token`; `storefront_id` also opens the playback session | same | same |
 
 Not honoured anywhere in the apps:
@@ -268,7 +272,7 @@ Not honoured anywhere in the apps:
 - `features.qualitySelector`: the app players have no quality menu.
 - `cast.androidReceiverCompatible`, `cast.autoJoinPolicy`: options of the
   web Cast SDK.
-- `isProtected`: the source type decides (`EyzflowFilm` plays with DRM).
+- `isProtected`: the source type decides (`EYZFlowFilm` plays with DRM).
 
 Without a config (or when it cannot be loaded) the TV overlay keeps its own
 white-on-black look; the dashboard's default purple applies only when a
@@ -287,6 +291,33 @@ The pieces are exported for hosts that drive playback themselves:
 `PlaybackEventAdapter` and `PlaybackCoordinator`. The code under
 `lib/src/core` imports no Flutter.
 
+## End screen
+
+Pass the films; the player shows them Netflix-style at the closing credits
+(the video shrinks into a corner) or after the film, counts down to the next
+stream and plays a picked one in place:
+
+```dart
+EYZFlowPlayer(
+  streamId: episode.streamId,
+  title: episode.title,
+  endScreen: EYZFlowEndScreen(
+    nextUp: EYZFlowEndScreenItem(streamId: next.streamId, title: next.title, poster: next.poster),
+    items: [
+      for (final f in similar)
+        EYZFlowEndScreenItem(streamId: f.streamId, title: f.title, poster: f.poster, duration: f.length),
+    ],
+    onSelect: (selection) => router.replaceWatch(selection.item.streamId),
+  ),
+)
+```
+
+`onSelect` can call `preventDefault()` to handle the pick itself.
+`itemBuilder` draws a film your way, `title` renames the row, and the
+config's theme styles it. On TV it takes the remote's focus. For a layout of
+your own, `overlayBuilder` is asked at each signal and after the end, and
+wins when it returns a widget. See [doc/player.md](doc/player.md#end-screen-and-overlays).
+
 ## Layout
 
 ```
@@ -295,7 +326,7 @@ lib/src/videoplayer_feature.dart, bloc/, player/, l10n/
                              the player
 lib/src/core/                key check, sessions, access token, beats, player
                              configs (pure Dart)
-lib/src/flutter/             EyzflowPlayer, the coordinator, the error screen
+lib/src/flutter/             EYZFlowPlayer, the coordinator, the error screen
 lib/src/native/, android/, ios/
                              the native player for Android and iOS, based on
                              better_native_video_player (MIT, see
@@ -326,10 +357,29 @@ final class MyWatchHistory implements WatchProgressStore {
 A failed save is logged and never interrupts playback. Trailers record
 nothing.
 
+### Royalties
+
+Licensor royalties are counted from the seconds viewers watch. With
+`offerId` (the film or episode played), `drmAuthorization` and a storefront,
+the player reports them itself to
+`POST /v1/content/storefront/{storefrontId}/playback-events`: every 30
+seconds while the film plays, at once on a pause, at the end and when the app
+goes to the background, and a last time when the player closes. Only time
+spent playing the film counts: not ads, pauses, seeks or stalls. Each report
+carries the seconds since the previous one (at most 120) and one session id
+per playback; seconds a report could not deliver go with the next one. The
+film's catalogue id goes with it.
+
+Trailers, and a film the end screen picked, report nothing. It works with or
+without a player key and analytics, on every platform (Tizen included). An
+app that sends these events itself should stop once it passes `offerId`, or
+the seconds are counted twice. `usageSender` replaces the upload, e.g. to log
+reports in a test app.
+
 ## Host setup
 
-1. Optionally set the player's language (`EyzflowPlayer(language:)`, or
-   `setEyzflowPlayerLanguage` before building a `VideoplayerFeatureView`);
+1. Optionally set the player's language (`EYZFlowPlayer(language:)`, or
+   `setEYZFlowPlayerLanguage` before building a `VideoplayerFeatureView`);
    without it the device's language is used when the player has it.
 2. Pass `isTv`. The package does not detect the form factor. On Android it
    picks the D-pad overlay and the `androidtv` platform; Tizen always plays
@@ -376,7 +426,7 @@ nothing.
    nothing extra.
 
 `endpoints` moves the key check, sessions and beats (for a dev backend). Stream
-and DRM licence URLs come from `EyzflowSource` and stay on production, so a dev
+and DRM licence URLs come from `EYZFlowSource` and stay on production, so a dev
 session id would not match the production licence gate.
 
 ## Known limits (v1)

@@ -16,7 +16,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: VideoplayerFeatureView(
-          videoSource: const EyzflowSource(id: 'film', title: 'Film'),
+          videoSource: const EYZFlowSource(id: 'film', title: 'Film'),
           debugOperatingSystemOverride: 'android',
           playerBuilder: (context, _) {
             bloc = context.read<VideoplayerFeatureBloc>();
@@ -40,7 +40,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: VideoplayerFeatureView(
-          videoSource: const EyzflowSource(id: 'film', title: 'Film'),
+          videoSource: const EYZFlowSource(id: 'film', title: 'Film'),
           debugOperatingSystemOverride: 'android',
           playerBuilder: (context, _) {
             bloc = context.read<VideoplayerFeatureBloc>();
@@ -86,7 +86,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: VideoplayerFeatureView(
-            videoSource: const EyzflowSource(id: 'film', title: 'Film'),
+            videoSource: const EYZFlowSource(id: 'film', title: 'Film'),
             playerBuilder: _fakePlayerBuilder,
           ),
         ),
@@ -135,7 +135,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: VideoplayerFeatureView(
-            videoSource: const EyzflowSource(id: 'film', title: 'Film'),
+            videoSource: const EYZFlowSource(id: 'film', title: 'Film'),
             playerBuilder: _fakePlayerBuilder,
             isTv: scenario.isTv,
           ),
@@ -151,10 +151,10 @@ void main() {
   test(
     'VideoplayerFeatureView routes a Trailer source to a trailer target',
     () {
-      const source = EyzflowSource(
+      const source = EYZFlowSource(
         id: 'trailer-a',
         title: 'Trailer A',
-        sourceType: EyzflowTrailer('catalogue-1'),
+        sourceType: EYZFlowTrailer('catalogue-1'),
       );
 
       final view = VideoplayerFeatureView(videoSource: source);
@@ -165,7 +165,7 @@ void main() {
 
   test('VideoplayerFeatureView routes a legacy source with no sourceType to a '
       'trailer target', () {
-    const source = EyzflowSource(id: 'legacy-stream', title: 'Legacy');
+    const source = EYZFlowSource(id: 'legacy-stream', title: 'Legacy');
 
     final view = VideoplayerFeatureView(videoSource: source);
 
@@ -175,10 +175,10 @@ void main() {
   test(
     'VideoplayerFeatureView routes a FeatureLength source to a source target',
     () {
-      const source = EyzflowSource(
+      const source = EYZFlowSource(
         id: 'film-a',
         title: 'Film A',
-        sourceType: EyzflowFilm('title-a'),
+        sourceType: EYZFlowFilm('title-a'),
       );
 
       final view = VideoplayerFeatureView(videoSource: source);
@@ -188,7 +188,7 @@ void main() {
   );
 
   test('started event marks the player ready', () async {
-    const source = EyzflowSource(id: 'sample-stream', title: 'Sample Video');
+    const source = EYZFlowSource(id: 'sample-stream', title: 'Sample Video');
     final bloc = VideoplayerFeatureBloc(
       target: const VideoplayerTrailerTarget(source),
     );
@@ -210,7 +210,7 @@ void main() {
   });
 
   test('player error marks the player failed', () async {
-    const source = EyzflowSource(id: 'sample-stream', title: 'Sample Video');
+    const source = EYZFlowSource(id: 'sample-stream', title: 'Sample Video');
     final bloc = VideoplayerFeatureBloc(
       target: const VideoplayerTrailerTarget(source),
     );
@@ -240,7 +240,7 @@ void main() {
   testWidgets('renders injected player surface with video source', (
     tester,
   ) async {
-    const source = EyzflowSource(id: 'sample-stream', title: 'Sample Video');
+    const source = EYZFlowSource(id: 'sample-stream', title: 'Sample Video');
 
     await tester.pumpWidget(
       MaterialApp(
@@ -261,7 +261,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: VideoplayerFeatureView(
-          videoSource: const EyzflowSource(
+          videoSource: const EYZFlowSource(
             id: 'sample-stream',
             title: 'Sample Video',
           ),
@@ -303,10 +303,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: VideoplayerFeatureView(
-          videoSource: const EyzflowSource(
+          videoSource: const EYZFlowSource(
             id: 'film-a',
             title: 'Film A',
-            sourceType: EyzflowFilm('title-a'),
+            sourceType: EYZFlowFilm('title-a'),
           ),
           debugOperatingSystemOverride: 'ios',
           onCloseRequested: () => closeRequests += 1,
@@ -326,10 +326,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: VideoplayerFeatureView(
-          videoSource: const EyzflowSource(
+          videoSource: const EYZFlowSource(
             id: 'film-a',
             title: 'Film A',
-            sourceType: EyzflowFilm('title-a'),
+            sourceType: EYZFlowFilm('title-a'),
           ),
           playerBuilder: _fakePlayerBuilder,
           debugOperatingSystemOverride: 'tizen',
@@ -347,10 +347,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: VideoplayerFeatureView(
-          videoSource: const EyzflowSource(
+          videoSource: const EYZFlowSource(
             id: 'film-a',
             title: 'Film A',
-            sourceType: EyzflowFilm('title-a'),
+            sourceType: EYZFlowFilm('title-a'),
           ),
           playerBuilder: _fakePlayerBuilder,
           debugOperatingSystemOverride: 'android',
@@ -369,10 +369,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: VideoplayerFeatureView(
-          videoSource: const EyzflowSource(
+          videoSource: const EYZFlowSource(
             id: 'film-a',
             title: 'Film A',
-            sourceType: EyzflowFilm('title-a'),
+            sourceType: EYZFlowFilm('title-a'),
           ),
           playerBuilder: _fakePlayerBuilder,
           debugOperatingSystemOverride: 'android',
@@ -391,10 +391,10 @@ void main() {
     for (final String os in <String>['macos', 'windows']) {
       for (final VideoplayerTarget target in <VideoplayerTarget>[
         const VideoplayerTrailerTarget(
-          EyzflowSource(id: 'trailer-a', title: 'Trailer A'),
+          EYZFlowSource(id: 'trailer-a', title: 'Trailer A'),
         ),
         const VideoplayerSourceTarget(
-          EyzflowSource(id: 'film-a', title: 'Film A'),
+          EYZFlowSource(id: 'film-a', title: 'Film A'),
         ),
       ]) {
         await tester.pumpWidget(
@@ -423,7 +423,7 @@ void main() {
     tester,
   ) async {
     const VideoplayerTarget target = VideoplayerSourceTarget(
-      EyzflowSource(id: 'film-a', title: 'Film A'),
+      EYZFlowSource(id: 'film-a', title: 'Film A'),
     );
     void onPlaybackEvent(PlaybackEvent event) {}
     late BuildContext context;
@@ -462,7 +462,7 @@ void main() {
     );
     expect(
       VideoplayerFeatureView(
-        videoSource: const EyzflowSource(id: 'film', title: 'Film'),
+        videoSource: const EYZFlowSource(id: 'film', title: 'Film'),
         onPlaybackEvent: onPlaybackEvent,
       ).onPlaybackEvent,
       onPlaybackEvent,
@@ -475,11 +475,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: VideoplayerFeatureView(
-            videoSource: const EyzflowSource(
+            videoSource: const EYZFlowSource(
               id: 'film-a',
               title: 'Film A',
               drmAccessHeader: 'base64-drm-payload',
-              sourceType: EyzflowFilm('title-a'),
+              sourceType: EYZFlowFilm('title-a'),
             ),
           ),
         ),
@@ -506,10 +506,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: VideoplayerFeatureView(
-            videoSource: const EyzflowSource(
+            videoSource: const EYZFlowSource(
               id: 'film-a',
               title: 'Film A',
-              sourceType: EyzflowFilm('title-a'),
+              sourceType: EYZFlowFilm('title-a'),
             ),
             playerBuilder: _fakePlayerBuilder,
             debugOperatingSystemOverride: 'ios',
@@ -552,8 +552,8 @@ Widget _fakePlayerBuilder(BuildContext context, VideoplayerTarget target) {
 }
 
 void _useGermanStorefront() {
-  setEyzflowPlayerLanguage('de');
-  addTearDown(() => setEyzflowPlayerLanguage(null));
+  setEYZFlowPlayerLanguage('de');
+  addTearDown(() => setEYZFlowPlayerLanguage(null));
 }
 
 class _MountCounter extends StatefulWidget {
