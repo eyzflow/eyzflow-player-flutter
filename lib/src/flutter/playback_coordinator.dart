@@ -10,6 +10,7 @@ import '../core/api.dart';
 import '../core/device_id.dart';
 import '../core/playback_session.dart';
 import '../core/player_license.dart';
+import '../core/usage_reporter.dart';
 import 'event_adapter.dart';
 
 /// Why the player stopped or did not start, as the error screen shows it.
@@ -91,6 +92,8 @@ final class PlaybackCoordinatorConfig {
     this.app,
     this.platform,
     this.analytics = true,
+    this.offerId,
+    this.catalogueId,
   });
 
   final String streamId;
@@ -114,6 +117,31 @@ final class PlaybackCoordinatorConfig {
 
   /// False turns beats off even when the key has analytics on.
   final bool analytics;
+
+  /// The offer (film or episode) played. With [drmAuthorization] and
+  /// [storefrontId], the seconds watched are reported for licensor
+  /// royalties. Null for trailers.
+  final String? offerId;
+
+  /// The catalogue entry played, sent with the royalty reports.
+  final String? catalogueId;
+
+  /// Who and what the royalty reports count against, when there is all of
+  /// it.
+  UsageTarget? get usageTarget {
+    final String? offer = offerId;
+    final String? authorization = drmAuthorization;
+    final String? storefront = storefrontId;
+    if (offer == null || offer.isEmpty) return null;
+    if (authorization == null || authorization.isEmpty) return null;
+    if (storefront == null || storefront.isEmpty) return null;
+    return UsageTarget(
+      storefrontId: storefront,
+      authorization: authorization,
+      offerId: offer,
+      catalogueId: catalogueId,
+    );
+  }
 }
 
 /// One playback's EYZFlow side, in the web player's order (`use-shaka.ts`):
@@ -128,16 +156,18 @@ final class PlaybackCoordinator extends ChangeNotifier {
     required this._sessionClient,
     required this._beatSender,
     required this._deviceIdStore,
+    UsageSender? usageSender,
     this.onLimitReached,
     this.onLicenseError,
     this.onError,
     this._now,
-  });
+  }) : _usageSender = usageSender ?? HttpUsageSender().call;
 
   final PlaybackCoordinatorConfig config;
   final PlayerLicenseClient _licenseClient;
   final PlaybackSessionClient _sessionClient;
   final BeatSender _beatSender;
+  final UsageSender _usageSender;
   final DeviceIdStore _deviceIdStore;
   final MonotonicClock? _now;
   final ValueChanged<PlaybackLimitError>? onLimitReached;
@@ -147,6 +177,7 @@ final class PlaybackCoordinator extends ChangeNotifier {
   EYZFlowPlayerStatus _status = const EYZFlowPlayerLoading();
   PlayerLicenseSession? _license;
   BeatTransport? _transport;
+  UsageReporter? _usage;
   PlaybackEventAdapter? _adapter;
   PlaybackSessionTarget? _sessionTarget;
   String? _sessionId;
@@ -163,6 +194,10 @@ final class PlaybackCoordinator extends ChangeNotifier {
   /// The beat transport, while analytics are on. For the example app's log.
   @visibleForTesting
   BeatTransport? get transport => _transport;
+
+  /// The royalty reporter, while a film reports its seconds watched.
+  @visibleForTesting
+  UsageReporter? get usage => _usage;
 
   Future<void> start() async {
     final String deviceId = await _readDeviceId();
@@ -194,6 +229,8 @@ final class PlaybackCoordinator extends ChangeNotifier {
         _startAnalytics(license.heartbeatInterval);
       }
     }
+    final UsageTarget? usageTarget = config.usageTarget;
+    if (usageTarget != null) _startUsage(usageTarget);
 
     final String? authorization = config.drmAuthorization;
     final bool signedIn = authorization != null && authorization.isNotEmpty;
@@ -261,6 +298,10 @@ final class PlaybackCoordinator extends ChangeNotifier {
   /// Every event the player reports.
   void onPlaybackEvent(PlaybackEvent event) {
     _adapter?.add(event);
+    if (event is PlaybackPaused || event is PlaybackCompleted) {
+      final usage = _usage;
+      if (usage != null) unawaited(usage.report());
+    }
     if (event case PlaybackError(:final message)) {
       final failure = _failureIn(message);
       if (failure != null) {
@@ -275,11 +316,16 @@ final class PlaybackCoordinator extends ChangeNotifier {
   void onBackgrounded() {
     final transport = _transport;
     if (transport != null) unawaited(transport.beat());
+    final usage = _usage;
+    if (usage != null) unawaited(usage.report());
   }
 
+  /// The collector both the beats and the royalty reports read, made once.
+  BeatCollector _collector() =>
+      (_adapter ??= PlaybackEventAdapter(BeatCollector(now: _now))).collector;
+
   void _startAnalytics(Duration interval) {
-    final collector = BeatCollector(now: _now);
-    _adapter = PlaybackEventAdapter(collector);
+    final collector = _collector();
     _transport = BeatTransport(
       collector: collector,
       token: () => _license?.token,
@@ -290,6 +336,17 @@ final class PlaybackCoordinator extends ChangeNotifier {
           ? config.platform?.drmName
           : 'none',
       platform: config.platform,
+    )..start();
+  }
+
+  /// The seconds watched, for licensor royalties: the same played time as the
+  /// beats, whether they are on or not.
+  void _startUsage(UsageTarget target) {
+    final collector = _collector();
+    _usage = UsageReporter(
+      target: target,
+      playedMs: () => collector.metrics().playedMs,
+      send: _usageSender,
     )..start();
   }
 
@@ -363,11 +420,13 @@ final class PlaybackCoordinator extends ChangeNotifier {
     _heartbeat = null;
     _license?.stop();
     final transport = _transport;
+    final usage = _usage;
     final target = _sessionTarget;
     final sessionId = _sessionId;
     _sessionId = null;
     await Future.wait([
       if (transport != null) transport.stop(),
+      if (usage != null) usage.stop(),
       if (target != null && sessionId != null)
         _sessionClient.close(target, sessionId),
     ]);
