@@ -3,7 +3,7 @@ description: >-
   EYZFlow player for Flutter apps: AVPlay on Tizen and the native player on
   Android and iOS, with the player key check, stream and device limits, and
   playback quality analytics.
-version: 0.6.0
+version: 0.6.1
 homepage: https://github.com/eyzflow/eyzflow-player-flutter
 repository: https://github.com/eyzflow/eyzflow-player-flutter
 issue_tracker: https://github.com/eyzflow/eyzflow-player-flutter/issues
