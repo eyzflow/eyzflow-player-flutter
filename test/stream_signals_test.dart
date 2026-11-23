@@ -229,7 +229,9 @@ void main() {
       ..position(_s(21));
     expect(tracker.value, isNull);
     // Landed: playing on past the intro.
-    tracker.position(_s(30));
+    tracker
+      ..position(_s(30))
+      ..position(_s(30.5));
     expect(tracker.value, isNull);
     // Seeking back into it later shows it again.
     tracker.position(_s(16));
@@ -239,6 +241,31 @@ void main() {
       'end eyz-intro',
       'start eyz-intro',
     ]);
+    tracker.dispose();
+  });
+
+  test('SignalTracker: Tizen reports the target, then the old position, '
+      'before the seek lands', () {
+    final SignalTracker tracker = SignalTracker()
+      ..signals = parseHlsSignals(_mediaPlaylist)
+      ..position(_s(20));
+    tracker.skipped(tracker.value!, _s(30));
+    // AVPlay sets its position to the target when seekTo returns …
+    tracker.position(_s(30));
+    expect(tracker.value, isNull);
+    // … then polls PlusPlayer, which still plays the intro for a few seconds.
+    for (final double s in <double>[20.5, 21, 21.5, 22, 22.5]) {
+      tracker.position(_s(s));
+      expect(tracker.value, isNull, reason: 'stale $s s');
+    }
+    // Landed.
+    tracker
+      ..position(_s(30.1))
+      ..position(_s(30.6));
+    expect(tracker.value, isNull);
+    // Seeking back into it later shows it again.
+    tracker.position(_s(16));
+    expect(tracker.value?.id, 'eyz-intro');
     tracker.dispose();
   });
 

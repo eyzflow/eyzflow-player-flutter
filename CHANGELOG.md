@@ -12,6 +12,11 @@
   - The film's player hands its video decoder to the ad's player for a
     mid-roll or post-roll, and the pre-roll plays before the film loads.
   - New dependency: `xml`.
+- Skip buttons on Tizen (EYF-214): after OK on "Skip intro" (or recap,
+  credits) the button no longer comes back for a few seconds. AVPlay reports
+  the skip's target as soon as the seek is sent, then the old position until
+  PlusPlayer lands; a skipped signal now stays dismissed until two position
+  reports in a row are past the target.
 
 ## 0.5.1
 
