@@ -1,3 +1,9 @@
+## 0.6.2
+
+- Subtitles on Tizen (EYF-467): the controls' bottom bar no longer covers the
+  subtitles. While the controls show, the subtitles move up above the progress
+  bar and track buttons, and drop back when they hide.
+
 ## 0.6.1
 
 - Playback sessions (EYF-466): the heartbeat and the close no longer send
