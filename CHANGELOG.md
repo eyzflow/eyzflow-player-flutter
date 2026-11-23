@@ -1,4 +1,4 @@
-## Unreleased
+## 0.5.1
 
 - Royalty usage (EYF-231): with `offerId`, `drmAuthorization` and a
   storefront, a film reports the seconds the viewer watched to
