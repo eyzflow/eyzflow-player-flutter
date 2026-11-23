@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -21,6 +22,12 @@ import 'skip_signal_button.dart';
 
 /// How long the overlay takes to fade in or out.
 const Duration _fadeDuration = Duration(milliseconds: 250);
+
+/// Draws the subtitles. [bottomInset] is how far up from the bottom of the
+/// screen they must stay to clear the controls' bottom bar: its height while
+/// the overlay shows, animating back to 0 as it hides.
+typedef PlayerCaptionsBuilder =
+    Widget Function(BuildContext context, double bottomInset);
 
 /// One selectable row of a track panel: the track to switch to, and the name
 /// to show for it. A `null` [trackId] is the subtitles panel's own `Off` row.
@@ -160,6 +167,7 @@ class PlayerControls extends StatefulWidget {
     this.onSkipSignal,
     this.skipButton = true,
     this.skipButtonTypes = const PlayerSkipButtonTypes(),
+    this.captionsBuilder,
   });
 
   final String title;
@@ -195,6 +203,12 @@ class PlayerControls extends StatefulWidget {
   /// `skipButtonTypes`): by default all but the closing credits.
   final PlayerSkipButtonTypes skipButtonTypes;
 
+  /// The subtitles, drawn over the video and the overlay's gradient but under
+  /// the track panels, and kept above the bottom bar while it shows so the
+  /// progress bar never covers them. Null draws none (the player draws its
+  /// own).
+  final PlayerCaptionsBuilder? captionsBuilder;
+
   /// The signal OK skips right now, if any.
   StreamSignal? get _skippable {
     final StreamSignal? current = skipButton && onSkipSignal != null
@@ -217,6 +231,32 @@ class _PlayerControlsState extends State<PlayerControls> {
   late PlayerControlsState _previous;
 
   ThumbnailTrack? _thumbnails;
+
+  /// The bottom bar's laid-out height, which the captions are lifted by while
+  /// the overlay shows. It changes with the track buttons coming and going.
+  double _bottomBarHeight = 0;
+
+  void _onBottomBarHeight(double height) {
+    if (mounted && height != _bottomBarHeight) {
+      setState(() => _bottomBarHeight = height);
+    }
+  }
+
+  /// The captions at [bottomInset], eased there so they move with the
+  /// overlay's fade rather than jump.
+  Widget? _captions(double bottomInset) {
+    final PlayerCaptionsBuilder? builder = widget.captionsBuilder;
+    if (builder == null) return null;
+    return IgnorePointer(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: bottomInset),
+        duration: _fadeDuration,
+        curve: Curves.easeOut,
+        builder: (BuildContext context, double inset, Widget? _) =>
+            builder(context, inset),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -436,12 +476,15 @@ class _PlayerControlsState extends State<PlayerControls> {
   Widget build(BuildContext context) {
     final bloc = context.read<PlayerControlsBloc>();
     if (!widget.showControls) {
-      return _BareRemote(
+      final Widget remote = _BareRemote(
         bloc: bloc,
         onBack: () => _leave(context),
         skipSignal: _skipSignalWhileHidden,
         skipButton: _skipButton(),
       );
+      final Widget? captions = _captions(0);
+      if (captions == null) return remote;
+      return Stack(fit: StackFit.expand, children: <Widget>[captions, remote]);
     }
     return _ThemeScope(theme: widget.theme, child: _buildOverlay(bloc));
   }
@@ -500,9 +543,11 @@ class _PlayerControlsState extends State<PlayerControls> {
                       onBack: widget.onBack,
                       nodes: _nodes,
                       thumbnails: _thumbnails,
+                      onBottomBarHeight: _onBottomBarHeight,
                     ),
                   ),
                 ),
+                ?_captions(state.visible ? _bottomBarHeight : 0),
                 if (state.activePanel != PlayerPanel.none)
                   _TrackPanel(panel: state.activePanel),
                 if (!state.visible) ?_skipButton(),
@@ -769,6 +814,7 @@ class _ControlsScaffold extends StatelessWidget {
     required this.title,
     required this.onBack,
     required this.nodes,
+    required this.onBottomBarHeight,
     this.thumbnails,
   });
 
@@ -776,6 +822,7 @@ class _ControlsScaffold extends StatelessWidget {
   final VoidCallback? onBack;
   final _ControlNodes nodes;
   final ThumbnailTrack? thumbnails;
+  final ValueChanged<double> onBottomBarHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -799,7 +846,10 @@ class _ControlsScaffold extends StatelessWidget {
         children: <Widget>[
           _TopBar(title: title, onBack: onBack, nodes: nodes),
           Expanded(child: _MiddleRow(nodes: nodes)),
-          _BottomBar(nodes: nodes, thumbnails: thumbnails),
+          _HeightReporter(
+            onHeight: onBottomBarHeight,
+            child: _BottomBar(nodes: nodes, thumbnails: thumbnails),
+          ),
         ],
       ),
     );
@@ -1522,4 +1572,38 @@ String _format(Duration d) {
   final String mm = minutes.toString().padLeft(2, '0');
   final String ss = seconds.toString().padLeft(2, '0');
   return hours > 0 ? '$hours:$mm:$ss' : '$mm:$ss';
+}
+
+/// Reports its child's height after each layout that changes it, a frame
+/// later: a parent cannot rebuild in the middle of laying out.
+class _HeightReporter extends SingleChildRenderObjectWidget {
+  const _HeightReporter({required this.onHeight, required super.child});
+
+  final ValueChanged<double> onHeight;
+
+  @override
+  _RenderHeightReporter createRenderObject(BuildContext context) =>
+      _RenderHeightReporter(onHeight);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderHeightReporter renderObject,
+  ) => renderObject.onHeight = onHeight;
+}
+
+class _RenderHeightReporter extends RenderProxyBox {
+  _RenderHeightReporter(this.onHeight);
+
+  ValueChanged<double> onHeight;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final double height = size.height;
+    if (height == _reported) return;
+    _reported = height;
+    SchedulerBinding.instance.addPostFrameCallback((_) => onHeight(height));
+  }
 }
