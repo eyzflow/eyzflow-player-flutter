@@ -25,5 +25,8 @@
   "castPlayingOn": "Wird auf {device} abgespielt",
   "castStop": "Streamen beenden",
   "castFailed": "Wiedergabe auf {device} nicht möglich.",
-  "adCountdown": "Werbung in {seconds}"
+  "adCountdown": "Werbung in {seconds}",
+  "adPosition": "Werbung {index} von {count}",
+  "adSkip": "Werbung überspringen",
+  "adSkipIn": "Überspringen in {seconds}"
 }

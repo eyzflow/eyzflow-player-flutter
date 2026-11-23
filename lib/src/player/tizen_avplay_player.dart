@@ -4,14 +4,23 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
 import '../core/source.dart';
 import 'package:video_player_avplay/video_player.dart';
 import 'package:video_player_avplay/video_player_platform_interface.dart'
     as avplay;
 
+import '../ads/ad_breaks.dart';
+import '../ads/ad_countdown.dart';
+import '../ads/ad_scheduler.dart';
+import '../ads/vast_ad_driver.dart';
+import '../ads/vast_loader.dart';
 import '../bloc/player_controls_bloc.dart';
 import '../bloc/videoplayer_feature_bloc.dart';
+import 'ad_countdown_notice.dart';
+import 'avplay_ad_player.dart';
 import 'hls_renditions.dart';
+import 'tv_ad_layer.dart';
 import 'playback_event.dart';
 import 'playback_event_emitter.dart';
 import 'playback_target.dart';
@@ -128,12 +137,24 @@ class TizenAvplayPlayer extends StatefulWidget {
     this.watchProgressRecorder,
     this.onPlaybackEvent,
     this.options = const PlayerOptions(),
+    this.createAdPlayer,
+    this.adClient,
+    this.loadAdBreaks,
   });
 
   final VideoplayerTarget target;
   final VideoplaybackControllerFactory? createController;
   final TizenDeviceDiagnostics? diagnostics;
   final WidevineLicenseClient? licenseClient;
+
+  /// Replaces the AVPlay player an ad plays in. A test seam.
+  final AdMediaPlayerFactory? createAdPlayer;
+
+  /// Replaces the HTTP client for ad tags and tracking. A test seam.
+  final http.Client? adClient;
+
+  /// Replaces reading the ad break markers from the manifest. A test seam.
+  final Future<List<AdBreak>> Function(Uri master)? loadAdBreaks;
 
   /// Records what the viewer watched. Absent in previews and tests, and for a
   /// trailer, which is not something a viewer resumes.
@@ -147,6 +168,9 @@ class TizenAvplayPlayer extends StatefulWidget {
 
   /// A player config's theme and features for the overlay. `loop` does not
   /// apply: Tizen's player (PlusPlayer) cannot loop.
+  ///
+  /// With [PlayerOptions.ads] the player plays the tag's ads itself (there is
+  /// no IMA for Tizen): see [VastAdDriver] and [TvAdLayer].
   final PlayerOptions options;
 
   @override
@@ -174,6 +198,21 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   bool _ready = false;
   bool _tickBridged = false;
   bool _tracksRequested = false;
+
+  /// Ads for the current session, when the config has an ad tag.
+  AdBreakScheduler? _ads;
+  VastAdDriver? _adDriver;
+  http.Client? _ownedAdClient;
+  var _finishing = false;
+
+  /// Seconds (the countdown's length … 1) until the next mid-roll while its
+  /// notice shows.
+  final ValueNotifier<int?> _adCountdown = ValueNotifier<int?>(null);
+  VideoplaybackValue? _lastValue;
+  Duration? _countdownPosition;
+
+  http.Client get _adClient =>
+      widget.adClient ?? (_ownedAdClient ??= http.Client());
 
   WidevineLicenseClient get _licenseClient =>
       widget.licenseClient ?? (_ownedLicenseClient ??= WidevineLicenseClient());
@@ -208,6 +247,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
 
   Future<void> _replace(int request) async {
     _closeEvents();
+    _disposeAds();
     final VideoplaybackSession? retiredSession = _session;
     await retiredSession?.dispose();
     if (!mounted ||
@@ -240,6 +280,8 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       onEvent: widget.onPlaybackEvent,
     );
     _events = events;
+    _finishing = false;
+    final AdBreakScheduler? ads = _setUpAds(events);
     final VideoplaybackSession session = VideoplaybackSession(
       target: widget.target,
       createController: _createAndCaptureController,
@@ -250,16 +292,148 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
           : (Duration position, Duration _) => recorder.report(position),
       onInitialized: (VideoplaybackValue value) =>
           events.ready(position: value.position, duration: value.duration),
-      onValue: events.tick,
+      onValue: (VideoplaybackValue value) {
+        events.tick(value);
+        final Duration? position = value.position;
+        if (ads != null && position != null && !value.isCompleted) {
+          ads.contentPosition(position);
+        }
+        _updateAdCountdown(value);
+      },
       // The controller opens at the resume position itself; see
       // [_createAvplayController].
       seeksToResumePosition: false,
     );
     _session = session;
+    if (ads != null) {
+      // Before the film's player exists: a TV has one video decoder, and
+      // the ad needs it. The pre-roll's time is not the film's startup.
+      await ads.beforeContent();
+      if (!mounted || !identical(_session, session)) return;
+    }
     await session.start();
     if (mounted && identical(_session, session)) {
       setState(() => _ready = true);
     }
+  }
+
+  /// The ads scheduler for a new session, or null without an ad tag. The
+  /// markers are read from the manifest while the player starts.
+  AdBreakScheduler? _setUpAds(PlaybackEventEmitter events) {
+    _disposeAds();
+    final PlayerAds? ads = widget.options.ads;
+    if (ads == null) return null;
+    final http.Client client = _adClient;
+    final AdPing ping = httpAdPing(client);
+    final VastAdDriver driver = _adDriver = VastAdDriver(
+      adTagUrl: ads.adTagUrl,
+      loader: VastLoader(client: client, ping: ping),
+      createPlayer: widget.createAdPlayer ?? AvplayAdMediaPlayer.new,
+      ping: ping,
+      onPauseContent: () => unawaited(_pauseForAd()),
+      onResumeContent: () => unawaited(_resumeAfterAd()),
+      onReleaseContent: () => unawaited(_releaseForPostroll()),
+      contentDuration: () => _playback?.value.duration,
+    );
+    final AdBreakScheduler scheduler = AdBreakScheduler(
+      ads: ads,
+      driver: driver,
+      onBreakStarted: events.adBreakStarted,
+      onBreakEnded: events.adBreakEnded,
+    )..addListener(_onAdsChanged);
+    driver.scheduler = scheduler;
+    _ads = scheduler;
+    final Uri master = switch (widget.target) {
+      VideoplayerTrailerTarget(:final source) => source.hlsStreamUrl,
+      VideoplayerSourceTarget(:final source) => source.hlsStreamUrl,
+    };
+    unawaited(
+      ads.loadMarkers(() async {
+        final Future<List<AdBreak>> Function(Uri)? load = widget.loadAdBreaks;
+        if (load != null) return load(master);
+        return loadHlsAdBreaks(client, master);
+      }),
+    );
+    return scheduler;
+  }
+
+  /// The film stops for a mid-roll and lets go of the video decoder, so the
+  /// ad's player can have it.
+  Future<void> _pauseForAd() async {
+    final VideoplaybackController? playback = _playback;
+    if (playback is _AvplayController) {
+      await playback.releaseForAd();
+    } else {
+      await playback?.pause();
+    }
+  }
+
+  Future<void> _resumeAfterAd() async {
+    final VideoplaybackController? playback = _playback;
+    if (playback is _AvplayController) await playback.restoreAfterAd();
+    await playback?.play();
+  }
+
+  /// The film ended and a post-roll plays: the decoder goes to the ad, and
+  /// the film is not resumed.
+  Future<void> _releaseForPostroll() async {
+    final VideoplaybackController? playback = _playback;
+    if (playback is _AvplayController) await playback.releaseForAd();
+  }
+
+  void _onAdsChanged() {
+    if (mounted) setState(() {});
+    _updateAdCountdown(_lastValue, jumped: false);
+  }
+
+  /// The notice before a mid-roll, from the latest position report. Hidden
+  /// while paused or buffering, right after a seek, while scrubbing or
+  /// previewing on the seek bar, and during an ad break.
+  void _updateAdCountdown(VideoplaybackValue? value, {bool? jumped}) {
+    final AdBreakScheduler? ads = _ads;
+    _lastValue = value;
+    final Duration? position = value?.position;
+    final Duration? previous = _countdownPosition;
+    if (jumped == null) _countdownPosition = position;
+    final bool seeked =
+        jumped ??
+        (position != null &&
+            previous != null &&
+            (position < previous || position - previous > maxPlayStep));
+    final PlayerControlsBloc? bloc = _controlsBloc;
+    final bool scrubbing =
+        bloc != null &&
+        !bloc.isClosed &&
+        (bloc.state.isScrubbing || bloc.state.isPreviewing);
+    _adCountdown.value = ads == null || value == null
+        ? null
+        : adCountdownFor(
+            enabled: widget.options.adCountdown,
+            playing:
+                value.isPlaying &&
+                !value.isBuffering &&
+                !value.isCompleted &&
+                !seeked &&
+                !scrubbing,
+            inBreak: ads.inBreak || ads.adPlaying,
+            remote: false,
+            position: position,
+            starts: ads.upcomingMidrolls,
+            length: widget.options.adCountdownSeconds,
+          );
+  }
+
+  void _disposeAds() {
+    final AdBreakScheduler? ads = _ads;
+    final VastAdDriver? driver = _adDriver;
+    _adCountdown.value = null;
+    _lastValue = null;
+    _countdownPosition = null;
+    _ads = null;
+    _adDriver = null;
+    ads?.removeListener(_onAdsChanged);
+    ads?.dispose();
+    driver?.dispose();
   }
 
   Future<VideoplaybackController> _createAndCaptureController(
@@ -326,6 +500,18 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
     // Recorded before the bloc tears the session down, so the completion is
     // written even though the view is about to go away.
     widget.watchProgressRecorder?.finish();
+    final AdBreakScheduler? ads = _ads;
+    if (ads == null) {
+      _close();
+      return;
+    }
+    // A VMAP's post-roll plays before the player closes.
+    if (_finishing) return;
+    _finishing = true;
+    unawaited(ads.contentCompleted().whenComplete(_close));
+  }
+
+  void _close() {
     if (mounted) {
       context.read<VideoplayerFeatureBloc>().add(
         const VideoplayerFeaturePlaybackFinished(),
@@ -348,15 +534,44 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
   @override
   void dispose() {
     _request++;
+    _disposeAds();
     _closeEvents();
     unawaited(_session?.dispose() ?? Future<void>.value());
     unawaited(_controlsBloc?.close() ?? Future<void>.value());
     _ownedLicenseClient?.close();
+    _ownedAdClient?.close();
+    _adCountdown.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final Widget content = _buildContent(context);
+    if (widget.options.ads == null) return content;
+    // One Stack from the first frame, the film at index 0, so the ads
+    // coming and going never re-parent the video.
+    final AdBreakScheduler? ads = _ads;
+    final VastAdDriver? driver = _adDriver;
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        content,
+        // Over the video and the controls, never focusable: it stays up
+        // while the controls are hidden.
+        if (ads != null && widget.options.adCountdown)
+          AdCountdownNotice(seconds: _adCountdown),
+        if (ads != null && driver != null)
+          TvAdLayer(
+            scheduler: ads,
+            driver: driver,
+            theme: widget.options.controlsTheme,
+            onBack: () => _closeFromControls(context),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final VideoplaybackController? playback = _playback;
     final VideoplaybackTracks? tracks = _playbackTracks;
     if (!_ready || playback == null || tracks == null) {
@@ -371,6 +586,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       VideoplayerSourceTarget(:final source) => source,
     };
     final String title = source.title;
+    final bool inAdBreak = _ads?.inBreak ?? false;
 
     return BlocProvider<PlayerControlsBloc>.value(
       value: bloc,
@@ -378,12 +594,21 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
         fit: StackFit.expand,
         children: <Widget>[
           _buildVideoSurface(bloc),
-          PlayerControls(
-            title: title,
-            thumbnailsUrl: source.thumbnailsUrl,
-            onBack: () => _closeFromControls(context),
-            theme: widget.options.controlsTheme,
-            showControls: widget.options.controls,
+          // Hidden and out of the remote's reach during an ad break: no
+          // focus, so no seek, no track panel. Kept alive for after it.
+          Visibility(
+            visible: !inAdBreak,
+            maintainState: true,
+            child: ExcludeFocus(
+              excluding: inAdBreak,
+              child: PlayerControls(
+                title: title,
+                thumbnailsUrl: source.thumbnailsUrl,
+                onBack: () => _closeFromControls(context),
+                theme: widget.options.controlsTheme,
+                showControls: widget.options.controls,
+              ),
+            ),
           ),
         ],
       ),
@@ -588,6 +813,31 @@ final class _AvplayController
 
   @override
   Future<void> pause() => controller.pause();
+
+  /// Pauses and lets go of the video decoder for an ad's player (PlusPlayer
+  /// `Deactivate`, the plugin's way to run two players). A model that
+  /// refuses is logged: the ad then fails to start, and the film resumes.
+  Future<void> releaseForAd() async {
+    await controller.pause();
+    try {
+      if (!await controller.deactivate()) {
+        logPlayback('film player did not release its decoder for the ad');
+      }
+    } on Object catch (error) {
+      logPlayback('film player deactivate failed', error: error);
+    }
+  }
+
+  /// Takes the decoder back after an ad. The caller plays.
+  Future<void> restoreAfterAd() async {
+    try {
+      if (!await controller.activate()) {
+        logPlayback('film player did not get its decoder back');
+      }
+    } on Object catch (error) {
+      logPlayback('film player activate failed', error: error);
+    }
+  }
 
   @override
   int? get selectedAudioTrackId => _selectedAudioTrackId;

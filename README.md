@@ -135,7 +135,7 @@ over the local network, no Google Cast SDK). Turn it off with
 
 ### Ads
 
-On Android, Android TV and iOS the player plays ads from the player config:
+On Android, Android TV, iOS and Tizen the player plays ads from the player config:
 `features.ads` on **and** a non-empty `ads.adTagUrl` (a VAST or VMAP tag).
 Otherwise no ad request is made at all.
 
@@ -149,10 +149,25 @@ The session's `ad_targeting` (e.g. `plan=basic-ads`, `access=svod`) is added
 to the tag's `cust_params`; a key the tag already sets there keeps the tag's
 value. A plan with ads cannot turn on ads the config has off.
 
-Ads play through Google IMA
+On Android, Android TV and iOS ads play through Google IMA
 (`interactive_media_ads`), which shows the ad, its countdown, the skip button
-when the ad allows one, and the click-through. Tizen plays no ads (there is no
-IMA for it).
+when the ad allows one, and the click-through. There is no IMA for Tizen, so
+there the player reads the tag itself and plays the ads in AVPlay:
+
+- VAST 2–4 inline and wrapper ads (up to 5 wrappers in a row), ad pods in
+  their sequence, and a VMAP's breaks (`start`, `end`, a time or a
+  percentage). Linear ads only: companion, overlay and VPAID creatives are
+  skipped. Of an ad's media files it plays an MP4 (the tallest up to 1080p),
+  else HLS.
+- The impression, `start`, quartile, `complete`, `skip` and `progress`
+  tracking URLs, and the error URLs with `[ERRORCODE]` (e.g. 303 no ad, 402
+  media timeout, 403 no media a TV plays, 405 media failed).
+- On screen: "Ad 1 of 2 · 0:12" over the ad and, for an ad with a
+  `skipoffset`, "Skip in 3" and then a Skip button that takes the remote's
+  focus, so OK skips. Back leaves the player as from the controls. No
+  click-through on a TV.
+- An ad that does not start within 10 s, stalls for 10 s or fails is
+  reported and the next one plays.
 
 When ads play follows the ad break markers on the stream (dashboard: Stream →
 Signals → Ad break), which the backend writes into the manifests as SCTE-35.
@@ -173,6 +188,10 @@ same rules as the web player:
   same position afterwards). TVs often have one hardware decoder, and while
   the film holds it the ad shows no picture, only IMA's countdown. iOS loads
   the film while the pre-roll plays.
+- Tizen: the pre-roll plays before the film's player is created, and for a
+  mid-roll or post-roll the film's player is paused and deactivated (its
+  video decoder freed, PlusPlayer `Deactivate`) before the ad's own player
+  starts, and activated again after the break.
 - At a break the content waits until the ad starts, or until it turns out
   there is none (empty or failed tag, ad blocker, no answer within 12 s):
   then it plays on, with no error.
@@ -235,9 +254,9 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 | `features.airplay` | iOS: false keeps the video off AirPlay | – | – |
 | `features.pip` | Android: false turns picture-in-picture off (iOS has none) | (off on TV) | – |
 | `cast.receiverAppId` | the receiver films cast to, when `castReceiverAppId` is not set | – | – |
-| `features.ads`, `ads.adTagUrl` | ads through Google IMA, see [Ads](#ads) | same | – (no IMA on Tizen) |
-| `features.adCountdown` | false: no "Ad in 5" notice before a mid-roll | same | – |
-| `ads.countdownSeconds` | the notice's length, 1–30 s (default 5) | same | – |
+| `features.ads`, `ads.adTagUrl` | ads through Google IMA, see [Ads](#ads) | same | ads played by the player itself, see [Ads](#ads) |
+| `features.adCountdown` | false: no "Ad in 5" notice before a mid-roll | same | same |
+| `ads.countdownSeconds` | the notice's length, 1–30 s (default 5) | same | same |
 | `drm.parameters` | into the DRM `access-token`; `storefront_id` also opens the playback session | same | same |
 
 Not honoured anywhere in the apps:
@@ -389,6 +408,10 @@ session id would not match the production licence gate.
   tag decides the pod. Companion and overlay (non-linear) ads are not handled.
   While a VMAP on a stream without markers waits for its next break, IMA's
   container stays over the content (it lets touches through).
+- Ads on Tizen: covered by tests only, not tried on a Samsung TV yet. Whether
+  every model hands the decoder to the ad's player after the film's player is
+  deactivated, and gets it back, is the thing to check on hardware; a model
+  that refuses fails the ad (reported with 405) and resumes the film.
 
 ## Develop
 

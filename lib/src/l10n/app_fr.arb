@@ -25,5 +25,8 @@
   "castPlayingOn": "Lecture sur {device}",
   "castStop": "Arrêter la diffusion",
   "castFailed": "Impossible de lire sur {device}.",
-  "adCountdown": "Publicité dans {seconds}"
+  "adCountdown": "Publicité dans {seconds}",
+  "adPosition": "Publicité {index} sur {count}",
+  "adSkip": "Ignorer la publicité",
+  "adSkipIn": "Ignorer dans {seconds}"
 }

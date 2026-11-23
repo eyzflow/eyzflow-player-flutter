@@ -1,3 +1,18 @@
+## Unreleased
+
+- Ads on Tizen (EYF-216). There is no IMA for Tizen, so the player reads the
+  config's ad tag itself and plays the ads in AVPlay, with the same rules as
+  the other platforms: the stream's ad break markers, the viewer's plan, the
+  "Ad in 5" countdown, and ad breaks in the playback events.
+  - VAST 2–4 inline and wrapper ads, ad pods, and VMAP pre-rolls, mid-rolls
+    and post-rolls; MP4 (up to 1080p) or HLS media.
+  - Impression, quartile, complete, skip, progress and error tracking.
+  - "Ad 1 of 2 · 0:12" over the ad and a Skip button for skippable ads,
+    reachable with the remote.
+  - The film's player hands its video decoder to the ad's player for a
+    mid-roll or post-roll, and the pre-roll plays before the film loads.
+  - New dependency: `xml`.
+
 ## 0.3.0
 
 - Ads follow the viewer's plan (EYF-210). The playback session's `ads` and

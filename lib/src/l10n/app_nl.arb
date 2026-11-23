@@ -25,5 +25,8 @@
   "castPlayingOn": "Speelt af op {device}",
   "castStop": "Casten stoppen",
   "castFailed": "Afspelen op {device} is niet gelukt.",
-  "adCountdown": "Reclame over {seconds}"
+  "adCountdown": "Reclame over {seconds}",
+  "adPosition": "Reclame {index} van {count}",
+  "adSkip": "Reclame overslaan",
+  "adSkipIn": "Overslaan over {seconds}"
 }

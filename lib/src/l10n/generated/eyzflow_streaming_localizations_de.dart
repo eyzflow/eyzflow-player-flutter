@@ -99,4 +99,17 @@ class EYZFlowStreamingLocalizationsDe extends EYZFlowStreamingLocalizations {
   String adCountdown(int seconds) {
     return 'Werbung in $seconds';
   }
+
+  @override
+  String adPosition(int index, int count) {
+    return 'Werbung $index von $count';
+  }
+
+  @override
+  String get adSkip => 'Werbung überspringen';
+
+  @override
+  String adSkipIn(int seconds) {
+    return 'Überspringen in $seconds';
+  }
 }

@@ -260,6 +260,24 @@ abstract class EYZFlowStreamingLocalizations {
   /// In en, this message translates to:
   /// **'Ad in {seconds}'**
   String adCountdown(int seconds);
+
+  /// Label over a playing ad on TV: its place in the ad break.
+  ///
+  /// In en, this message translates to:
+  /// **'Ad {index} of {count}'**
+  String adPosition(int index, int count);
+
+  /// Button on TV that skips a skippable ad.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip ad'**
+  String get adSkip;
+
+  /// Shown on TV in place of the skip button until the ad may be skipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip in {seconds}'**
+  String adSkipIn(int seconds);
 }
 
 class _EYZFlowStreamingLocalizationsDelegate
