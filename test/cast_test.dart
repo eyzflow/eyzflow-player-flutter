@@ -421,6 +421,29 @@ void main() {
       },
     );
 
+    test('the phone tracks wait until the TV plays, since the receiver resets '
+        'them when the film starts', () async {
+      await cast.cast(
+        _tv,
+        _media,
+        appId: 'A',
+        audioLanguage: 'en',
+        subtitleLanguage: 'de',
+      );
+      backend.tv.report(
+        const CastPlayback(
+          state: CastPlayerState.buffering,
+          tracks: tracks,
+          activeTrackIds: [1],
+        ),
+      );
+      expect(backend.tv.calls.where((c) => c.startsWith('tracks')), isEmpty);
+      backend.tv.report(playing());
+      expect(backend.tv.calls.where((c) => c.startsWith('tracks')), [
+        'tracks [2, 4]',
+      ]);
+    });
+
     test(
       'explicit Off reaches a receiver that has not reported active IDs',
       () async {
