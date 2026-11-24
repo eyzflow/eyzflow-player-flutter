@@ -28,7 +28,7 @@ extension AndroidPlaybackController on NativeVideoPlayerController {
   /// fullscreen route's, on iOS one over AVKit's controls. The app shows it
   /// once it found a Cast device.
   Future<void> setCastButtonVisible(bool visible) async {
-    if (_castButtonVisible == visible && !_isAndroidPlayback) return;
+    if (_castButtonVisible == visible) return;
     _castButtonVisible = visible;
     if (_isAndroidPlayback) {
       await _androidInvoke<void>('setCastButtonVisible', {'visible': visible});

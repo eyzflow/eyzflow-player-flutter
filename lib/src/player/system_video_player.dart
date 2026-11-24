@@ -95,8 +95,9 @@ class SystemVideoPlayer extends StatefulWidget {
   final bool useSharedOverlay;
 
   /// Shows a Cast button with the native controls: inside Media3's controls
-  /// on Android (it fades with them), top right over the player on iOS. The
-  /// host sets it once it found a Cast device. Never with [useSharedOverlay].
+  /// on Android (it fades with them), under the trailing end of AVKit's top
+  /// bar on iOS. The host sets it once it found a Cast device. Never with
+  /// [useSharedOverlay].
   final bool castAvailable;
 
   /// A tap on the Cast button, with the playback position. Playback goes on;
@@ -158,6 +159,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   void _onOverlayChanged() {
     if (!mounted) return;
     setState(() {});
+    _syncCastButton();
     // AVKit's (and Android's) native full screen covers everything Flutter
     // draws: the end screen or the app's overlay would show behind it. Leave
     // it, so the viewer sees them.
@@ -454,12 +456,14 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     _updateAdCountdown(_lastValue, jumped: false);
   }
 
-  /// The native Cast button: once a Cast device is found. On iOS it is
-  /// hidden during an ad break, as AVKit's controls under it are.
+  /// The native Cast button: once a Cast device is found. On iOS, where it
+  /// sits in the video, it is hidden during an ad break (as AVKit's controls
+  /// are) and while the end screen or the app's overlay is up (they can
+  /// shrink the video into a corner).
   bool get _castButtonShown =>
       widget._showsCast &&
       !(defaultTargetPlatform == TargetPlatform.iOS &&
-          (_ads?.inBreak ?? false));
+          ((_ads?.inBreak ?? false) || _overlay.active));
 
   void _syncCastButton() {
     unawaited(_nativeController?.setCastButtonVisible(_castButtonShown));
