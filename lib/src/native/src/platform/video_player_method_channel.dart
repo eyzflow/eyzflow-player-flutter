@@ -217,6 +217,23 @@ class VideoPlayerMethodChannel {
 
   /// Sets the text-size scale for embedded (native-rendered) subtitle
   /// tracks. 1.0 = platform default. Issue #43.
+  /// Shows or hides the Cast button over AVKit's controls (iOS, EYZFlow
+  /// patch).
+  Future<void> setCastButtonVisible(bool visible, {String? label}) async {
+    try {
+      await _methodChannel.invokeMethod<void>(
+        'setCastButtonVisible',
+        <String, Object>{
+          'viewId': primaryPlatformViewId,
+          'visible': visible,
+          'label': ?label,
+        },
+      );
+    } catch (e) {
+      debugPrint('Error calling setCastButtonVisible: $e');
+    }
+  }
+
   Future<void> setEmbeddedTextScale(double scale) async {
     try {
       await _methodChannel
