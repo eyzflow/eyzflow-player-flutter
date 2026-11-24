@@ -272,7 +272,9 @@ final class EYZFlowCastController extends ChangeNotifier {
         current is CastActive ? current.playback.position : startAt,
       );
     }
-    if (!_tracksApplied && playback.tracks.isNotEmpty) {
+    // The receiver goes back to its default tracks when the film starts, so
+    // a switch sent while it still loads is lost: wait until it plays.
+    if (!_tracksApplied && _started && playback.tracks.isNotEmpty) {
       _tracksApplied = true;
       _applyPhoneTracks(playback);
     }

@@ -649,7 +649,12 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
   void _onCastPlayback(CastPlayback playback) {
     final source = _source;
     if (source == null) return;
-    if (playback.hasActiveTrackIds && playback.tracks.isNotEmpty) {
+    // While the TV loads it reports its default tracks, not the viewer's:
+    // stopping then keeps the phone's own choice.
+    final bool onScreen =
+        playback.state == CastPlayerState.playing ||
+        playback.state == CastPlayerState.paused;
+    if (onScreen && playback.hasActiveTrackIds && playback.tracks.isNotEmpty) {
       _lastTracksOnTv = playback;
     }
     final previous = _castPlayerState;
