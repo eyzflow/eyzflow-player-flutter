@@ -1,4 +1,4 @@
-## Unreleased
+## 0.6.3
 
 - Chromecast (EYF-479): with no `castReceiverAppId` and no `cast.receiverAppId`
   in the player config, films now cast through the EYZFlow receiver
