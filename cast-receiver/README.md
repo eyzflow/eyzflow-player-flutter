@@ -32,7 +32,8 @@ session heartbeating while it casts.
 On a TV with a remote (Google TV, TVs with Chromecast built-in), **Up** or
 **Menu** opens a menu over the film with **Subtitles** (Off and each subtitle
 track) and **Audio** (each audio track, when there is more than one). Up and
-Down move, OK picks, Back closes, and it closes by itself after 8 seconds.
+Down move, OK picks, and Back closes it where the TV passes Back to the page;
+it also closes by itself after 8 seconds.
 Tracks show their name, else their language; forced subtitles are marked
 "(forced)" when the Cast framework lists them.
 

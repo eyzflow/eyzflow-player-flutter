@@ -137,235 +137,241 @@
           return playbackConfig;
         });
 
-        // ---- On-TV subtitle and audio menu -------------------------------------
-        //
-        // A TV remote's D-pad reaches the page as keydown events. While the menu is
-        // closed only the open keys (Up, Menu) are taken, so OK, Left and Right stay
-        // with the stock player (play/pause, seek). While it is open every key is
-        // taken. A device without a remote sends no keys, so nothing shows.
-        const menuEl = document.getElementById("tracks");
-        const CLOSE_AFTER_MS = 8000;
-        const OPEN_KEYS = new Set(["ArrowUp", "ContextMenu", "Menu"]);
-        const OPEN_CODES = new Set([38, 93]); // Up, ContextMenu
-        const SELECT_KEYS = new Set(["Enter", " ", "Select"]);
-        const SELECT_CODES = new Set([13, 23, 32]); // Enter, D-pad centre, Space
-        const BACK_KEYS = new Set(["Escape", "Backspace", "GoBack", "BrowserBack"]);
-        const BACK_CODES = new Set([4, 8, 27, 461, 10009]); // Android BACK, Backspace, Escape, webOS, Tizen
+        // The menu must never keep the receiver from starting: any error in it is
+        // logged and playback goes on without it.
+        try {
+          // ---- On-TV subtitle and audio menu -------------------------------------
+          //
+          // A TV remote's D-pad reaches the page as keydown events. While the menu is
+          // closed only the open keys (Up, Menu) are taken, so OK, Left and Right stay
+          // with the stock player (play/pause, seek). While it is open every key is
+          // taken. A device without a remote sends no keys, so nothing shows.
+          const menuEl = document.getElementById("tracks");
+          const CLOSE_AFTER_MS = 8000;
+          const OPEN_KEYS = new Set(["ArrowUp", "ContextMenu", "Menu"]);
+          const OPEN_CODES = new Set([38, 93]); // Up, ContextMenu
+          const SELECT_KEYS = new Set(["Enter", " ", "Select"]);
+          const SELECT_CODES = new Set([13, 32]); // Enter, Space
+          const BACK_KEYS = new Set(["Escape", "Backspace", "GoBack", "BrowserBack"]);
+          const BACK_CODES = new Set([8, 27, 461, 10009]); // Backspace, Escape, webOS, Tizen
 
-        const languageNames = (() => {
-          try {
-            return new Intl.DisplayNames([navigator.language || "en", "en"], { type: "language" });
-          } catch (e) {
-            return null;
-          }
-        })();
-
-        const languageName = (code) => {
-          if (!code) return "";
-          try {
-            const name = languageNames && languageNames.of(code);
-            if (name && name !== code) return name.charAt(0).toUpperCase() + name.slice(1);
-          } catch (e) {
-            // An unknown tag: fall back to the tag itself.
-          }
-          return code;
-        };
-
-        // DASH role forced_subtitle (Shaka may also mark it as `forced-subtitle`).
-        const isForced = (track) =>
-          Array.isArray(track.roles) && track.roles.some((role) => /^forced[-_]subtitle$/.test(role));
-
-        // Track names, else language names; repeated names get a number so a
-        // film's stereo and 5.1 in one language can be told apart.
-        const labelTracks = (tracks) => {
-          const labels = tracks.map((track) => {
-            let label = track.name || languageName(track.language) || `Track ${track.trackId}`;
-            if (isForced(track) && !/forced/i.test(label)) label += " (forced)";
-            return label;
-          });
-          const seen = {};
-          return labels.map((label) => {
-            const count = labels.filter((other) => other === label).length;
-            if (count < 2) return label;
-            seen[label] = (seen[label] || 0) + 1;
-            return `${label} ${seen[label]}`;
-          });
-        };
-
-        let items = []; // { label, active, pick } or { heading }
-        let focus = -1;
-        let closeTimer = null;
-
-        const isOpen = () => !menuEl.hidden;
-
-        const mediaLoaded = () => {
-          const state = player.getPlayerState();
-          return state && state !== framework.messages.PlayerState.IDLE;
-        };
-
-        // The menu's rows, read fresh from the track managers each time it opens,
-        // so changes from the sender show.
-        const buildItems = () => {
-          const text = player.getTextTracksManager();
-          const audio = player.getAudioTracksManager();
-          let textTracks = [];
-          let audioTracks = [];
-          let activeText = [];
-          let activeAudio = null;
-          try {
-            textTracks = text.getTracks() || [];
-            activeText = text.getActiveIds() || [];
-          } catch (e) {
-            // No text tracks for this media.
-          }
-          try {
-            audioTracks = audio.getTracks() || [];
-            activeAudio = audio.getActiveId();
-          } catch (e) {
-            // No audio tracks for this media.
-          }
-
-          const rows = [];
-          if (textTracks.length) {
-            rows.push({ heading: "Subtitles" });
-            const textOn = textTracks.some((t) => activeText.includes(t.trackId));
-            rows.push({ label: "Off", active: !textOn, pick: () => text.setActiveByIds([]) });
-            labelTracks(textTracks).forEach((label, i) => {
-              const id = textTracks[i].trackId;
-              rows.push({ label, active: activeText.includes(id), pick: () => text.setActiveByIds([id]) });
-            });
-          }
-          if (audioTracks.length > 1) {
-            rows.push({ heading: "Audio" });
-            labelTracks(audioTracks).forEach((label, i) => {
-              const id = audioTracks[i].trackId;
-              const active = activeAudio === null ? i === 0 : activeAudio === id;
-              rows.push({ label, active, pick: () => audio.setActiveById(id) });
-            });
-          }
-          return rows;
-        };
-
-        const render = () => {
-          menuEl.textContent = "";
-          items.forEach((row, i) => {
-            if (row.heading) {
-              const h = document.createElement("h2");
-              h.textContent = row.heading;
-              menuEl.appendChild(h);
-              return;
+          const languageNames = (() => {
+            try {
+              return new Intl.DisplayNames(["en"], { type: "language" });
+            } catch (e) {
+              return null;
             }
-            const el = document.createElement("div");
-            el.className = "item" + (row.active ? " active" : "") + (i === focus ? " focused" : "");
-            el.setAttribute("role", "menuitemradio");
-            el.setAttribute("aria-checked", String(row.active));
-            el.textContent = row.label;
-            menuEl.appendChild(el);
-            if (i === focus) el.scrollIntoView({ block: "nearest" });
-          });
-        };
+          })();
 
-        const restartCloseTimer = () => {
-          clearTimeout(closeTimer);
-          closeTimer = setTimeout(closeMenu, CLOSE_AFTER_MS);
-        };
-
-        const openMenu = () => {
-          items = buildItems();
-          const rows = items.filter((row) => !row.heading);
-          if (!rows.length) return false;
-          focus = items.findIndex((row) => !row.heading && row.active);
-          if (focus < 0) focus = items.findIndex((row) => !row.heading);
-          menuEl.hidden = false;
-          render();
-          restartCloseTimer();
-          return true;
-        };
-
-        function closeMenu() {
-          clearTimeout(closeTimer);
-          menuEl.hidden = true;
-          menuEl.textContent = "";
-          items = [];
-          focus = -1;
-        }
-
-        const moveFocus = (step) => {
-          let next = focus;
-          do {
-            next += step;
-          } while (next >= 0 && next < items.length && items[next].heading);
-          if (next >= 0 && next < items.length) focus = next;
-          render();
-        };
-
-        const pick = () => {
-          const row = items[focus];
-          if (!row || row.heading) return;
-          try {
-            row.pick();
-            // The managers update the media status; send it now so the sender's
-            // menus follow without waiting for the next status.
-            player.broadcastStatus(true);
-          } catch (e) {
-            console.warn("[eyzflow-receiver] track switch failed", e);
-          }
-          closeMenu();
-        };
-
-        const matches = (event, keys, codes) => keys.has(event.key) || codes.has(event.keyCode);
-
-        document.addEventListener(
-          "keydown",
-          (event) => {
-            console.debug("[eyzflow-receiver] key", event.key, event.keyCode);
-            if (!isOpen()) {
-              if (!matches(event, OPEN_KEYS, OPEN_CODES) || !mediaLoaded()) return;
-              if (!openMenu()) return;
-            } else if (event.key === "ArrowUp" || event.keyCode === 38) {
-              moveFocus(-1);
-            } else if (event.key === "ArrowDown" || event.keyCode === 40) {
-              moveFocus(1);
-            } else if (matches(event, SELECT_KEYS, SELECT_CODES)) {
-              pick();
-            } else if (matches(event, BACK_KEYS, BACK_CODES) || matches(event, OPEN_KEYS, OPEN_CODES)) {
-              closeMenu();
+          const languageName = (code) => {
+            if (!code) return "";
+            try {
+              const name = languageNames && languageNames.of(code);
+              if (name && name !== code) return name.charAt(0).toUpperCase() + name.slice(1);
+            } catch (e) {
+              // An unknown tag: fall back to the tag itself.
             }
-            if (isOpen()) restartCloseTimer();
-            event.preventDefault();
-            event.stopImmediatePropagation();
-          },
-          true,
-        );
+            return code;
+          };
 
-        // A new film, or the end of one, closes the menu; its rows would be stale.
-        player.addEventListener(
-          [framework.events.EventType.MEDIA_FINISHED, framework.events.EventType.PLAYER_LOAD_COMPLETE],
-          () => {
+          // DASH role forced_subtitle (Shaka may also mark it as `forced-subtitle`).
+          const isForced = (track) =>
+            Array.isArray(track.roles) && track.roles.some((role) => /^forced[-_]subtitle$/.test(role));
+
+          // Track names, else language names; repeated names get a number so a
+          // film's stereo and 5.1 in one language can be told apart.
+          const labelTracks = (tracks) => {
+            const labels = tracks.map((track) => {
+              let label = track.name || languageName(track.language) || `Track ${track.trackId}`;
+              if (isForced(track) && !/forced/i.test(label)) label += " (forced)";
+              return label;
+            });
+            const seen = {};
+            return labels.map((label) => {
+              const count = labels.filter((other) => other === label).length;
+              if (count < 2) return label;
+              seen[label] = (seen[label] || 0) + 1;
+              return `${label} ${seen[label]}`;
+            });
+          };
+
+          let items = []; // { label, active, pick } or { heading }
+          let focus = -1;
+          let closeTimer = null;
+
+          const isOpen = () => !menuEl.hidden;
+
+          const mediaLoaded = () => {
+            const state = player.getPlayerState();
+            return state && state !== framework.messages.PlayerState.IDLE;
+          };
+
+          // The menu's rows, read fresh from the track managers each time it opens,
+          // so changes from the sender show.
+          const buildItems = () => {
+            const text = player.getTextTracksManager();
+            const audio = player.getAudioTracksManager();
+            let textTracks = [];
+            let audioTracks = [];
+            let activeText = [];
+            let activeAudio = null;
+            try {
+              textTracks = text.getTracks() || [];
+              activeText = text.getActiveIds() || [];
+            } catch (e) {
+              // No text tracks for this media.
+            }
+            try {
+              audioTracks = audio.getTracks() || [];
+              activeAudio = audio.getActiveId();
+            } catch (e) {
+              // No audio tracks for this media.
+            }
+
+            const rows = [];
+            if (textTracks.length) {
+              rows.push({ heading: "Subtitles" });
+              const textOn = textTracks.some((t) => activeText.includes(t.trackId));
+              rows.push({ label: "Off", active: !textOn, pick: () => text.setActiveByIds([]) });
+              labelTracks(textTracks).forEach((label, i) => {
+                const id = textTracks[i].trackId;
+                rows.push({ label, active: activeText.includes(id), pick: () => text.setActiveByIds([id]) });
+              });
+            }
+            if (audioTracks.length > 1) {
+              rows.push({ heading: "Audio" });
+              labelTracks(audioTracks).forEach((label, i) => {
+                const id = audioTracks[i].trackId;
+                const active = activeAudio === null ? i === 0 : activeAudio === id;
+                rows.push({ label, active, pick: () => audio.setActiveById(id) });
+              });
+            }
+            return rows;
+          };
+
+          const render = () => {
+            menuEl.textContent = "";
+            items.forEach((row, i) => {
+              if (row.heading) {
+                const h = document.createElement("h2");
+                h.textContent = row.heading;
+                menuEl.appendChild(h);
+                return;
+              }
+              const el = document.createElement("div");
+              el.className = "item" + (row.active ? " active" : "") + (i === focus ? " focused" : "");
+              el.setAttribute("role", "menuitemradio");
+              el.setAttribute("aria-checked", String(row.active));
+              el.textContent = row.label;
+              menuEl.appendChild(el);
+              if (i === focus) el.scrollIntoView({ block: "nearest" });
+            });
+          };
+
+          const restartCloseTimer = () => {
+            clearTimeout(closeTimer);
+            closeTimer = setTimeout(closeMenu, CLOSE_AFTER_MS);
+          };
+
+          const openMenu = () => {
+            items = buildItems();
+            const rows = items.filter((row) => !row.heading);
+            if (!rows.length) return false;
+            focus = items.findIndex((row) => !row.heading && row.active);
+            if (focus < 0) focus = items.findIndex((row) => !row.heading);
+            menuEl.hidden = false;
+            render();
+            restartCloseTimer();
+            return true;
+          };
+
+          function closeMenu() {
+            clearTimeout(closeTimer);
+            menuEl.hidden = true;
+            menuEl.textContent = "";
+            items = [];
+            focus = -1;
+          }
+
+          const moveFocus = (step) => {
+            let next = focus;
+            do {
+              next += step;
+            } while (next >= 0 && next < items.length && items[next].heading);
+            if (next >= 0 && next < items.length) focus = next;
+            render();
+          };
+
+          const pick = () => {
+            const row = items[focus];
+            if (!row || row.heading) return;
+            try {
+              row.pick();
+              // The managers update the media status; send it now so the sender's
+              // menus follow without waiting for the next status.
+              player.broadcastStatus(true);
+            } catch (e) {
+              console.warn("[eyzflow-receiver] track switch failed", e);
+            }
             closeMenu();
-            logTracks();
-          },
-        );
+          };
 
-        // What the framework lists, so a debug session shows whether forced
-        // subtitles reach the text tracks manager.
-        function logTracks() {
-          try {
-            const describe = (t) => ({ id: t.trackId, language: t.language, name: t.name, roles: t.roles, subtype: t.subtype });
-            console.debug("[eyzflow-receiver] text tracks", (player.getTextTracksManager().getTracks() || []).map(describe));
-            console.debug("[eyzflow-receiver] audio tracks", (player.getAudioTracksManager().getTracks() || []).map(describe));
-          } catch (e) {
-            // No tracks.
-          }
-        }
+          const matches = (event, keys, codes) => keys.has(event.key) || codes.has(event.keyCode);
 
-        context.addEventListener(framework.system.EventType.READY, () => {
-          const caps = context.getDeviceCapabilities() || {};
-          console.debug(
-            "[eyzflow-receiver] dpad input",
-            caps[framework.system.DeviceCapabilities.DPAD_INPUT_SUPPORTED],
+          document.addEventListener(
+            "keydown",
+            (event) => {
+              console.debug("[eyzflow-receiver] key", event.key, event.keyCode);
+              if (!isOpen()) {
+                if (!matches(event, OPEN_KEYS, OPEN_CODES) || !mediaLoaded()) return;
+                if (!openMenu()) return;
+              } else if (event.key === "ArrowUp" || event.keyCode === 38) {
+                moveFocus(-1);
+              } else if (event.key === "ArrowDown" || event.keyCode === 40) {
+                moveFocus(1);
+              } else if (matches(event, SELECT_KEYS, SELECT_CODES)) {
+                pick();
+              } else if (matches(event, BACK_KEYS, BACK_CODES) || matches(event, OPEN_KEYS, OPEN_CODES)) {
+                closeMenu();
+              }
+              if (isOpen()) restartCloseTimer();
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            },
+            true,
           );
-        });
+
+          // A new film, or the end of one, closes the menu; its rows would be stale.
+          player.addEventListener(
+            [framework.events.EventType.MEDIA_FINISHED, framework.events.EventType.PLAYER_LOAD_COMPLETE],
+            () => {
+              closeMenu();
+              logTracks();
+            },
+          );
+
+          // What the framework lists, so a debug session shows whether forced
+          // subtitles reach the text tracks manager.
+          function logTracks() {
+            try {
+              const describe = (t) => ({ id: t.trackId, language: t.language, name: t.name, roles: t.roles, subtype: t.subtype });
+              console.debug("[eyzflow-receiver] text tracks", (player.getTextTracksManager().getTracks() || []).map(describe));
+              console.debug("[eyzflow-receiver] audio tracks", (player.getAudioTracksManager().getTracks() || []).map(describe));
+            } catch (e) {
+              // No tracks.
+            }
+          }
+
+          context.addEventListener(framework.system.EventType.READY, () => {
+            const caps = context.getDeviceCapabilities() || {};
+            console.debug(
+              "[eyzflow-receiver] dpad input",
+              caps[framework.system.DeviceCapabilities.DPAD_INPUT_SUPPORTED],
+            );
+          });
+        } catch (e) {
+          console.warn("[eyzflow-receiver] track menu unavailable", e);
+        }
 
         // Licence refusals carry the backend's code (STREAM_LIMIT, DEVICE_LIMIT,
         // PLAYER_KEY_INVALID, …); log it so a receiver debug session shows why.
