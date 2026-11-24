@@ -1,3 +1,16 @@
+## 0.7.0
+
+- Chromecast tracks (EYF-480): casting starts the TV with the phone's audio and
+  subtitle languages, and subtitles turned off on the phone stay off. The
+  casting screen has Audio and Subtitles panels that switch tracks on the TV
+  (with 5.1, 7.1 and AD labels where the receiver names them), and changes made
+  with the TV's own remote menu show on the phone. When casting ends, the phone
+  resumes with the TV's last languages. The cast clock and watch progress move
+  between the receiver's reports and hold while it buffers or seeks.
+- Cast receiver (EYF-476): on a TV with a remote, Up or Menu opens a Subtitles /
+  Audio menu over the film (`cast-receiver/index.html`, hosted at
+  `https://stream.eyzflow.com/cast/index.html`; not part of the package).
+
 ## 0.6.3
 
 - Chromecast (EYF-479): with no `castReceiverAppId` and no `cast.receiverAppId`
