@@ -1,3 +1,10 @@
+## 0.7.1
+
+- Chromecast tracks (EYF-480): the phone's audio and subtitle languages are
+  sent to the TV once it plays. Sent while it still loaded, they were lost
+  because the receiver goes back to its default tracks when the film starts.
+  Stopping while the TV still loads keeps the phone's own choice.
+
 ## 0.7.0
 
 - Chromecast tracks (EYF-480): casting starts the TV with the phone's audio and
