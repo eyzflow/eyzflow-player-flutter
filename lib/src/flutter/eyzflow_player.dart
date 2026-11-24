@@ -224,10 +224,10 @@ class EYZFlowPlayer extends StatefulWidget {
   /// does. A test seam.
   final VideoplayerFeaturePlayerBuilder? playerBuilder;
 
-  /// The EYZFlow Cast receiver's app id from the Google Cast console
-  /// (`cast-receiver/`), else the config's `cast.receiverAppId`. Films cast
-  /// only with it: Google's default receiver cannot add the DRM access token.
-  /// Without it only trailers cast.
+  /// The Cast receiver's app id from the Google Cast console, else the
+  /// config's `cast.receiverAppId`, else the EYZFlow receiver
+  /// ([defaultCastReceiverAppId], `cast-receiver/`), which adds the DRM access
+  /// token so films cast as well as trailers.
   final String? castReceiverAppId;
 
   /// Offers Chromecast on Android and iOS phones and tablets when a Cast
@@ -505,12 +505,10 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
     widget.onPlaybackEvent?.call(event);
   }
 
-  /// Whether to show the Cast button: a TV was found, and a film has the
-  /// EYZFlow receiver to play its DRM.
+  /// Whether to show the Cast button: a TV was found.
   bool get _castAvailable {
     final cast = _cast;
-    if (cast == null || cast.devices.isEmpty) return false;
-    return !_isProtected || _castReceiverAppId != null;
+    return cast != null && cast.devices.isNotEmpty;
   }
 
   void _onCastChanged() {

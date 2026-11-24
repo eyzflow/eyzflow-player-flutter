@@ -105,8 +105,11 @@ abstract interface class CastBackend {
   Future<CastConnection> connect(CastTarget target, {required String appId});
 }
 
-/// Google's Default Media Receiver: clear streams only.
-const String defaultCastReceiverAppId = nvp.CastSession.defaultReceiverAppId;
+/// The EYZFlow Cast receiver (`https://stream.eyzflow.com/cast/index.html`),
+/// used when neither the app nor the player config names one. It adds the DRM
+/// access token to licence requests, so films cast as well as trailers;
+/// Google's Default Media Receiver (`CC1AD845`) plays clear streams only.
+const String defaultCastReceiverAppId = 'A534F914';
 
 /// The Chromecast client in our patched native player: CASTV2 over the local
 /// network, no Google Cast SDK.

@@ -1,3 +1,11 @@
+## Unreleased
+
+- Chromecast (EYF-479): with no `castReceiverAppId` and no `cast.receiverAppId`
+  in the player config, films now cast through the EYZFlow receiver
+  (`A534F914`) instead of offering no Cast, and trailers no longer go to
+  Google's default receiver. An app or config that names its own receiver
+  keeps it. Matches the web player 0.9.1.
+
 ## 0.6.2
 
 - Subtitles on Tizen (EYF-467): the controls' bottom bar no longer covers the

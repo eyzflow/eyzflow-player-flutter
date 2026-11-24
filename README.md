@@ -122,9 +122,10 @@ stalled time, `onPlaybackEvent` reports the TV's states, and watch progress is
 recorded.
 
 **Films need the EYZFlow Cast receiver** (`cast-receiver/`): Google's standard
-receiver cannot add the DRM `access-token` to licence requests. It is hosted
-at `https://stream.eyzflow.com/cast/index.html`; register that URL in the
-Google Cast console and pass its app id as `castReceiverAppId`. Without it only trailers offer Cast. See
+receiver cannot add the DRM `access-token` to licence requests. EYZFlow hosts
+it at `https://stream.eyzflow.com/cast/index.html` as app id `A534F914`, which
+the player uses when neither `castReceiverAppId` nor the config's
+`cast.receiverAppId` names another receiver. See
 [cast-receiver/README.md](cast-receiver/README.md).
 
 **AirPlay** is the iPhone's own: Apple's player controls show the AirPlay

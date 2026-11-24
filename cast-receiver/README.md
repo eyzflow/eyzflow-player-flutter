@@ -31,10 +31,11 @@ session heartbeating while it casts.
 
 EYZFlow hosts this receiver at `https://stream.eyzflow.com/cast/index.html`,
 registered with Google as the published Custom Receiver **"EYZFlow Player",
-application id `A534F914`**. Apps use it as it is:
+application id `A534F914`**. The Flutter and web players use it when no
+receiver id is set, so apps need nothing:
 
 ```dart
-EYZFlowPlayer(castReceiverAppId: 'A534F914', …)
+EYZFlowPlayer(…) // casts through A534F914
 ```
 
 To run your own copy, host `index.html` over HTTPS (no build step), register

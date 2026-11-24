@@ -335,11 +335,18 @@ void main() {
       expect(view(tester).castAvailable, isTrue);
     });
 
-    testWidgets('a film without the EYZFlow receiver offers no Cast', (
+    testWidgets('a film without a receiver id casts to the EYZFlow receiver', (
       tester,
     ) async {
-      await pump(tester, receiver: null);
-      expect(view(tester).castAvailable, isFalse);
+      final backend = await pump(tester, receiver: null);
+      expect(view(tester).castAvailable, isTrue);
+
+      view(tester).onCastRequested!(_min(10));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Living Room TV'));
+      await tester.pump();
+      expect(backend.appId, 'A534F914');
+      expect(backend.tv.loaded!.customData!['accessToken'], isA<String>());
     });
 
     testWidgets('a TV app offers no Cast', (tester) async {
