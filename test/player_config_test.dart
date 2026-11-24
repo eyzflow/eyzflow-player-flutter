@@ -349,4 +349,65 @@ void main() {
       expect(parseCssLength('-4px'), isNull);
     });
   });
+
+  group('watchProgress.completedPercent', () {
+    double percent(Object? json) => PlayerConfig.fromJson({
+      'watchProgress': ?json,
+    }).watchProgressCompletedPercent;
+
+    test('defaults to 95', () {
+      expect(PlayerConfig.defaults.watchProgressCompletedPercent, 95);
+      expect(percent(null), 95);
+      expect(percent(<String, Object?>{}), 95);
+      expect(percent({'completedPercent': '90'}), 95);
+      expect(percent('90'), 95);
+    });
+
+    test('reads the config and clamps it to 50–100', () {
+      expect(percent({'completedPercent': 90}), 90);
+      expect(percent({'completedPercent': 92.5}), 92.5);
+      expect(percent({'completedPercent': 100}), 100);
+      expect(percent({'completedPercent': 20}), 50);
+      expect(percent({'completedPercent': 400}), 100);
+    });
+
+    test('round-trips through toJson', () {
+      final config = PlayerConfig.fromJson({
+        'watchProgress': {'completedPercent': 90},
+      });
+      expect(config.toJson()['watchProgress'], {'completedPercent': 90.0});
+      expect(PlayerConfig.defaults.toJson(), isNot(contains('watchProgress')));
+    });
+
+    test('an inline config wins; leaving it out keeps the remote one', () {
+      final remote = PlayerConfig.fromJson({
+        'watchProgress': {'completedPercent': 90},
+      });
+      expect(
+        mergePlayerConfig(
+          remote,
+          const PlayerConfigOverride(isProtected: false),
+        ).watchProgressCompletedPercent,
+        90,
+      );
+      expect(
+        mergePlayerConfig(
+          remote,
+          const PlayerConfigOverride(
+            watchProgress: PlayerWatchProgressConfig(completedPercent: 80),
+          ),
+        ).watchProgressCompletedPercent,
+        80,
+      );
+      expect(
+        mergePlayerConfig(
+          remote,
+          const PlayerConfigOverride(
+            watchProgress: PlayerWatchProgressConfig(),
+          ),
+        ).watchProgressCompletedPercent,
+        90,
+      );
+    });
+  });
 }

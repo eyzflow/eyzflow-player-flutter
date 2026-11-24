@@ -47,8 +47,13 @@ enters a `failed` playback state. Only the visible result — `NoPlayerSurface`
 Feature-length sources can receive an optional `WatchProgressRecorder`. The
 default composition seeks to `source.progressSeconds` once the duration
 is known, writes progress periodically, and records completion; trailer sources
-remain playback-only. This package owns the player callback/lifecycle, while
-the host supplies the authenticated watch-history client.
+remain playback-only. `EYZFlowPlayer` gives it an `EYZFlowWatchHistoryStore`
+(`PUT /v1/content/storefront/{storefrontId}/watch-history` with the viewer's
+`Authorization`) unless the host passes its own `WatchProgressStore` or turns
+saving off. A save counts as completed past the config's
+`watchProgress.completedPercent` of the duration (default 95 %), and always at
+the end. The first save of a film is never one at 0 s that is not completed, so
+a film opened and closed at once stays out of "Continue watching".
 
 On Tizen the resume position is not a seek: it is passed to PlusPlayer as the
 `startPosition` player option, which seeks before prepare. Seeking the paused

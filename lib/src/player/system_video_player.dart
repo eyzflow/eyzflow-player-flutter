@@ -300,7 +300,8 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       onFailure: _fail,
       onProgress: recorder == null
           ? null
-          : (Duration position, Duration _) => recorder.report(position),
+          : (Duration position, Duration duration) =>
+                recorder.report(position, duration: duration),
       onInitialized: (VideoplaybackValue value) =>
           events.ready(position: value.position, duration: value.duration),
       onValue: (VideoplaybackValue value) {

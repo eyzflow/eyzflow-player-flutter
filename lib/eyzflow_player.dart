@@ -37,6 +37,7 @@ export 'src/core/player_config.dart';
 export 'src/core/player_license.dart';
 export 'src/core/thumbnails.dart';
 export 'src/core/usage_reporter.dart';
+export 'src/core/watch_history_store.dart';
 export 'src/flutter/device_context.dart'
     show SharedPreferencesDeviceIdStore, resolvePlayerPlatform;
 export 'src/flutter/error_view.dart';
