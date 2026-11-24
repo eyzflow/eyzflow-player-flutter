@@ -503,6 +503,51 @@ final class PlayerEndScreenConfig {
   };
 }
 
+/// From this share of a film on (in percent), it counts as watched when the
+/// player config does not say otherwise. The web and iOS players use the
+/// same.
+const double defaultWatchProgressCompletedPercent = 95;
+
+/// A config's `watchProgress.completedPercent` as a percent to use: 50–100
+/// (clamped), else [defaultWatchProgressCompletedPercent] for a missing value
+/// or one that is not a number. 100 means only the end itself. The web
+/// player's `completedRatio`, as a percent.
+double clampWatchProgressCompletedPercent(Object? configured) {
+  if (configured is! num || !configured.isFinite) {
+    return defaultWatchProgressCompletedPercent;
+  }
+  return configured.toDouble().clamp(50, 100);
+}
+
+/// The config's watch progress settings (`watchProgress`): when a film
+/// counts as watched in the EYZFlow watch history.
+@immutable
+final class PlayerWatchProgressConfig {
+  const PlayerWatchProgressConfig({this.completedPercent});
+
+  factory PlayerWatchProgressConfig.fromJson(Map<String, Object?> json) =>
+      PlayerWatchProgressConfig(
+        completedPercent: switch (json['completedPercent']) {
+          final num p when p.isFinite => clampWatchProgressCompletedPercent(p),
+          _ => null,
+        },
+      );
+
+  /// From this share of the film on (50–100 %; 100: only the end), it is
+  /// saved as completed. Null: [defaultWatchProgressCompletedPercent].
+  final double? completedPercent;
+
+  Map<String, Object?> toJson() => {'completedPercent': ?completedPercent};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlayerWatchProgressConfig &&
+      other.completedPercent == completedPercent;
+
+  @override
+  int get hashCode => completedPercent.hashCode;
+}
+
 /// Extra DRM access-token parameters, e.g. `{'storefront_id': '…'}`. The
 /// dashboard does not store this section today; it comes from an inline
 /// config, as on the web.
@@ -544,6 +589,7 @@ final class PlayerConfig {
     this.drm,
     this.endScreen,
     this.skipButtonTypes,
+    this.watchProgress,
   });
 
   /// The web player's `DEFAULT_CONFIG`, and the backend's defaults.
@@ -585,6 +631,11 @@ final class PlayerConfig {
       final Map<String, Object?> types => PlayerSkipButtonTypes.fromJson(types),
       _ => null,
     },
+    watchProgress: switch (json['watchProgress']) {
+      final Map<String, Object?> watchProgress =>
+        PlayerWatchProgressConfig.fromJson(watchProgress),
+      _ => null,
+    },
   );
 
   final String id;
@@ -600,6 +651,15 @@ final class PlayerConfig {
   final PlayerDrmConfig? drm;
   final PlayerEndScreenConfig? endScreen;
   final PlayerSkipButtonTypes? skipButtonTypes;
+  final PlayerWatchProgressConfig? watchProgress;
+
+  /// From this share of a film on (50–100 %), its watch progress is saved as
+  /// completed: `watchProgress.completedPercent`, else
+  /// [defaultWatchProgressCompletedPercent].
+  double get watchProgressCompletedPercent =>
+      clampWatchProgressCompletedPercent(
+        watchProgress?.completedPercent ?? defaultWatchProgressCompletedPercent,
+      );
 
   /// `cast.receiverAppId`, when set.
   /// How many seconds the countdown before a mid-roll shows:
@@ -631,6 +691,8 @@ final class PlayerConfig {
     if (drm case final drm?) 'drm': drm.toJson(),
     if (endScreen case final endScreen?) 'endScreen': endScreen.toJson(),
     if (skipButtonTypes case final types?) 'skipButtonTypes': types.toJson(),
+    if (watchProgress case final watchProgress?)
+      'watchProgress': watchProgress.toJson(),
   };
 }
 
@@ -649,6 +711,7 @@ final class PlayerConfigOverride {
     this.drm,
     this.endScreen,
     this.skipButtonTypes,
+    this.watchProgress,
   });
 
   final String? id;
@@ -675,6 +738,9 @@ final class PlayerConfigOverride {
 
   /// Merged type by type.
   final PlayerSkipButtonTypes? skipButtonTypes;
+
+  /// Merged field by field.
+  final PlayerWatchProgressConfig? watchProgress;
 }
 
 /// The web player's `mergeConfig`: [patch] over [base]. Theme and features
@@ -712,6 +778,13 @@ PlayerConfig mergePlayerConfig(PlayerConfig base, PlayerConfigOverride? patch) {
       null => base.skipButtonTypes,
       final PlayerSkipButtonTypes t =>
         (base.skipButtonTypes ?? const PlayerSkipButtonTypes()).merge(t),
+    },
+    watchProgress: switch (patch.watchProgress) {
+      null => base.watchProgress,
+      final PlayerWatchProgressConfig w => PlayerWatchProgressConfig(
+        completedPercent:
+            w.completedPercent ?? base.watchProgress?.completedPercent,
+      ),
     },
   );
 }

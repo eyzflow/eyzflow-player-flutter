@@ -6,6 +6,7 @@ import '../end_screen/end_screen.dart';
 import '../player/playback_event.dart';
 import '../player/playback_target.dart';
 import '../player/watch_progress_recorder.dart';
+import '../core/watch_history_store.dart';
 import '../videoplayer_feature.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -81,6 +82,7 @@ class EYZFlowPlayer extends StatefulWidget {
     this.appId,
     this.analytics = true,
     this.watchProgressStore,
+    this.saveWatchProgress = true,
     this.language,
     this.onLimitReached,
     this.onLicenseError,
@@ -166,9 +168,15 @@ class EYZFlowPlayer extends StatefulWidget {
   /// False turns beats off even when the key has analytics on.
   final bool analytics;
 
-  /// Where watch progress is saved (films only), e.g. the app's watch
-  /// history. Null records nothing.
+  /// Where watch progress goes instead of the EYZFlow watch history, e.g. the
+  /// app's own backend (films only). Null: with [drmAuthorization] and a
+  /// storefront, the player saves to the EYZFlow watch history itself
+  /// ([EYZFlowWatchHistoryStore]).
   final WatchProgressStore? watchProgressStore;
+
+  /// False saves no watch progress at all: neither to the EYZFlow watch
+  /// history nor to [watchProgressStore].
+  final bool saveWatchProgress;
 
   /// The language of the player's own text (`en`, `de`, `fr`, `nl`), e.g.
   /// the storefront's. Null keeps [eyzflowPlayerLanguage]: the one set with
@@ -327,6 +335,10 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
   /// inline [EYZFlowPlayer.config].
   PlayerConfig _config = PlayerConfig.defaults;
 
+  /// The storefront playback started with: [EYZFlowPlayer.storefrontId],
+  /// else the config's `drm.parameters.storefront_id`.
+  String? _storefrontId;
+
   /// A film the end screen picked: it plays in place of `widget.streamId`
   /// until the app passes another one.
   EYZFlowEndScreenItem? _picked;
@@ -474,6 +486,7 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
     );
     _setUpCast(w.enableCast && config.features.chromecast);
     final String? storefrontId = w.storefrontId ?? config.drm?.storefrontId;
+    _storefrontId = storefrontId;
     final coordinator = PlaybackCoordinator(
       config: PlaybackCoordinatorConfig(
         streamId: _streamId,
@@ -538,7 +551,7 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
         sourceType: _sourceType,
         progressSeconds: _picked != null ? null : w.progressSeconds,
       );
-      final store = w.watchProgressStore;
+      final store = _watchProgressStore();
       final firstReady = _source == null;
       if (firstReady) {
         // The session has answered before the player mounts, so before the
@@ -558,10 +571,40 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
           ? WatchProgressRecorder(
               store: store,
               target: VideoplayerSourceTarget(source),
+              completedPercent: _config.watchProgressCompletedPercent,
             )
           : null;
     }
     setState(() {});
+  }
+
+  /// Where watch progress goes: the app's store, else the EYZFlow watch
+  /// history when the viewer's authorization and a storefront are known.
+  /// A film the end screen picked goes to the watch history only when the
+  /// app gave its catalogue id ([EYZFlowEndScreenItem.sourceType]), and
+  /// without the offer, which is the app's film's.
+  WatchProgressStore? _watchProgressStore() {
+    final w = widget;
+    if (!w.saveWatchProgress) return null;
+    final WatchProgressStore? own = w.watchProgressStore;
+    if (own != null) return own;
+    final String? authorization = w.drmAuthorization;
+    final String? storefrontId = _storefrontId;
+    final EYZFlowEndScreenItem? picked = _picked;
+    if (authorization == null ||
+        authorization.isEmpty ||
+        storefrontId == null ||
+        storefrontId.isEmpty ||
+        (picked != null && picked.sourceType is! EYZFlowFilm)) {
+      return null;
+    }
+    return EYZFlowWatchHistoryStore(
+      storefrontId: storefrontId,
+      authorization: authorization,
+      offerId: picked == null ? w.offerId : null,
+      client: w.httpClient ?? (_ownedClient ??= http.Client()),
+      endpoints: w.endpoints,
+    );
   }
 
   void _onEvent(PlaybackEvent event) {
@@ -659,7 +702,7 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
     }
     final previous = _castPlayerState;
     _castPlayerState = playback.state;
-    _recorder?.report(playback.position);
+    _recorder?.report(playback.position, duration: playback.duration);
     if (previous == playback.state) return;
     final position = playback.position;
     final duration = playback.duration;

@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:eyzflow_player/eyzflow_player.dart';
 import 'package:eyzflow_player/src/player/player_policy.dart';
 
@@ -398,6 +401,72 @@ void main() {
         expect(reported, <Duration>[const Duration(seconds: 612)]);
       },
     );
+
+    /// The EYZFlow watch history behind the same guard: a resume never
+    /// saves 0 over the viewer's place.
+    test('the watch history gets nothing before the resume position', () async {
+      final _FakeController controller = _FakeController()
+        .._value = const VideoplaybackValue(duration: Duration(minutes: 30));
+      controller.duringInitialize = () => controller.emit(
+        const VideoplaybackValue(
+          position: Duration.zero,
+          duration: Duration(minutes: 30),
+        ),
+      );
+      final bodies = <Object?>[];
+      final target = VideoplayerSourceTarget(
+        EYZFlowSource(
+          id: 'stream',
+          title: 'Episode',
+          sourceType: const EYZFlowFilm('episode'),
+          progressSeconds: 612,
+        ),
+      );
+      final recorder = WatchProgressRecorder(
+        store: EYZFlowWatchHistoryStore(
+          storefrontId: 'sf',
+          authorization: 'Bearer viewer',
+          client: MockClient((request) async {
+            bodies.add(jsonDecode(request.body));
+            return http.Response('', 204);
+          }),
+        ),
+        target: target,
+      );
+      final session = VideoplaybackSession(
+        target: target,
+        createController: (_) async => controller,
+        onFinished: () {},
+        onFailure: (_) {},
+        onProgress: (position, duration) =>
+            recorder.report(position, duration: duration),
+      );
+
+      await session.start();
+      controller.emit(
+        const VideoplaybackValue(
+          position: Duration(seconds: 3),
+          duration: Duration(minutes: 30),
+        ),
+      );
+      await recorder.flush();
+      expect(bodies, isEmpty);
+
+      controller.emit(
+        const VideoplaybackValue(
+          position: Duration(seconds: 612),
+          duration: Duration(minutes: 30),
+        ),
+      );
+      await recorder.flush();
+      expect(bodies, [
+        {
+          'catalogue_id': 'episode',
+          'progress_seconds': 612,
+          'completed': false,
+        },
+      ]);
+    });
 
     /// The seek failing leaves playback at 0; recording from there would
     /// overwrite the saved position just the same.

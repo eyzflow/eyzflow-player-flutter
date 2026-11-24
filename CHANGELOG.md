@@ -1,3 +1,20 @@
+## 0.8.0
+
+- Watch progress (EYF-493): the player saves the viewer's place in a film to
+  the EYZFlow watch history itself
+  (`PUT /v1/content/storefront/{storefrontId}/watch-history`), with the
+  viewer's `drmAuthorization`, the storefront and `offerId`, so apps no longer
+  need their own `WatchProgressStore`. An app's own `watchProgressStore` still
+  replaces it; `saveWatchProgress: false` saves nothing. Without the viewer's
+  authorization or a storefront nothing is sent. New: `EYZFlowWatchHistoryStore`.
+- A save counts as completed once the position reaches the player config's new
+  `watchProgress.completedPercent` of the film (50–100, default 95; 100 means
+  only the end), not only at the very end. `WatchProgressRecorder.report` and
+  `checkpoint` take an optional `duration` for it.
+- A film opened and closed straight away no longer shows in "Continue
+  watching": the first save is never one at 0 seconds that is not completed.
+  The same save twice in a row is sent once.
+
 ## 0.7.1
 
 - Chromecast tracks (EYF-480): the phone's audio and subtitle languages are

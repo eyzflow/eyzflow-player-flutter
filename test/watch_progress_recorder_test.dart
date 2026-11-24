@@ -226,4 +226,152 @@ void main() {
 
     expect(flushed, isTrue);
   });
+
+  group('completed', () {
+    const film = Duration(minutes: 100);
+
+    test('from 95 % of the duration by default', () async {
+      final store = _RecordingStore();
+      final recorder = WatchProgressRecorder(
+        store: store,
+        target: VideoplayerSourceTarget(_source()),
+      );
+
+      expect(recorder.completedPercent, 95);
+      recorder.report(const Duration(minutes: 94), duration: film);
+      recorder.report(const Duration(minutes: 95), duration: film);
+      await recorder.flush();
+
+      expect(store.writes, <(String, double, bool)>[
+        ('episode-catalogue', 94 * 60, false),
+        ('episode-catalogue', 95 * 60, true),
+      ]);
+    });
+
+    test('a checkpoint keeps the reported duration', () async {
+      final store = _RecordingStore();
+      final recorder = WatchProgressRecorder(
+        store: store,
+        target: VideoplayerSourceTarget(_source()),
+        completedPercent: 80,
+      );
+
+      recorder.report(const Duration(minutes: 70), duration: film);
+      recorder.checkpoint(const Duration(minutes: 81));
+      await recorder.flush();
+
+      expect(store.writes.last, ('episode-catalogue', 81 * 60, true));
+    });
+
+    test('100 % means only the end itself', () async {
+      final store = _RecordingStore();
+      final recorder = WatchProgressRecorder(
+        store: store,
+        target: VideoplayerSourceTarget(_source()),
+        completedPercent: 100,
+      );
+
+      recorder.checkpoint(const Duration(minutes: 99), duration: film);
+      recorder.checkpoint(
+        film - const Duration(milliseconds: 400),
+        duration: film,
+      );
+      await recorder.flush();
+
+      expect(store.writes, <(String, double, bool)>[
+        ('episode-catalogue', 99 * 60, false),
+        ('episode-catalogue', 99 * 60 + 59, true),
+      ]);
+    });
+
+    test('the percent is clamped to 50–100', () {
+      WatchProgressRecorder make(double percent) => WatchProgressRecorder(
+        store: _RecordingStore(),
+        target: VideoplayerSourceTarget(_source()),
+        completedPercent: percent,
+      );
+      expect(make(10).completedPercent, 50);
+      expect(make(150).completedPercent, 100);
+      expect(make(double.nan).completedPercent, 95);
+    });
+
+    test('without a duration only finish completes', () async {
+      final store = _RecordingStore();
+      final recorder = WatchProgressRecorder(
+        store: store,
+        target: VideoplayerSourceTarget(_source()),
+      );
+
+      recorder.report(const Duration(minutes: 99));
+      await recorder.flush();
+
+      expect(store.writes.single, ('episode-catalogue', 99 * 60, false));
+    });
+  });
+
+  group('a never-watched film', () {
+    test('saves nothing at 0 s', () async {
+      final store = _RecordingStore();
+      final recorder = WatchProgressRecorder(
+        store: store,
+        target: VideoplayerSourceTarget(_source()),
+      );
+
+      recorder.report(Duration.zero, duration: const Duration(minutes: 90));
+      recorder.checkpoint(const Duration(milliseconds: 800));
+      await recorder.flush();
+
+      expect(store.writes, isEmpty);
+    });
+
+    test('saves once it plays', () async {
+      final store = _RecordingStore();
+      final recorder = WatchProgressRecorder(
+        store: store,
+        target: VideoplayerSourceTarget(_source()),
+      );
+
+      recorder.checkpoint(Duration.zero);
+      recorder.checkpoint(const Duration(seconds: 4));
+      await recorder.flush();
+
+      expect(store.writes, <(String, double, bool)>[
+        ('episode-catalogue', 4, false),
+      ]);
+    });
+
+    test('a rewind to 0 after a save is saved', () async {
+      final store = _RecordingStore();
+      final recorder = WatchProgressRecorder(
+        store: store,
+        target: VideoplayerSourceTarget(_source()),
+      );
+
+      recorder.checkpoint(const Duration(seconds: 40));
+      recorder.checkpoint(Duration.zero);
+      await recorder.flush();
+
+      expect(store.writes.last, ('episode-catalogue', 0, false));
+    });
+  });
+
+  test('a failed save is sent again at the same position', () async {
+    final store = _RecordingStore()..error = StateError('offline');
+    final recorder = WatchProgressRecorder(
+      store: store,
+      target: VideoplayerSourceTarget(_source()),
+    );
+
+    recorder.checkpoint(const Duration(seconds: 23));
+    await recorder.flush();
+    store.error = null;
+    recorder.checkpoint(const Duration(seconds: 23));
+    recorder.checkpoint(const Duration(seconds: 23));
+    await recorder.flush();
+
+    expect(store.writes, <(String, double, bool)>[
+      ('episode-catalogue', 23, false),
+      ('episode-catalogue', 23, false),
+    ]);
+  });
 }

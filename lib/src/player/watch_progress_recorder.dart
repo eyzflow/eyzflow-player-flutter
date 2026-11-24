@@ -1,3 +1,7 @@
+import '../core/player_config.dart'
+    show
+        clampWatchProgressCompletedPercent,
+        defaultWatchProgressCompletedPercent;
 import '../core/source.dart';
 
 import 'playback_target.dart';
@@ -10,8 +14,9 @@ import 'player_log.dart';
 /// much position.
 const Duration watchProgressWriteInterval = Duration(seconds: 10);
 
-/// Where watch progress goes: the app's watch history, e.g. its call to the
-/// EYZFlow watch-history API:
+/// Where watch progress goes. `EYZFlowPlayer` saves to the EYZFlow watch
+/// history (`EYZFlowWatchHistoryStore`) by default; an app that keeps its own
+/// watch history implements this instead:
 ///
 /// ```dart
 /// final class MyWatchHistory implements WatchProgressStore {
@@ -39,21 +44,36 @@ abstract interface class WatchProgressStore {
 ///
 /// Progress is best-effort: a failed write is logged and never interrupts
 /// playback. Nothing reads a position back to confirm a write, because the
-/// watch-history read is eventually consistent. Writes go through the app's
-/// [store], so they land wherever the rest of the app reads watch history.
+/// watch-history read is eventually consistent. Writes go through [store]:
+/// the EYZFlow watch history (`EYZFlowWatchHistoryStore`) or the app's own.
+///
+/// A save counts as completed once the position reaches [completedPercent]
+/// of the duration (100: only the end), and always on [finish]. A film that
+/// was opened and closed at once saves nothing: the first save is never one
+/// at 0 seconds that is not completed, so it does not show in "Continue
+/// watching".
 final class WatchProgressRecorder {
   WatchProgressRecorder({
     required this.store,
     required VideoplayerTarget target,
-  }) : _catalogueId = _catalogueIdOf(target);
+    double completedPercent = defaultWatchProgressCompletedPercent,
+  }) : _catalogueId = _catalogueIdOf(target),
+       completedPercent = clampWatchProgressCompletedPercent(completedPercent);
 
   final WatchProgressStore store;
+
+  /// From this share of the film on (50–100 %), a save counts as completed.
+  final double completedPercent;
 
   /// The catalogue to record against, or `null` when this asset has no
   /// progress of its own.
   final String? _catalogueId;
 
   Duration? _lastWritten;
+  Duration? _latest;
+  Duration? _duration;
+  (int, bool)? _lastSaved;
+  bool _savedAny = false;
   bool _finished = false;
   Future<void> _writes = Future<void>.value();
 
@@ -64,21 +84,26 @@ final class WatchProgressRecorder {
   bool get isRecording => _catalogueId != null;
 
   /// Reports a position, writing only once per [watchProgressWriteInterval].
-  void report(Duration position) {
+  /// [duration], when known, decides whether the film counts as watched; the
+  /// last one reported is kept for later saves.
+  void report(Duration position, {Duration? duration}) {
     if (_catalogueId == null || _finished) return;
+    _track(position, duration);
     final Duration? last = _lastWritten;
     if (last != null && (position - last).abs() < watchProgressWriteInterval) {
       return;
     }
     _lastWritten = position;
-    _write(position, completed: false);
+    _write(position, completed: _isCompleted(position));
   }
 
-  /// Saves the latest position immediately on pause or exit, without completing.
-  void checkpoint(Duration position) {
+  /// Saves the latest position immediately on pause or exit. It counts as
+  /// completed past [completedPercent] of the duration.
+  void checkpoint(Duration position, {Duration? duration}) {
     if (_catalogueId == null || _finished) return;
+    _track(position, duration);
     _lastWritten = position;
-    _write(position, completed: false);
+    _write(position, completed: _isCompleted(position));
   }
 
   /// Records the finished asset. Further reports are ignored, so a late tick
@@ -86,12 +111,36 @@ final class WatchProgressRecorder {
   void finish() {
     if (_catalogueId == null || _finished) return;
     _finished = true;
-    _write(_lastWritten ?? Duration.zero, completed: true);
+    _write(_latest ?? _lastWritten ?? Duration.zero, completed: true);
+  }
+
+  void _track(Duration position, Duration? duration) {
+    _latest = position;
+    if (duration != null && duration > Duration.zero) _duration = duration;
+  }
+
+  bool _isCompleted(Duration position) {
+    final Duration? duration = _duration;
+    if (duration == null) return false;
+    if (completedPercent >= 100) {
+      return position >= duration - const Duration(milliseconds: 500);
+    }
+    return position.inMicroseconds >=
+        duration.inMicroseconds * completedPercent / 100;
   }
 
   void _write(Duration position, {required bool completed}) {
     final String catalogueId = _catalogueId!;
-    final double seconds = position.inSeconds.toDouble();
+    final int whole = position.inSeconds;
+    final (int, bool) entry = (whole, completed);
+    // Opening a film and leaving at once doesn't put it in "Continue
+    // watching".
+    if (!_savedAny && whole <= 0 && !completed) return;
+    // The same save again changes nothing.
+    if (_lastSaved == entry) return;
+    _savedAny = true;
+    _lastSaved = entry;
+    final double seconds = whole.toDouble();
     _writes = _writes.then((_) async {
       final elapsed = Stopwatch()..start();
       logPlayback(
@@ -112,6 +161,8 @@ final class WatchProgressRecorder {
         // Keep the queue successful so a failed progress write cannot prevent
         // a later progress or completion write.
         logPlayback('watch_progress.put failed', error: error);
+        // The same position may be saved again.
+        if (_lastSaved == entry) _lastSaved = null;
       }
     });
   }

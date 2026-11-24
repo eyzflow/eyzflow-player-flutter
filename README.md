@@ -5,7 +5,8 @@ The EYZFlow video player for Flutter apps, in one package:
 - **The player:** fullscreen playback of EYZFlow streams. AVPlay on Samsung
   Tizen TVs, ExoPlayer on Android and Android TV, AVPlayer on iOS; Widevine and
   FairPlay DRM; the TV controls overlay; subtitles and audio tracks; resume and
-  watch progress. How it works: [doc/player.md](doc/player.md).
+  watch progress saved to the EYZFlow watch history. How it works:
+  [doc/player.md](doc/player.md).
 - **The EYZFlow rules around it,** the same as the EYZFlow web
   player:
   - **Player key check:** `POST /v1/player/license`, renewed while playing.
@@ -34,7 +35,8 @@ Navigator.of(context).push(MaterialPageRoute<void>(
     offerId: offer.id,                        // royalties: see below
     playerKey: 'pk_…',                        // optional
     configId: 'cfg_…',                        // optional: dashboard player config
-    watchProgressStore: myWatchHistory,       // optional: see below
+    saveWatchProgress: true,                  // optional: see Watch progress
+    watchProgressStore: myWatchHistory,       // optional: the app's own store
     language: 'de',                           // optional: en, de, fr, nl
     onLimitReached: (limit) => …,             // STREAM_LIMIT, DEVICE_LIMIT, …
     onLicenseError: (error) => …,             // PLAYER_KEY_INVALID, …
@@ -272,6 +274,7 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 | `skipButtonTypes.*` | `intro`, `recap`, `openingCredits`, `closingCredits`: which signals get a skip button (default: all but closing credits) | same | same |
 | `features.endScreen`, `endScreen.*` | false: no end screen; `autoplaySeconds` (0–30), `showAt` (`credits`/`end`), `shrinkVideo`, `secondsBeforeEnd` (0–120, without closing credits) tune it | same | same |
 | `drm.parameters` | into the DRM `access-token`; `storefront_id` also opens the playback session | same | same |
+| `watchProgress.completedPercent` | from this share of the film on (50–100, default 95; 100: only the end) its watch progress is saved as completed | same | same |
 
 Not honoured anywhere in the apps:
 
@@ -346,12 +349,38 @@ example/                     loader app
 ```
 
 The package has no dependency on any EYZFlow app code: the app passes in what
-it owns (the viewer's token, the storefront, where watch progress goes).
+it owns (the viewer's token, the storefront, and optionally its own watch
+progress store).
 
 ### Watch progress
 
-Films report their position (every 10 seconds, on pause and at the end) to a
-`WatchProgressStore` the app provides, for example its watch-history client:
+The player saves the viewer's place in a film for "Continue watching" itself:
+every 10 seconds while it plays, at once on a pause, when playback stops, and
+as completed at the end. With an `EYZFlowFilm` source (its catalogue id),
+`drmAuthorization` and a storefront (`storefrontId`, else the config's
+`drm.parameters.storefront_id`), it sends them to the EYZFlow watch history:
+
+```
+PUT /v1/content/storefront/{storefrontId}/watch-history
+Authorization: <drmAuthorization>
+{"catalogue_id": "…", "progress_seconds": 612, "completed": false, "offer_id": "…"}
+```
+
+`progress_seconds` is whole seconds; `offer_id` goes along when the app passes
+`offerId`. Without the viewer's authorization or a storefront nothing is sent.
+Trailers save nothing, and neither does a film the end screen picked unless
+its item names the film's catalogue id (`sourceType: EYZFlowFilm(…)`).
+
+A save counts as completed once the position reaches the config's
+`watchProgress.completedPercent` of the film (50–100, default 95; 100 means
+only the end itself), and always when the film plays to its end. Nothing is
+saved until playback reaches the start position, so a resume never writes 0
+over the viewer's place. A film opened and closed straight away saves nothing:
+the first save is never one at 0 seconds that is not completed, so it does not
+show in "Continue watching".
+
+An app that keeps its own watch history passes a `WatchProgressStore`, which
+replaces the EYZFlow watch history:
 
 ```dart
 final class MyWatchHistory implements WatchProgressStore {
@@ -362,10 +391,17 @@ final class MyWatchHistory implements WatchProgressStore {
     required bool completed,
   }) => api.saveProgress(catalogueId, progressSeconds, completed);
 }
+
+EYZFlowPlayer(…, watchProgressStore: MyWatchHistory());
 ```
 
-A failed save is logged and never interrupts playback. Trailers record
-nothing.
+`saveWatchProgress: false` saves nothing at all, to either store. An app that
+saved progress itself through the EYZFlow API before should drop that code, or
+pass `saveWatchProgress: false`, so it is not saved twice.
+`EYZFlowWatchHistoryStore` is exported for hosts that drive
+`VideoplayerFeatureView` themselves.
+
+A failed save is logged and never interrupts playback.
 
 ### Royalties
 
