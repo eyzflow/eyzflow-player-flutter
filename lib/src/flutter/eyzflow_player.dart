@@ -15,6 +15,9 @@ import '../cast/cast_backend.dart';
 import '../cast/cast_controller.dart';
 import '../cast/cast_media.dart';
 import '../cast/cast_picker.dart';
+import '../cast/cast_track_scope.dart';
+import '../player/player_policy.dart';
+import '../player/subtitle_preference_store.dart';
 import '../cast/casting_view.dart';
 import '../core/analytics/transport.dart';
 import '../core/api.dart';
@@ -23,6 +26,7 @@ import '../core/playback_session.dart';
 import '../core/player_config.dart';
 import '../core/player_license.dart';
 import '../l10n/player_language.dart';
+import '../l10n/language_names.dart';
 import '../l10n/streaming_l10n.dart';
 import '../player/player_options.dart';
 import 'device_context.dart';
@@ -259,6 +263,64 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
   /// Bumped to mount a fresh player, e.g. when casting hands playback back.
   var _playerGeneration = 0;
   CastPlayerState? _castPlayerState;
+
+  /// The audio and subtitle languages the viewer picked on the phone, carried
+  /// to the TV when casting starts.
+  String? _audioLanguage;
+  String? _subtitleLanguage;
+  bool _subtitlesOff = false;
+  VideoplaybackTracks? _phoneTracks;
+  CastPlayback? _lastTracksOnTv;
+  bool _restoreAfterCast = false;
+
+  VoidCallback _attachPhoneTracks(VideoplaybackTracks tracks) {
+    _phoneTracks = tracks;
+    if (_restoreAfterCast) {
+      _restoreAfterCast = false;
+      unawaited(_restorePhoneTracks(tracks));
+    }
+    return () {
+      if (identical(_phoneTracks, tracks)) _phoneTracks = null;
+    };
+  }
+
+  Future<void> _restorePhoneTracks(VideoplaybackTracks phone) async {
+    bool current() => mounted && identical(_phoneTracks, phone);
+    try {
+      if (_audioLanguage != null) {
+        final audio = await phone.audioTracks();
+        if (!current()) return;
+        final matches = audio.where(
+          (t) =>
+              EYZFlowLanguageNames.sameBaseLanguage(_audioLanguage, t.language),
+        );
+        if (matches.isNotEmpty &&
+            !matches.any((t) => t.trackId == phone.selectedAudioTrackId)) {
+          await phone.selectAudioTrack(matches.first.trackId);
+        }
+      }
+      if (!current()) return;
+      if (_subtitlesOff) {
+        await phone.selectTextTrack(null);
+      } else if (_subtitleLanguage != null) {
+        final text = await phone.textTracks();
+        if (!current()) return;
+        final matches = text.where(
+          (t) => EYZFlowLanguageNames.sameBaseLanguage(
+            _subtitleLanguage,
+            t.language,
+          ),
+        );
+        if (matches.isNotEmpty &&
+            !matches.any((t) => t.trackId == phone.selectedTextTrackId)) {
+          await phone.selectTextTrack(matches.first.trackId);
+        }
+      }
+    } on Object catch (error) {
+      debugPrint('[eyzflow-cast] restoring phone tracks failed: $error');
+    }
+  }
+
   var _closing = false;
 
   /// The config playback started with: [EYZFlowPlayer.configId]'s, under the
@@ -372,6 +434,11 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
 
   Future<void> _start() async {
     final int run = ++_startRun;
+    _lastTracksOnTv = null;
+    _restoreAfterCast = false;
+    _audioLanguage = null;
+    _subtitleLanguage = null;
+    _subtitlesOff = false;
     final w = widget;
     final PlayerPlatform? platform = resolvePlayerPlatform(
       isTv: w.isTv,
@@ -498,6 +565,11 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
   }
 
   void _onEvent(PlaybackEvent event) {
+    if (event is PlaybackAudioTrackChanged) _audioLanguage = event.language;
+    if (event is PlaybackSubtitleTrackChanged) {
+      _subtitleLanguage = event.language;
+      _subtitlesOff = event.language == null;
+    }
     _coordinator?.onPlaybackEvent(event);
     if (event is PlaybackReady) widget.onReady?.call();
     if (event is PlaybackSignalEnded) widget.onSignal?.call(null);
@@ -519,11 +591,45 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
     final cast = _cast;
     final source = _source;
     if (cast == null || source == null || cast.isCasting) return;
+    final run = _startRun;
     final target = await showCastPicker(context, cast);
-    if (target == null || !mounted) return;
+    if (target == null || !mounted || run != _startRun) return;
+    final tracks = _phoneTracks;
+    final store = getSubtitlePreferenceStoreOrNull();
+    var audio = _audioLanguage;
+    var subtitles = _subtitleLanguage;
+    var off =
+        _subtitlesOff ||
+        (subtitles == null &&
+            store?.hasPreference == true &&
+            store?.languageCode == null);
+    if (tracks != null) {
+      final audioTracks = await tracks.audioTracks();
+      final textTracks = await tracks.textTracks();
+      if (!mounted || run != _startRun || !identical(tracks, _phoneTracks)) {
+        return;
+      }
+      audio =
+          audioTracks
+              .where((t) => t.trackId == tracks.selectedAudioTrackId)
+              .firstOrNull
+              ?.language ??
+          audio;
+      if (textTracks.isNotEmpty) {
+        subtitles = textTracks
+            .where((t) => t.trackId == tracks.selectedTextTrackId)
+            .firstOrNull
+            ?.language;
+        off = tracks.selectedTextTrackId == null;
+      }
+    }
     // The phone stops: the player unmounts as the casting screen takes over.
     _onEvent(PlaybackPaused(sourceId: source.id, position: position));
     _castPlayerState = null;
+    _lastTracksOnTv = null;
+    _audioLanguage = audio;
+    _subtitleLanguage = subtitles;
+    _subtitlesOff = off;
     await cast.cast(
       target,
       castMediaFor(
@@ -532,6 +638,9 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
         accessHeader: source.drmAccessHeader,
       ),
       appId: _castReceiverAppId ?? defaultCastReceiverAppId,
+      audioLanguage: audio,
+      subtitleLanguage: subtitles,
+      subtitlesOff: off,
     );
   }
 
@@ -540,6 +649,9 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
   void _onCastPlayback(CastPlayback playback) {
     final source = _source;
     if (source == null) return;
+    if (playback.hasActiveTrackIds && playback.tracks.isNotEmpty) {
+      _lastTracksOnTv = playback;
+    }
     final previous = _castPlayerState;
     _castPlayerState = playback.state;
     _recorder?.report(playback.position);
@@ -606,6 +718,26 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
     }
     _recorder?.checkpoint(position);
     if (_closing) return;
+    final report = _lastTracksOnTv;
+    if (report != null) {
+      final active = report.tracks.where(
+        (t) => report.activeTrackIds.contains(t.id),
+      );
+      _audioLanguage =
+          active
+              .where((t) => t.kind == CastTrackKind.audio)
+              .firstOrNull
+              ?.language ??
+          _audioLanguage;
+      if (report.tracks.any((t) => t.kind == CastTrackKind.subtitles)) {
+        final text = active
+            .where((t) => t.kind == CastTrackKind.subtitles)
+            .firstOrNull;
+        _subtitleLanguage = text?.language;
+        _subtitlesOff = text == null;
+      }
+    }
+    _restoreAfterCast = true;
     // The phone takes over where the TV was.
     setState(() {
       _source = EYZFlowSource(
@@ -686,6 +818,7 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
             title: source.title,
             poster: source.poster,
             onClose: _closeWhileCasting,
+            theme: _options.controlsTheme,
           );
         }
         return PlayerOverlayScope(
@@ -693,18 +826,21 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
           endScreen: widget.endScreen,
           overlayBuilder: widget.overlayBuilder,
           onPick: _pick,
-          child: VideoplayerFeatureView(
-            key: ValueKey((coordinator, _playerGeneration)),
-            videoSource: source,
-            isTv: widget.isTv,
-            watchProgressRecorder: _recorder,
-            onCloseRequested: _close,
-            onPlaybackEvent: _onEvent,
-            playerBuilder: widget.playerBuilder,
-            debugOperatingSystemOverride: widget.debugOperatingSystemOverride,
-            castAvailable: _castAvailable,
-            onCastRequested: _onCastRequested,
-            options: _options,
+          child: CastTrackScope(
+            attach: _attachPhoneTracks,
+            child: VideoplayerFeatureView(
+              key: ValueKey((coordinator, _playerGeneration)),
+              videoSource: source,
+              isTv: widget.isTv,
+              watchProgressRecorder: _recorder,
+              onCloseRequested: _close,
+              onPlaybackEvent: _onEvent,
+              playerBuilder: widget.playerBuilder,
+              debugOperatingSystemOverride: widget.debugOperatingSystemOverride,
+              castAvailable: _castAvailable,
+              onCastRequested: _onCastRequested,
+              options: _options,
+            ),
           ),
         );
     }

@@ -31,18 +31,85 @@ final class CastTarget {
 /// What the TV is doing.
 enum CastPlayerState { idle, buffering, playing, paused }
 
+/// What a [CastTrack] carries.
+enum CastTrackKind { audio, subtitles }
+
+/// An audio or subtitle track of the media on the TV, as the receiver lists
+/// it. [id] is the receiver's own track id, not the phone's.
+final class CastTrack {
+  const CastTrack({
+    required this.id,
+    required this.kind,
+    this.language,
+    this.name,
+    this.roles = const [],
+    this.channelCount,
+  });
+
+  static CastTrack? fromReceiver(nvp.CastMediaTrack track) {
+    final kind = switch (track.type) {
+      'AUDIO' => CastTrackKind.audio,
+      'TEXT' => CastTrackKind.subtitles,
+      _ => null,
+    };
+    if (kind == null) return null;
+    return CastTrack(
+      id: track.trackId,
+      kind: kind,
+      language: track.language,
+      name: track.name,
+      roles: track.roles,
+      channelCount: track.channelCount,
+    );
+  }
+
+  final int id;
+  final CastTrackKind kind;
+  final String? language;
+  final String? name;
+  final List<String> roles;
+  final int? channelCount;
+}
+
 /// The receiver's state, as its last status said.
 final class CastPlayback {
   const CastPlayback({
     this.state = CastPlayerState.idle,
     this.position = Duration.zero,
+    this.hasFreshPosition = true,
     this.duration,
     this.idleReason,
-  });
+    this.tracks = const <CastTrack>[],
+    List<int>? activeTrackIds,
+  }) : activeTrackIds = activeTrackIds ?? const [],
+       hasActiveTrackIds = activeTrackIds != null;
 
   final CastPlayerState state;
   final Duration position;
+
+  /// Whether this status includes a new media time from the receiver.
+  final bool hasFreshPosition;
   final Duration? duration;
+
+  /// The media's audio and subtitle tracks; empty until the receiver lists
+  /// them.
+  final List<CastTrack> tracks;
+
+  /// The [tracks] playing now: at most one audio and one subtitle track.
+  final List<int> activeTrackIds;
+
+  /// False until the receiver explicitly reports its selection (possibly empty).
+  final bool hasActiveTrackIds;
+
+  CastPlayback atEstimatedPosition(Duration estimate) => CastPlayback(
+    state: state,
+    position: estimate,
+    hasFreshPosition: false,
+    duration: duration,
+    idleReason: idleReason,
+    tracks: tracks,
+    activeTrackIds: hasActiveTrackIds ? activeTrackIds : null,
+  );
 
   /// Why the receiver is idle: `FINISHED`, `CANCELLED`, `INTERRUPTED`,
   /// `ERROR`, or null.
@@ -91,6 +158,14 @@ abstract interface class CastConnection {
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);
+
+  /// Plays exactly [trackIds] (audio and subtitles); a kind left out is
+  /// off.
+  Future<void> setActiveTracks(List<int> trackIds);
+
+  /// Asks the receiver for a fresh status. A receiver only reports its
+  /// position when its state changes, so the phone asks from time to time.
+  Future<void> requestStatus();
 
   /// Stops the media and closes the receiver app.
   Future<void> stop();
@@ -158,8 +233,13 @@ final class _NativeCastConnection implements CastConnection {
       _ => CastPlayerState.idle,
     },
     position: status.position,
+    hasFreshPosition: status.hasFreshPosition,
     duration: status.duration,
     idleReason: status.idleReason,
+    tracks: <CastTrack>[
+      for (final t in status.mediaTracks) ?CastTrack.fromReceiver(t),
+    ],
+    activeTrackIds: status.hasActiveTrackIds ? status.activeTrackIds : null,
   );
 
   @override
@@ -189,6 +269,13 @@ final class _NativeCastConnection implements CastConnection {
 
   @override
   Future<void> seek(Duration position) => _session.seek(position);
+
+  @override
+  Future<void> setActiveTracks(List<int> trackIds) =>
+      _session.setActiveTracks(trackIds);
+
+  @override
+  Future<void> requestStatus() => _session.requestStatus();
 
   @override
   Future<void> stop() async {

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../l10n/language_names.dart';
 import '../l10n/streaming_l10n.dart';
+import '../player/player_options.dart';
+import '../player/player_policy.dart';
+import '../player/track_panel.dart';
 import 'cast_backend.dart';
 import 'cast_controller.dart';
 
@@ -15,7 +20,11 @@ class CastingView extends StatefulWidget {
     required this.title,
     this.poster,
     required this.onClose,
+    this.theme = const PlayerControlsTheme(),
   });
+
+  /// The player's controls theme, for the audio and subtitle panels.
+  final PlayerControlsTheme theme;
 
   final EYZFlowCastController cast;
   final String title;
@@ -63,7 +72,7 @@ class _CastingViewState extends State<CastingView> {
                 final duration = playback?.duration;
                 final position = playback?.position ?? Duration.zero;
                 final max = (duration?.inMilliseconds ?? 0).toDouble();
-                return Column(
+                final controls = Column(
                   children: [
                     Align(
                       alignment: Alignment.topLeft,
@@ -152,12 +161,41 @@ class _CastingViewState extends State<CastingView> {
                         ),
                       ),
                     const SizedBox(height: 16),
+                    if (playback != null && playback.tracks.isNotEmpty)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final kind in CastTrackKind.values)
+                            if (playback.tracks.any((t) => t.kind == kind))
+                              TextButton.icon(
+                                onPressed: () => _showPanel(context, kind),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                ),
+                                icon: Icon(
+                                  kind == CastTrackKind.audio
+                                      ? Icons.audiotrack
+                                      : Icons.subtitles,
+                                ),
+                                label: Text(
+                                  kind == CastTrackKind.audio
+                                      ? streamingL10n.audio
+                                      : streamingL10n.subtitles,
+                                ),
+                              ),
+                        ],
+                      ),
                     TextButton.icon(
                       onPressed: widget.cast.stop,
                       icon: const Icon(Icons.stop),
                       label: Text(streamingL10n.castStop),
                     ),
                     const SizedBox(height: 24),
+                  ],
+                );
+                return CustomScrollView(
+                  slivers: [
+                    SliverFillRemaining(hasScrollBody: false, child: controls),
                   ],
                 );
               },
@@ -168,10 +206,118 @@ class _CastingViewState extends State<CastingView> {
     );
   }
 
+  /// The phone's audio or subtitle panel over the casting screen; a tap
+  /// switches the TV and closes it.
+  Future<void> _showPanel(BuildContext context, CastTrackKind kind) {
+    final cast = widget.cast;
+    final theme = widget.theme;
+    final textStyle = DefaultTextStyle.of(context).style;
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black38,
+      pageBuilder: (dialog, _, _) => ListenableBuilder(
+        listenable: cast,
+        builder: (dialog, _) {
+          final state = cast.state;
+          if (state is! CastActive) {
+            final route = ModalRoute.of(dialog)!;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (route.isActive) route.navigator?.removeRoute(route);
+            });
+            return const SizedBox.shrink();
+          }
+          final playback = state.playback;
+          final tracks = [
+            for (final t in playback.tracks)
+              if (t.kind == kind) t,
+          ];
+          final isAudio = kind == CastTrackKind.audio;
+          void pick(VoidCallback switchTv) {
+            Navigator.of(dialog).pop();
+            switchTv();
+          }
+
+          final rows = <TrackPanelRow>[
+            if (!isAudio)
+              (
+                label: streamingL10n.subtitlesOff,
+                selected:
+                    playback.hasActiveTrackIds &&
+                    !tracks.any((t) => playback.activeTrackIds.contains(t.id)),
+                onSelected: () => pick(() => cast.selectSubtitles(null)),
+              ),
+            for (final t in tracks)
+              (
+                label: castTrackLabel(t),
+                selected: playback.activeTrackIds.contains(t.id),
+                onSelected: () => pick(
+                  () => isAudio
+                      ? cast.selectAudio(t.id)
+                      : cast.selectSubtitles(t.id),
+                ),
+              ),
+          ];
+          final selected = rows.indexWhere((r) => r.selected);
+          return SafeArea(
+            child: CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.goBack): () async {
+                  // Android can also deliver a route pop for the same press.
+                  await WidgetsBinding.instance.endOfFrame;
+                  if (dialog.mounted &&
+                      ModalRoute.isCurrentOf(dialog) == true) {
+                    Navigator.of(dialog).pop();
+                  }
+                },
+              },
+              child: DefaultTextStyle(
+                style: textStyle,
+                child: TrackPanel(
+                  theme: theme,
+                  title: isAudio
+                      ? streamingL10n.audio
+                      : streamingL10n.subtitles,
+                  rows: rows,
+                  selectedRow: selected == -1 ? 0 : selected,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   static String _time(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
+}
+
+/// A cast track's row label, as the phone's panel words it: the language name
+/// with what tells two renditions apart ("Arabic (5.1)", "French (AD)"),
+/// from receiver metadata, with the track name as a fallback.
+String castTrackLabel(CastTrack track) {
+  final String? name = track.name;
+  final String? language = track.language == null
+      ? null
+      : EYZFlowLanguageNames.languageName(track.language!);
+  if (language == null) return name ?? track.language ?? '${track.id}';
+  if (track.kind != CastTrackKind.audio) return language;
+  final raw = name ?? '';
+  final layout = track.channelCount == null
+      ? RegExp(r'\b[57]\.1\b').firstMatch(raw)?.group(0)
+      : surroundLayout(track.channelCount);
+  // "alternate" alone can be a dub or commentary as well as description.
+  final description =
+      track.roles.contains('description') ||
+      RegExp(
+        r'\b(AD|audio description|audiodeskription)\b',
+        caseSensitive: false,
+      ).hasMatch(raw);
+  return audioTrackLabel(language, layout: layout, description: description);
 }

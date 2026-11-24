@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../l10n/language_names.dart';
 import 'cast_backend.dart';
 
 /// Where casting is.
@@ -88,6 +89,15 @@ final class EYZFlowCastController extends ChangeNotifier {
   var _started = false;
   var _ending = false;
   var _startAt = Duration.zero;
+  String? _audioLanguage;
+  String? _subtitleLanguage;
+  var _tracksApplied = false;
+  var _subtitlesOff = false;
+
+  /// Seconds since the receiver last reported a media position.
+  var _sinceReport = 0;
+  Object? _pendingSeek;
+  Timer? _clock;
   String? _lastReported;
   var _disposed = false;
 
@@ -135,17 +145,31 @@ final class EYZFlowCastController extends ChangeNotifier {
   }
 
   /// Hands playback to [target] with the receiver [appId].
+  ///
+  /// [audioLanguage] and [subtitleLanguage] are what the viewer chose on the
+  /// phone; once the TV lists its tracks they are selected there by
+  /// language. Null leaves the TV's default (a null subtitle language does
+  /// not turn subtitles off). Set [subtitlesOff] to explicitly disable them.
   Future<void> cast(
     CastTarget target,
     CastMedia media, {
     required String appId,
+    String? audioLanguage,
+    String? subtitleLanguage,
+    bool subtitlesOff = false,
   }) async {
     if (isCasting || _disposed) return;
+    _audioLanguage = audioLanguage;
+    _subtitleLanguage = subtitleLanguage;
+    _tracksApplied = false;
+    _subtitlesOff = subtitlesOff;
     _started = false;
+    _pendingSeek = null;
     _ending = false;
     _lastReported = null;
     _startAt = media.startAt;
     _setState(CastConnecting(target));
+    _sinceReport = 0;
     final CastConnection connection;
     try {
       connection = await _connect(target, appId);
@@ -181,7 +205,30 @@ final class EYZFlowCastController extends ChangeNotifier {
     _loadTimer = Timer(loadTimeout, () {
       if (!_started) _fail(target, 'timeout', media.startAt);
     });
+    _clock?.cancel();
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     await connection.load(media);
+  }
+
+  /// A receiver only reports its position when its state changes; between
+  /// reports the phone runs the clock itself while the TV plays, and asks
+  /// for a fresh status every 15 s so the estimate cannot drift.
+  void _tick() {
+    final state = _state;
+    if (_ending || state is! CastActive) return;
+    final reported = state.playback;
+    if (reported.state != CastPlayerState.playing && _pendingSeek == null) {
+      return;
+    }
+    _sinceReport += 1;
+    if (_sinceReport % 15 == 0) unawaited(_connection?.requestStatus());
+    if (_pendingSeek != null) return;
+    var position = reported.position + const Duration(seconds: 1);
+    final duration = reported.duration;
+    if (duration != null && position > duration) position = duration;
+    final estimate = reported.atEstimatedPosition(position);
+    _setState(CastActive(state.target, estimate));
+    onPlayback?.call(estimate);
   }
 
   void _onPlayback(CastTarget target, CastPlayback playback, Duration startAt) {
@@ -216,8 +263,119 @@ final class EYZFlowCastController extends ChangeNotifier {
     }
     // Before the media started, the receiver reports idle with no reason.
     if (playback.state == CastPlayerState.idle && !_started) return;
+    if (playback.hasFreshPosition) {
+      _pendingSeek = null;
+      _sinceReport = 0;
+    } else {
+      final current = _state;
+      playback = playback.atEstimatedPosition(
+        current is CastActive ? current.playback.position : startAt,
+      );
+    }
+    if (!_tracksApplied && playback.tracks.isNotEmpty) {
+      _tracksApplied = true;
+      _applyPhoneTracks(playback);
+    }
     _setState(CastActive(target, playback));
     onPlayback?.call(playback);
+  }
+
+  /// Selects the phone's languages on the TV, once its tracks are known.
+  void _applyPhoneTracks(CastPlayback playback) {
+    final int? audio = _byLanguage(
+      playback.tracks,
+      CastTrackKind.audio,
+      _audioLanguage,
+    );
+    final int? subtitles = _byLanguage(
+      playback.tracks,
+      CastTrackKind.subtitles,
+      _subtitleLanguage,
+    );
+    if (audio == null && subtitles == null && !_subtitlesOff) return;
+    final List<int> withAudio = _withTrack(
+      playback,
+      CastTrackKind.audio,
+      audio ?? _active(playback, CastTrackKind.audio),
+    );
+    final List<int> next = _withTrack(
+      CastPlayback(tracks: playback.tracks, activeTrackIds: withAudio),
+      CastTrackKind.subtitles,
+      _subtitlesOff
+          ? null
+          : subtitles ?? _active(playback, CastTrackKind.subtitles),
+    );
+    if (playback.hasActiveTrackIds &&
+        listEquals(next, playback.activeTrackIds)) {
+      return;
+    }
+    unawaited(_setTracks(next));
+  }
+
+  /// Plays audio track [id] on the TV; the subtitles stay as they are.
+  Future<void> selectAudio(int id) => _select(CastTrackKind.audio, id);
+
+  /// Shows subtitle track [id] on the TV, or none for null; the audio stays.
+  Future<void> selectSubtitles(int? id) => _select(CastTrackKind.subtitles, id);
+
+  Future<void> _select(CastTrackKind kind, int? id) async {
+    final state = _state;
+    if (state is! CastActive) return;
+    final List<int> next = _withTrack(state.playback, kind, id);
+    if (state.playback.hasActiveTrackIds &&
+        listEquals(next, state.playback.activeTrackIds)) {
+      return;
+    }
+    await _setTracks(next);
+  }
+
+  Future<void> _setTracks(List<int> ids) async {
+    try {
+      await _connection?.setActiveTracks(ids);
+    } on Object catch (error) {
+      debugPrint('[eyzflow-cast] track switch failed: $error');
+    }
+  }
+
+  /// The active ids with the [kind] track replaced by [id] (removed if null).
+  static List<int> _withTrack(
+    CastPlayback playback,
+    CastTrackKind kind,
+    int? id,
+  ) {
+    final Set<int> ofKind = {
+      for (final t in playback.tracks)
+        if (t.kind == kind) t.id,
+    };
+    return [
+      for (final active in playback.activeTrackIds)
+        if (!ofKind.contains(active)) active,
+      ?id,
+    ]..sort();
+  }
+
+  static int? _active(CastPlayback playback, CastTrackKind kind) => playback
+      .tracks
+      .where((t) => t.kind == kind && playback.activeTrackIds.contains(t.id))
+      .map((t) => t.id)
+      .firstOrNull;
+
+  /// The first [kind] track in [language], compared by display name as the
+  /// phone's panel does: EYZFlow tags one language differently across
+  /// streams (`de`, `deu`, `de_DE`).
+  static int? _byLanguage(
+    List<CastTrack> tracks,
+    CastTrackKind kind,
+    String? language,
+  ) {
+    return tracks
+        .where(
+          (t) =>
+              t.kind == kind &&
+              EYZFlowLanguageNames.sameBaseLanguage(language, t.language),
+        )
+        .map((t) => t.id)
+        .firstOrNull;
   }
 
   /// Before the receiver reported a position, the TV is where it started.
@@ -226,7 +384,18 @@ final class EYZFlowCastController extends ChangeNotifier {
 
   Future<void> play() async => _connection?.play();
   Future<void> pause() async => _connection?.pause();
-  Future<void> seek(Duration position) async => _connection?.seek(position);
+  Future<void> seek(Duration position) async {
+    final connection = _connection;
+    if (connection == null) return;
+    final request = Object();
+    _pendingSeek = request;
+    try {
+      await connection.seek(position);
+    } catch (_) {
+      if (identical(_pendingSeek, request)) _pendingSeek = null;
+      rethrow;
+    }
+  }
 
   /// Stops casting. The player takes over at the TV's position.
   Future<void> stop() async {
@@ -257,6 +426,8 @@ final class EYZFlowCastController extends ChangeNotifier {
   }) async {
     if (_ending) return;
     _ending = true;
+    _clock?.cancel();
+    _clock = null;
     debugPrint(
       '[eyzflow-cast] ${target.name}: ended (${reason.name}'
       '${failure == null ? '' : ': $failure'}) at $position',
@@ -297,6 +468,7 @@ final class EYZFlowCastController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _loadTimer?.cancel();
+    _clock?.cancel();
     unawaited(_playbackSub?.cancel());
     unawaited(_errorSub?.cancel());
     final connection = _connection;

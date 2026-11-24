@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
 import '../core/source.dart';
+import '../cast/cast_track_scope.dart';
 
 import '../bloc/player_controls_bloc.dart';
 import '../bloc/videoplayer_feature_bloc.dart';
@@ -178,7 +179,11 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     if (recorder != null) unawaited(recorder.flush());
   }
 
+  VoidCallback? _detachCastTracks;
+
   void _retireNative() {
+    _detachCastTracks?.call();
+    _detachCastTracks = null;
     _checkpoint();
     unawaited(_androidEvents?.cancel());
     unawaited(_pipEvents?.cancel());
@@ -325,6 +330,13 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       if (!mounted || !identical(_session, session)) return;
     }
     await session.start();
+    if (!mounted || !identical(_session, session)) return;
+    final tracks = _playbackTracks;
+    if (!widget.useSharedOverlay && tracks != null) {
+      _detachCastTracks = context
+          .getInheritedWidgetOfExactType<CastTrackScope>()
+          ?.attach(tracks);
+    }
     // Overlay mode needs a rebuild once the controller exists: unlike the
     // native-controls path, nothing else calls setState on the injected-
     // controller path, so the overlay would never be built.
@@ -964,7 +976,7 @@ final class _SystemPlayerController
     ]);
   }
 
-  /// Fetched once per load. Cached because selection addresses the plugin's
+  /// Refreshed on enumeration. Cached because selection addresses the plugin's
   /// own track object, and re-fetching the whole list on every selection is a
   /// needless native round trip. Safe here, unlike on the AVPlay adapter:
   /// these are read only after initialize() and load() have completed.
@@ -979,9 +991,9 @@ final class _SystemPlayerController
 
   @override
   Future<List<PlayerAudioTrack>> audioTracks() async {
-    final List<NativeVideoPlayerAudioTrack> tracks = _nativeAudioTracks ??=
+    final List<NativeVideoPlayerAudioTrack> tracks = _nativeAudioTracks =
         await controller.getAvailableAudioTracks();
-    selectedAudioTrackId ??= systemSelectedIndex(
+    selectedAudioTrackId = systemSelectedIndex(
       tracks,
       (NativeVideoPlayerAudioTrack t) => t.isSelected,
       (NativeVideoPlayerAudioTrack t) => t.index,
@@ -991,9 +1003,9 @@ final class _SystemPlayerController
 
   @override
   Future<List<PlayerTextTrack>> textTracks() async {
-    final List<NativeVideoPlayerSubtitleTrack> tracks = _nativeTextTracks ??=
+    final List<NativeVideoPlayerSubtitleTrack> tracks = _nativeTextTracks =
         await controller.getAvailableSubtitleTracks();
-    selectedTextTrackId ??= systemSelectedIndex(
+    selectedTextTrackId = systemSelectedIndex(
       tracks,
       (NativeVideoPlayerSubtitleTrack t) => t.isSelected,
       (NativeVideoPlayerSubtitleTrack t) => t.index,

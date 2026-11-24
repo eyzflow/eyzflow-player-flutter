@@ -129,6 +129,22 @@ abstract interface class VideoplaybackController {
   Future<void> dispose();
 }
 
+/// Surround layouts named in the audio panel. Mono and stereo have no suffix.
+String? surroundLayout(int? channels) => switch (channels) {
+  6 => '5.1',
+  8 => '7.1',
+  _ => null,
+};
+
+String audioTrackLabel(
+  String language, {
+  String? layout,
+  required bool description,
+}) {
+  final tags = [?layout, if (description) 'AD'];
+  return tags.isEmpty ? language : '$language (${tags.join(', ')})';
+}
+
 /// One audio track surfaced to the controls overlay. Package-owned so nothing
 /// outside the plugin adapter depends on `video_player_avplay` types.
 final class PlayerAudioTrack {
@@ -147,11 +163,7 @@ final class PlayerAudioTrack {
 
   /// "5.1"/"7.1" for surround layouts, otherwise `null`: stereo and mono
   /// need no qualifier, and other counts have no conventional name.
-  String? get surroundLabel => switch (channel) {
-    6 => '5.1',
-    8 => '7.1',
-    _ => null,
-  };
+  String? get surroundLabel => surroundLayout(channel);
 
   /// The rendition's HLS `CHARACTERISTICS` UTIs (RFC 8216 §4.3.4.2.1).
   final Set<String> characteristics;

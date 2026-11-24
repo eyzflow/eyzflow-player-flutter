@@ -112,6 +112,14 @@ Chromecast is found on the Wi-Fi: inside the native controls on Android (it
 fades with them), top right on iOS. Picking a TV hands the film over at the
 phone's position; the phone shows the poster, "Playing on …", play/pause, a
 seek bar and **Stop casting**, which hands playback back at the TV's position.
+The TV selects the phone’s current audio and subtitle languages when matching
+tracks are available. Subtitles turned off on the phone stay off on the TV.
+The casting screen’s Audio and Subtitles panels switch tracks on the TV.
+Audio labels show 5.1, 7.1 and AD when the receiver identifies the rendition.
+When casting ends, the phone resumes with the TV’s last reported languages
+where available, including subtitles off. If the receiver disconnects before
+confirming a selection, the phone restores its outgoing choices. Long track
+lists scroll, and disconnecting closes any open casting panel.
 Closing the player stops the TV too. If the TV refuses the film, the phone
 says so and plays on.
 
@@ -119,7 +127,8 @@ While the TV plays, the playback session keeps heartbeating (the film counts
 as the phone's one stream: the TV's licence request carries the phone's
 `device_id` and `playback_session_id`), beats keep counting played, paused and
 stalled time, `onPlaybackEvent` reports the TV's states, and watch progress is
-recorded.
+recorded. The cast clock holds its position during buffering and while a seek
+awaits the next receiver status.
 
 **Films need the EYZFlow Cast receiver** (`cast-receiver/`): Google's standard
 receiver cannot add the DRM `access-token` to licence requests. EYZFlow hosts

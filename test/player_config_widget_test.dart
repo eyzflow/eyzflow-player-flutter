@@ -83,6 +83,12 @@ final class _Tv implements CastConnection {
   Future<void> seek(Duration position) async {}
   @override
   Future<void> stop() async {}
+
+  @override
+  Future<void> setActiveTracks(List<int> trackIds) async {}
+
+  @override
+  Future<void> requestStatus() async {}
 }
 
 /// The API: the player config, playback sessions.

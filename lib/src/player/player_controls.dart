@@ -19,6 +19,7 @@ import 'player_options.dart';
 import '../core/player_config.dart' show PlayerSkipButtonTypes;
 import '../signals/stream_signals.dart';
 import 'skip_signal_button.dart';
+import 'track_panel.dart';
 
 /// How long the overlay takes to fade in or out.
 const Duration _fadeDuration = Duration(milliseconds: 250);
@@ -46,18 +47,15 @@ List<_NamedTrack> _namedAudioTracks(
 ) => <_NamedTrack>[
   for (final PlayerAudioTrack t in tracks)
     if (EYZFlowLanguageNames.languageName(t.language) case final String name)
-      (trackId: t.trackId, label: _audioLabel(name, t)),
+      (
+        trackId: t.trackId,
+        label: audioTrackLabel(
+          name,
+          layout: t.surroundLabel,
+          description: t.isAudioDescription,
+        ),
+      ),
 ];
-
-/// "Französisch (5.1, AD)": the qualifiers that tell two renditions of one
-/// language apart.
-String _audioLabel(String name, PlayerAudioTrack t) {
-  final List<String> tags = <String>[
-    if (t.surroundLabel case final String layout) layout,
-    if (t.isAudioDescription) 'AD',
-  ];
-  return tags.isEmpty ? name : '$name (${tags.join(', ')})';
-}
 
 /// The text tracks a panel can offer.
 ///
@@ -1335,134 +1333,23 @@ class _TrackPanel extends StatelessWidget {
     );
     final int autofocusRow = selectedRow == -1 ? 0 : selectedRow;
 
-    return Align(
-      alignment: Alignment.centerRight,
-      // A scope, not just a traversal group. Two things follow from it, both
-      // of which the group alone did not give:
-      //
-      // Directional traversal searches the focused node's nearest scope, so
-      // the arrows are bounded to these rows — without it an arrow walked
-      // straight out onto the transport still sitting underneath the panel.
-      //
-      // And `autofocus` is applied only to a scope with no focused child.
-      // The route's scope already had one — the button that opened the panel
-      // — so the checked row's autofocus was silently dropped and focus
-      // stayed outside the sidebar entirely.
-      child: FocusScope(
-        child: FocusTraversalGroup(
-          child: Container(
-            width: 270,
-            color: _ThemeScope.of(context).panelColor,
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Text(
-                  isAudio ? streamingL10n.audio : streamingL10n.subtitles,
-                  style: TextStyle(
-                    color: _ThemeScope.of(context).textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                for (final (int index, _NamedTrack row) in rows.indexed)
-                  _TrackRow(
-                    label: row.label,
-                    selected: row.trackId == selectedId,
-                    onSelected: () => bloc.add(
-                      isAudio
-                          // Only the subtitles panel has a null-id row.
-                          ? PlayerControlsAudioSelected(row.trackId!)
-                          : PlayerControlsTextSelected(row.trackId),
-                    ),
-                    autofocus: index == autofocusRow,
-                  ),
-              ],
+    return TrackPanel(
+      theme: _ThemeScope.of(context),
+      title: isAudio ? streamingL10n.audio : streamingL10n.subtitles,
+      selectedRow: autofocusRow,
+      rows: <TrackPanelRow>[
+        for (final _NamedTrack row in rows)
+          (
+            label: row.label,
+            selected: row.trackId == selectedId,
+            onSelected: () => bloc.add(
+              isAudio
+                  // Only the subtitles panel has a null-id row.
+                  ? PlayerControlsAudioSelected(row.trackId!)
+                  : PlayerControlsTextSelected(row.trackId),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TrackRow extends StatelessWidget {
-  const _TrackRow({
-    required this.label,
-    required this.selected,
-    required this.onSelected,
-    required this.autofocus,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onSelected;
-  final bool autofocus;
-
-  @override
-  Widget build(BuildContext context) {
-    return FocusableActionDetector(
-      autofocus: autofocus,
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-      },
-      actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (_) {
-            onSelected();
-            return null;
-          },
-        ),
-      },
-      child: Builder(
-        builder: (context) {
-          final bool focused = Focus.of(context).hasFocus;
-          final PlayerControlsTheme theme = _ThemeScope.of(context);
-          final Color text = theme.textColor;
-          return GestureDetector(
-            onTap: onSelected,
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              decoration: BoxDecoration(
-                color: focused
-                    ? theme.focusColor
-                    : text.withValues(alpha: text.a * 0.1),
-                borderRadius: BorderRadius.circular(theme.radius),
-              ),
-              child: Row(
-                children: <Widget>[
-                  // A check on the language that is playing, and nothing at
-                  // all on the others: an empty checkbox on every row read as
-                  // "none of these is on". The box keeps the labels aligned.
-                  SizedBox(
-                    width: 24,
-                    child: selected
-                        ? Icon(
-                            Icons.check,
-                            color: focused
-                                ? theme.onFocusColor
-                                : text.withValues(alpha: text.a * 0.7),
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: 9),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: focused ? theme.onFocusColor : text,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+      ],
     );
   }
 }
