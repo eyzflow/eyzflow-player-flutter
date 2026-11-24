@@ -512,7 +512,7 @@ const double defaultWatchProgressCompletedPercent = 95;
 /// (clamped), else [defaultWatchProgressCompletedPercent] for a missing value
 /// or one that is not a number. 100 means only the end itself. The web
 /// player's `completedRatio`, as a percent.
-double watchProgressCompletedPercent(Object? configured) {
+double clampWatchProgressCompletedPercent(Object? configured) {
   if (configured is! num || !configured.isFinite) {
     return defaultWatchProgressCompletedPercent;
   }
@@ -528,7 +528,7 @@ final class PlayerWatchProgressConfig {
   factory PlayerWatchProgressConfig.fromJson(Map<String, Object?> json) =>
       PlayerWatchProgressConfig(
         completedPercent: switch (json['completedPercent']) {
-          final num p when p.isFinite => watchProgressCompletedPercent(p),
+          final num p when p.isFinite => clampWatchProgressCompletedPercent(p),
           _ => null,
         },
       );
@@ -657,7 +657,9 @@ final class PlayerConfig {
   /// completed: `watchProgress.completedPercent`, else
   /// [defaultWatchProgressCompletedPercent].
   double get watchProgressCompletedPercent =>
-      watchProgress?.completedPercent ?? defaultWatchProgressCompletedPercent;
+      clampWatchProgressCompletedPercent(
+        watchProgress?.completedPercent ?? defaultWatchProgressCompletedPercent,
+      );
 
   /// `cast.receiverAppId`, when set.
   /// How many seconds the countdown before a mid-roll shows:

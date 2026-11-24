@@ -379,6 +379,18 @@ void main() {
       expect(PlayerConfig.defaults.toJson(), isNot(contains('watchProgress')));
     });
 
+    test('an inline percent is clamped too', () {
+      expect(
+        mergePlayerConfig(
+          PlayerConfig.defaults,
+          const PlayerConfigOverride(
+            watchProgress: PlayerWatchProgressConfig(completedPercent: 20),
+          ),
+        ).watchProgressCompletedPercent,
+        50,
+      );
+    });
+
     test('an inline config wins; leaving it out keeps the remote one', () {
       final remote = PlayerConfig.fromJson({
         'watchProgress': {'completedPercent': 90},

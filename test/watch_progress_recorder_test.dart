@@ -354,4 +354,24 @@ void main() {
       expect(store.writes.last, ('episode-catalogue', 0, false));
     });
   });
+
+  test('a failed save is sent again at the same position', () async {
+    final store = _RecordingStore()..error = StateError('offline');
+    final recorder = WatchProgressRecorder(
+      store: store,
+      target: VideoplayerSourceTarget(_source()),
+    );
+
+    recorder.checkpoint(const Duration(seconds: 23));
+    await recorder.flush();
+    store.error = null;
+    recorder.checkpoint(const Duration(seconds: 23));
+    recorder.checkpoint(const Duration(seconds: 23));
+    await recorder.flush();
+
+    expect(store.writes, <(String, double, bool)>[
+      ('episode-catalogue', 23, false),
+      ('episode-catalogue', 23, false),
+    ]);
+  });
 }

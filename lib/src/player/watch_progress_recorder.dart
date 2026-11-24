@@ -1,5 +1,7 @@
 import '../core/player_config.dart'
-    show defaultWatchProgressCompletedPercent, watchProgressCompletedPercent;
+    show
+        clampWatchProgressCompletedPercent,
+        defaultWatchProgressCompletedPercent;
 import '../core/source.dart';
 
 import 'playback_target.dart';
@@ -56,7 +58,7 @@ final class WatchProgressRecorder {
     required VideoplayerTarget target,
     double completedPercent = defaultWatchProgressCompletedPercent,
   }) : _catalogueId = _catalogueIdOf(target),
-       completedPercent = watchProgressCompletedPercent(completedPercent);
+       completedPercent = clampWatchProgressCompletedPercent(completedPercent);
 
   final WatchProgressStore store;
 
@@ -71,6 +73,7 @@ final class WatchProgressRecorder {
   Duration? _latest;
   Duration? _duration;
   (int, bool)? _lastSaved;
+  bool _savedAny = false;
   bool _finished = false;
   Future<void> _writes = Future<void>.value();
 
@@ -129,13 +132,14 @@ final class WatchProgressRecorder {
   void _write(Duration position, {required bool completed}) {
     final String catalogueId = _catalogueId!;
     final int whole = position.inSeconds;
-    final (int, bool)? last = _lastSaved;
+    final (int, bool) entry = (whole, completed);
     // Opening a film and leaving at once doesn't put it in "Continue
     // watching".
-    if (last == null && whole <= 0 && !completed) return;
+    if (!_savedAny && whole <= 0 && !completed) return;
     // The same save again changes nothing.
-    if (last == (whole, completed)) return;
-    _lastSaved = (whole, completed);
+    if (_lastSaved == entry) return;
+    _savedAny = true;
+    _lastSaved = entry;
     final double seconds = whole.toDouble();
     _writes = _writes.then((_) async {
       final elapsed = Stopwatch()..start();
@@ -157,6 +161,8 @@ final class WatchProgressRecorder {
         // Keep the queue successful so a failed progress write cannot prevent
         // a later progress or completion write.
         logPlayback('watch_progress.put failed', error: error);
+        // The same position may be saved again.
+        if (_lastSaved == entry) _lastSaved = null;
       }
     });
   }
