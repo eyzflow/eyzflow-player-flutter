@@ -13,5 +13,6 @@
 library;
 
 export 'src/models/cast_device.dart';
+export 'src/services/cast/cast_media_track.dart';
 export 'src/services/cast/cast_session.dart';
 export 'src/services/cast_device_discovery.dart';

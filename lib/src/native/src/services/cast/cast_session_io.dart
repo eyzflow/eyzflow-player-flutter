@@ -5,65 +5,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../models/cast_device.dart';
+import 'cast_media_track.dart';
 import 'cast_protocol.dart';
+import 'cast_session_status.dart';
 
-/// State pushed by the receiver (also when changed from the TV remote or
-/// another sender) — listen to [CastSession.statusStream] to keep app UI
-/// in sync.
-@immutable
-class CastSessionStatus {
-  const CastSessionStatus({
-    this.playerState = 'IDLE',
-    this.position = Duration.zero,
-    this.duration,
-    this.volumeLevel = 1.0,
-    this.muted = false,
-    this.activeTrackIds = const <int>[],
-    this.idleReason,
-  });
-
-  /// IDLE / BUFFERING / PLAYING / PAUSED (receiver vocabulary).
-  final String playerState;
-  final Duration position;
-  final Duration? duration;
-
-  /// Receiver volume 0..1.
-  final double volumeLevel;
-  final bool muted;
-
-  /// Currently active media tracks (e.g. enabled caption track ids).
-  final List<int> activeTrackIds;
-
-  /// FINISHED / CANCELLED / ERROR when [playerState] is IDLE.
-  final String? idleReason;
-
-  bool get isPlaying => playerState == 'PLAYING';
-
-  CastSessionStatus copyWith({
-    String? playerState,
-    Duration? position,
-    Duration? duration,
-    double? volumeLevel,
-    bool? muted,
-    List<int>? activeTrackIds,
-    String? idleReason,
-  }) => CastSessionStatus(
-    playerState: playerState ?? this.playerState,
-    position: position ?? this.position,
-    duration: duration ?? this.duration,
-    volumeLevel: volumeLevel ?? this.volumeLevel,
-    muted: muted ?? this.muted,
-    activeTrackIds: activeTrackIds ?? this.activeTrackIds,
-    idleReason: idleReason,
-  );
-
-  @override
-  String toString() =>
-      'CastSessionStatus($playerState'
-      '${idleReason == null ? '' : '($idleReason)'} ${position.inSeconds}s'
-      '${duration == null ? '' : '/${duration!.inSeconds}s'} '
-      'vol ${(volumeLevel * 100).round()}% tracks $activeTrackIds)';
-}
+export 'cast_session_status.dart';
 
 /// A sidecar text track for the receiver (same VTT files as the plugin's
 /// sidecar subtitles — the receiver fetches the URL itself, so it must be
@@ -188,7 +134,10 @@ class CastSession {
     // EYZFlow patch: write errors (a device that hung up while a heartbeat
     // or command was sent) complete `done` with an error; unobserved, that
     // crashed the app as an unhandled SocketException.
-    _socket.done.then<void>((_) => _shutdown(), onError: (Object _) => _shutdown());
+    _socket.done.then<void>(
+      (_) => _shutdown(),
+      onError: (Object _) => _shutdown(),
+    );
     _socket.listen(
       (chunk) {
         for (final message in _frames.addChunk(chunk)) {
@@ -309,17 +258,16 @@ class CastSession {
       _lastStatus.copyWith(
         playerState: playerState,
         position: currentTimeSeconds == null
-            ? _lastStatus.position
+            ? null
             : Duration(milliseconds: (currentTimeSeconds * 1000).round()),
         duration: durationSeconds == null
             ? _lastStatus.duration
             : Duration(milliseconds: (durationSeconds * 1000).round()),
-        activeTrackIds:
-            (s['activeTrackIds'] as List?)
-                ?.cast<num>()
-                .map((n) => n.toInt())
-                .toList() ??
-            _lastStatus.activeTrackIds,
+        activeTrackIds: (s['activeTrackIds'] as List?)
+            ?.cast<num>()
+            .map((n) => n.toInt())
+            .toList(),
+        mediaTracks: castMediaTracks(media),
         idleReason: idleReason,
       ),
     );
@@ -361,7 +309,8 @@ class CastSession {
     // the beginning of the DVR window; omitting the field lets it default to the
     // live edge, matching local playback. Only send it when the caller actually
     // requested a position (or for regular buffered media).
-    final bool sendCurrentTime = streamType != 'LIVE' || startAt > Duration.zero;
+    final bool sendCurrentTime =
+        streamType != 'LIVE' || startAt > Duration.zero;
 
     final payload = <String, dynamic>{
       'type': 'LOAD',

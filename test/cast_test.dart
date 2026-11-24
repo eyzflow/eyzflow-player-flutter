@@ -2,11 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:eyzflow_player/eyzflow_player.dart';
+import 'package:eyzflow_player/src/player/player_policy.dart';
+import 'package:eyzflow_player/src/player/system_video_player.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:eyzflow_player/src/cast/casting_view.dart';
+import 'package:eyzflow_player/src/player/track_panel.dart';
+import 'package:eyzflow_player/src/native/cast.dart' as nvp;
 
 const _tv = CastTarget(id: 'tv-1', name: 'Living Room TV', model: 'Chromecast');
 
@@ -54,6 +60,13 @@ final class _FakeTv implements CastConnection {
 
   @override
   Future<void> stop() async => calls.add('stop');
+
+  @override
+  Future<void> setActiveTracks(List<int> trackIds) async =>
+      calls.add('tracks $trackIds');
+
+  @override
+  Future<void> requestStatus() async => calls.add('status');
 }
 
 final class _FakeBackend implements CastBackend {
@@ -249,6 +262,445 @@ void main() {
     });
   });
 
+  group('cast clock', () {
+    test('the position advances while the TV plays, not while paused', () {
+      fakeAsync((async) {
+        final backend = _FakeBackend();
+        final reported = <Duration>[];
+        final cast = EYZFlowCastController(
+          backend: backend,
+          onPlayback: (p) => reported.add(p.position),
+        );
+        cast.cast(_tv, _media, appId: 'A');
+        async.flushMicrotasks();
+        backend.tv.report(
+          CastPlayback(state: CastPlayerState.playing, position: _min(10)),
+        );
+        async.elapse(const Duration(seconds: 3));
+        expect(
+          (cast.state as CastActive).playback.position,
+          _min(10) + const Duration(seconds: 3),
+        );
+        expect(reported.last, _min(10) + const Duration(seconds: 3));
+
+        backend.tv.report(
+          CastPlayback(state: CastPlayerState.paused, position: _min(11)),
+        );
+        async.elapse(const Duration(seconds: 5));
+        expect((cast.state as CastActive).playback.position, _min(11));
+        cast.dispose();
+      });
+    });
+
+    test('a pending seek freezes the clock until a receiver report', () {
+      fakeAsync((async) {
+        final backend = _FakeBackend();
+        final positions = <Duration>[];
+        final cast = EYZFlowCastController(
+          backend: backend,
+          onPlayback: (p) => positions.add(p.position),
+        );
+        cast.cast(_tv, _media, appId: 'A');
+        async.flushMicrotasks();
+        backend.tv.report(
+          CastPlayback(state: CastPlayerState.playing, position: _min(1)),
+        );
+        async.elapse(const Duration(seconds: 1));
+        final beforeSeek = positions.length;
+        cast.seek(_min(20));
+        async.elapse(const Duration(seconds: 16));
+        expect(positions, hasLength(beforeSeek));
+        expect(backend.tv.calls, contains('status'));
+        backend.tv.report(
+          CastPlayback(state: CastPlayerState.buffering, position: _min(20)),
+        );
+        async.elapse(const Duration(seconds: 3));
+        expect(positions.last, _min(20));
+        backend.tv.report(
+          CastPlayback(state: CastPlayerState.playing, position: _min(20)),
+        );
+        async.elapse(const Duration(seconds: 2));
+        expect(positions.last, _min(20) + const Duration(seconds: 2));
+        cast.dispose();
+      });
+    });
+
+    test('a status without a position cannot release a pending seek', () {
+      fakeAsync((async) {
+        final backend = _FakeBackend();
+        final cast = EYZFlowCastController(backend: backend);
+        cast.cast(_tv, _media, appId: 'A');
+        async.flushMicrotasks();
+        backend.tv.report(
+          CastPlayback(state: CastPlayerState.playing, position: _min(1)),
+        );
+        async.elapse(const Duration(seconds: 2));
+        final frozen = (cast.state as CastActive).playback.position;
+        cast.seek(_min(10));
+        backend.tv.report(
+          CastPlayback(
+            state: CastPlayerState.playing,
+            position: _min(1),
+            hasFreshPosition: false,
+          ),
+        );
+        async.elapse(const Duration(seconds: 3));
+        expect((cast.state as CastActive).playback.position, frozen);
+        cast.dispose();
+      });
+    });
+
+    test('the TV is asked for its status every 15 s while playing', () {
+      fakeAsync((async) {
+        final backend = _FakeBackend();
+        final cast = EYZFlowCastController(backend: backend);
+        cast.cast(_tv, _media, appId: 'A');
+        async.flushMicrotasks();
+        backend.tv.report(
+          CastPlayback(state: CastPlayerState.playing, position: _min(1)),
+        );
+        async.elapse(const Duration(seconds: 31));
+        expect(backend.tv.calls.where((c) => c == 'status'), hasLength(2));
+        cast.dispose();
+      });
+    });
+  });
+
+  group('cast tracks', () {
+    late _FakeBackend backend;
+    late EYZFlowCastController cast;
+
+    const tracks = <CastTrack>[
+      CastTrack(id: 1, kind: CastTrackKind.audio, language: 'de'),
+      CastTrack(id: 2, kind: CastTrackKind.audio, language: 'en'),
+      CastTrack(id: 3, kind: CastTrackKind.subtitles, language: 'en-GB'),
+      CastTrack(id: 4, kind: CastTrackKind.subtitles, language: 'de'),
+    ];
+    CastPlayback playing({List<int> active = const [1]}) => CastPlayback(
+      state: CastPlayerState.playing,
+      position: _min(1),
+      tracks: tracks,
+      activeTrackIds: active,
+    );
+
+    setUp(() {
+      backend = _FakeBackend();
+      cast = EYZFlowCastController(backend: backend);
+    });
+
+    test('the receiver status lists its audio and subtitle tracks', () {
+      final status = nvp.castMediaTracks(<String, dynamic>{
+        'tracks': [
+          {'trackId': 1, 'type': 'AUDIO', 'language': 'de', 'name': 'Deutsch'},
+          {'trackId': 3, 'type': 'TEXT', 'language': 'en'},
+          {'trackId': 9, 'type': 'VIDEO'},
+        ],
+      })!;
+      expect(status.map((t) => '${t.trackId} ${t.type} ${t.language}'), [
+        '1 AUDIO de',
+        '3 TEXT en',
+        '9 VIDEO null',
+      ]);
+    });
+
+    test(
+      'the phone audio and subtitles carry over once, by language',
+      () async {
+        await cast.cast(
+          _tv,
+          _media,
+          appId: 'A',
+          audioLanguage: 'en',
+          subtitleLanguage: 'en',
+        );
+        backend.tv.report(playing());
+        backend.tv.report(playing(active: const [2, 3]));
+        expect(backend.tv.calls.where((c) => c.startsWith('tracks')), [
+          'tracks [2, 3]',
+        ]);
+      },
+    );
+
+    test(
+      'explicit Off reaches a receiver that has not reported active IDs',
+      () async {
+        await cast.cast(_tv, _media, appId: 'A');
+        backend.tv.report(
+          const CastPlayback(state: CastPlayerState.paused, tracks: tracks),
+        );
+        await cast.selectSubtitles(null);
+        expect(backend.tv.calls.last, 'tracks []');
+        cast.dispose();
+      },
+    );
+
+    test(
+      'partial native status distinguishes cached time and unknown tracks',
+      () {
+        final initial = const nvp.CastSessionStatus();
+        final volume = initial.copyWith(volumeLevel: 0.5);
+        expect(volume.hasFreshPosition, isFalse);
+        expect(volume.hasActiveTrackIds, isFalse);
+        final media = volume.copyWith(position: _min(4), activeTrackIds: []);
+        expect(media.hasFreshPosition, isTrue);
+        final trackEdit = media.copyWith(activeTrackIds: [42]);
+        expect(trackEdit.hasFreshPosition, isFalse);
+        expect(trackEdit.position, _min(4));
+        expect(trackEdit.copyWith(muted: true).activeTrackIds, [42]);
+        expect(media.copyWith(muted: true).hasActiveTrackIds, isTrue);
+      },
+    );
+
+    test('no choice on the phone leaves the TV defaults', () async {
+      await cast.cast(_tv, _media, appId: 'A');
+      backend.tv.report(playing());
+      expect(backend.tv.calls.where((c) => c.startsWith('tracks')), isEmpty);
+    });
+
+    test(
+      'switching audio keeps the subtitles, and subtitles can go off',
+      () async {
+        await cast.cast(_tv, _media, appId: 'A');
+        backend.tv.report(playing(active: const [1, 4]));
+        await cast.selectAudio(2);
+        backend.tv.report(playing(active: const [2, 4]));
+        await cast.selectSubtitles(null);
+        expect(backend.tv.calls.where((c) => c.startsWith('tracks')), [
+          'tracks [2, 4]',
+          'tracks [2]',
+        ]);
+      },
+    );
+  });
+
+  testWidgets('the casting screen offers the phone panels, labelled alike', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    final cast = EYZFlowCastController(backend: backend);
+    await cast.cast(_tv, _media, appId: 'A');
+    backend.tv.report(
+      CastPlayback(
+        state: CastPlayerState.paused,
+        position: _min(1),
+        duration: _min(90),
+        tracks: const [
+          CastTrack(
+            id: 1,
+            kind: CastTrackKind.audio,
+            language: 'ar',
+            name: 'Arabic stereo',
+          ),
+          CastTrack(
+            id: 2,
+            kind: CastTrackKind.audio,
+            language: 'ar',
+            name: 'Arabic 5.1 5.1',
+          ),
+          CastTrack(id: 4, kind: CastTrackKind.subtitles, language: 'de'),
+        ],
+        activeTrackIds: const [1, 4],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CastingView(cast: cast, title: 'Film', onClose: () {}),
+      ),
+    );
+
+    await tester.tap(find.text('Audio'));
+    await tester.pumpAndSettle();
+    void expectPlainPanelText() {
+      final labels = tester.widgetList<RichText>(
+        find.descendant(
+          of: find.byType(TrackPanel),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(labels, isNotEmpty);
+      for (final label in labels) {
+        expect(
+          label.text.style?.decoration?.contains(TextDecoration.underline),
+          isNot(isTrue),
+          reason: label.text.toPlainText(),
+        );
+      }
+    }
+
+    expectPlainPanelText();
+    expect(find.text('Arabic'), findsOneWidget);
+    await tester.tap(find.text('Arabic (5.1)'));
+    await tester.pumpAndSettle();
+    expect(backend.tv.calls.last, 'tracks [2, 4]');
+    expect(find.text('Arabic (5.1)'), findsNothing);
+
+    await tester.tap(find.text('Subtitles'));
+    await tester.pumpAndSettle();
+    expectPlainPanelText();
+    await tester.tap(find.text('Off'));
+    await tester.pumpAndSettle();
+    expect(backend.tv.calls.last, 'tracks [1]');
+    cast.dispose();
+  });
+
+  testWidgets(
+    'the remote focuses the selected track and Back returns to casting',
+    (tester) async {
+      final backend = _FakeBackend();
+      final cast = EYZFlowCastController(backend: backend);
+      await cast.cast(_tv, _media, appId: 'A');
+      backend.tv.report(_receiverTracks(active: [2, 4]));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CastingView(cast: cast, title: 'Film', onClose: () {}),
+        ),
+      );
+      final button = tester.element(find.text('Audio'));
+      Focus.of(button).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(
+        Focus.of(tester.element(find.text('English'))).hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        Focus.of(tester.element(find.text('French'))).hasPrimaryFocus,
+        isTrue,
+      );
+      // Android supplies the logical Back keycode independently of the scan code.
+      await tester.sendKeyEvent(
+        LogicalKeyboardKey.goBack,
+        physicalKey: PhysicalKeyboardKey.escape,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('English'), findsNothing);
+      expect(Focus.of(button).hasFocus, isTrue);
+      expect(cast.isCasting, isTrue);
+      expect(backend.tv.calls, ['load']);
+      cast.dispose();
+    },
+  );
+
+  testWidgets(
+    'a long casting panel scrolls to the last track by touch and remote',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 360));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final backend = _FakeBackend();
+      final cast = EYZFlowCastController(backend: backend);
+      await cast.cast(_tv, _media, appId: 'A');
+      backend.tv.report(
+        CastPlayback(
+          state: CastPlayerState.paused,
+          tracks: [
+            for (var id = 1; id <= 12; id++)
+              CastTrack(
+                id: id,
+                kind: CastTrackKind.subtitles,
+                name: 'Track $id',
+              ),
+          ],
+          activeTrackIds: const [],
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CastingView(cast: cast, title: 'Film', onClose: () {}),
+        ),
+      );
+      await tester.tap(find.text('Subtitles'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (var i = 0; i < 12; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
+      expect(
+        Focus.of(tester.element(find.text('Track 12'))).hasPrimaryFocus,
+        isTrue,
+      );
+      expect(find.text('Track 12').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('Track 12'));
+      await tester.pumpAndSettle();
+      expect(backend.tv.calls.last, 'tracks [12]');
+      cast.dispose();
+    },
+  );
+
+  test('cast labels tell renditions apart, like the phone', () {
+    String label(String? language, String? name) => castTrackLabel(
+      CastTrack(
+        id: 1,
+        kind: CastTrackKind.audio,
+        language: language,
+        name: name,
+      ),
+    );
+    expect(label('ar', 'Arabic stereo'), 'Arabic');
+    expect(label('ar', 'Arabic 5.1 5.1'), 'Arabic (5.1)');
+    expect(label('fr', 'French AD'), 'French (AD)');
+    expect(label(null, 'Commentary'), 'Commentary');
+  });
+
+  test('cast audio labels prefer receiver metadata and fall back to names', () {
+    String label({
+      String name = 'French',
+      List<String>? roles,
+      Object? info,
+      String type = 'AUDIO',
+    }) {
+      final track = nvp.castMediaTracks({
+        'tracks': [
+          {
+            'trackId': 42,
+            'type': type,
+            'language': 'fr',
+            'name': name,
+            'roles': ?roles,
+            'audioTrackInfo': ?info,
+          },
+        ],
+      })!.single;
+      return castTrackLabel(CastTrack.fromReceiver(track)!);
+    }
+
+    expect(
+      label(roles: ['description'], info: {'numAudioChannels': 8}),
+      'French (7.1, AD)',
+    );
+    expect(label(name: 'French 5.1', info: {'numAudioChannels': 2}), 'French');
+    expect(label(roles: ['alternate']), 'French');
+    expect(label(name: 'French AD', roles: ['alternate']), 'French (AD)');
+    expect(label(name: 'French 5.1', info: 'unknown'), 'French (5.1)');
+    expect(label(name: 'French 2.1'), 'French');
+    expect(
+      label(type: 'TEXT', name: 'French AD', roles: ['description']),
+      'French',
+    );
+  });
+
+  test('the phone language matches a differently tagged TV track', () async {
+    final backend = _FakeBackend();
+    final cast = EYZFlowCastController(backend: backend);
+    await cast.cast(_tv, _media, appId: 'A', subtitleLanguage: 'de');
+    backend.tv.report(
+      CastPlayback(
+        state: CastPlayerState.playing,
+        position: _min(1),
+        tracks: const [
+          CastTrack(id: 1, kind: CastTrackKind.audio, language: 'ar'),
+          CastTrack(id: 5, kind: CastTrackKind.subtitles, language: 'deu'),
+        ],
+        activeTrackIds: const [1],
+      ),
+    );
+    expect(backend.tv.calls.last, 'tracks [1, 5]');
+    cast.dispose();
+  });
+
   group('castMediaFor', () {
     const source = EYZFlowSource(
       id: 'stream-1',
@@ -292,6 +744,7 @@ void main() {
       String? receiver = 'ABCD1234',
       bool isTv = false,
       List<PlaybackEvent>? events,
+      _PhonePlayer Function()? phone,
     }) async {
       final backend = _FakeBackend();
       final client = MockClient((request) async {
@@ -316,7 +769,12 @@ void main() {
             castBackend: backend,
             debugOperatingSystemOverride: 'android',
             onPlaybackEvent: events?.add,
-            playerBuilder: (_, _) => const SizedBox(key: Key('player')),
+            playerBuilder: (_, target) => phone == null
+                ? const SizedBox(key: Key('player'))
+                : SystemVideoPlayer(
+                    target: target,
+                    createController: (_) async => phone(),
+                  ),
           ),
         ),
       );
@@ -328,6 +786,100 @@ void main() {
 
     VideoplayerFeatureView view(WidgetTester tester) => tester
         .widget<VideoplayerFeatureView>(find.byType(VideoplayerFeatureView));
+
+    Future<void> pickTv(WidgetTester tester) async {
+      view(tester).onCastRequested!(_min(10));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('Living Room TV'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    for (final subtitles in [true, false]) {
+      testWidgets(
+        'casts current phone tracks without a pick (subtitles $subtitles)',
+        (tester) async {
+          final phone = _PhonePlayer()
+            ..selectedTextTrackId = subtitles ? 7 : null;
+          final backend = await pump(tester, phone: () => phone);
+          await pickTv(tester);
+          backend.tv.report(_receiverTracks(active: [1, 3]));
+          expect(
+            backend.tv.calls.last,
+            subtitles ? 'tracks [2, 4]' : 'tracks [2]',
+          );
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+
+    for (final subtitles in [true, false]) {
+      testWidgets(
+        'resumes the receiver tracks on the phone (subtitles $subtitles)',
+        (tester) async {
+          final resumed = _PhonePlayer();
+          var players = 0;
+          final backend = await pump(
+            tester,
+            phone: () => ++players == 1 ? _PhonePlayer() : resumed,
+          );
+          await pickTv(tester);
+          backend.tv.report(_receiverTracks(active: [2, 4]));
+          backend.tv.report(_receiverTracks(active: subtitles ? [1, 3] : [1]));
+          await tester.pump();
+          await tester.tap(find.text('Stop casting'));
+          await tester.pump();
+          await tester.pump();
+          expect(players, 2);
+          expect(resumed.selectedAudioTrackId, 6);
+          expect(resumed.selectedTextTrackId, subtitles ? 8 : null);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+
+    testWidgets('unknown receiver selection preserves the outgoing subtitles', (
+      tester,
+    ) async {
+      final resumed = _PhonePlayer()..selectedTextTrackId = null;
+      var players = 0;
+      final backend = await pump(
+        tester,
+        phone: () => ++players == 1 ? _PhonePlayer() : resumed,
+      );
+      await pickTv(tester);
+      backend.tv.report(
+        CastPlayback(
+          state: CastPlayerState.paused,
+          tracks: _receiverTracks(active: []).tracks,
+        ),
+      );
+      backend.tv.disconnect();
+      await tester.pump();
+      await tester.pump();
+      expect(resumed.selectedTextTrackId, 7);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets(
+      'disconnect closes an open casting panel and resumes the phone',
+      (tester) async {
+        final backend = await pump(tester);
+        await pickTv(tester);
+        backend.tv.report(_receiverTracks(active: [2, 4]));
+        await tester.pump();
+        await tester.tap(find.text('Audio'));
+        await tester.pumpAndSettle();
+        expect(find.text('English'), findsOneWidget);
+        backend.tv.disconnect();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final player = tester.element(find.byKey(const Key('player')));
+        expect(ModalRoute.isCurrentOf(player), isTrue);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
 
     testWidgets('offers Cast once a TV is found', (tester) async {
       final backend = await pump(tester);
@@ -414,6 +966,62 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   });
+}
+
+CastPlayback _receiverTracks({required List<int> active}) => CastPlayback(
+  state: CastPlayerState.paused,
+  tracks: const [
+    CastTrack(id: 1, kind: CastTrackKind.audio, language: 'fr'),
+    CastTrack(id: 2, kind: CastTrackKind.audio, language: 'en'),
+    CastTrack(id: 3, kind: CastTrackKind.subtitles, language: 'fr'),
+    CastTrack(id: 4, kind: CastTrackKind.subtitles, language: 'de'),
+  ],
+  activeTrackIds: active,
+);
+
+class _PhonePlayer implements VideoplaybackController, VideoplaybackTracks {
+  @override
+  final value = const VideoplaybackValue();
+  @override
+  int? selectedAudioTrackId = 5;
+  @override
+  int? selectedTextTrackId = 7;
+  @override
+  Future<List<PlayerAudioTrack>> audioTracks() async => const [
+    PlayerAudioTrack(trackId: 5, language: 'eng'),
+    PlayerAudioTrack(trackId: 6, language: 'fra'),
+  ];
+  @override
+  Future<List<PlayerTextTrack>> textTracks() async => const [
+    PlayerTextTrack(trackId: 7, language: 'deu'),
+    PlayerTextTrack(trackId: 8, language: 'fr_FR'),
+  ];
+  @override
+  Future<bool> selectAudioTrack(int id) async {
+    selectedAudioTrackId = id;
+    return true;
+  }
+
+  @override
+  Future<bool> selectTextTrack(int? id) async {
+    selectedTextTrackId = id;
+    return true;
+  }
+
+  @override
+  Future<void> initialize() async {}
+  @override
+  Future<void> play() async {}
+  @override
+  Future<void> pause() async {}
+  @override
+  Future<void> seekTo(Duration position) async {}
+  @override
+  void addListener(void Function(VideoplaybackValue) listener) {}
+  @override
+  void removeListener(void Function(VideoplaybackValue) listener) {}
+  @override
+  Future<void> dispose() async {}
 }
 
 double? _progress(VideoplayerFeatureView view) => switch (view.target) {

@@ -1,30 +1,11 @@
 import '../../models/cast_device.dart';
+import 'cast_session_status.dart';
+
+export 'cast_session_status.dart';
 
 /// Web/WASM stubs: CASTV2 needs dart:io sockets. The API mirrors the io
 /// implementation so shared code compiles; everything network-touching
 /// throws [UnsupportedError].
-class CastSessionStatus {
-  const CastSessionStatus({
-    this.playerState = 'IDLE',
-    this.position = Duration.zero,
-    this.duration,
-    this.volumeLevel = 1.0,
-    this.muted = false,
-    this.activeTrackIds = const <int>[],
-    this.idleReason,
-  });
-
-  final String playerState;
-  final Duration position;
-  final Duration? duration;
-  final double volumeLevel;
-  final bool muted;
-  final List<int> activeTrackIds;
-  final String? idleReason;
-
-  bool get isPlaying => playerState == 'PLAYING';
-}
-
 class CastTextTrack {
   const CastTextTrack({
     required this.trackId,

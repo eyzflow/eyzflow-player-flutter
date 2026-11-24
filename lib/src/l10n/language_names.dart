@@ -16,6 +16,14 @@ typedef LanguageNameResolver = String? Function(String code, String uiLanguage);
 /// Built in, from the Unicode CLDR display names, for the player's four UI
 /// languages; an app with its own names sets [resolver].
 abstract final class EYZFlowLanguageNames {
+  /// Cast senders and receivers can use different tags for the same language.
+  static bool sameBaseLanguage(String? first, String? second) {
+    String? name(String? code) =>
+        code == null ? null : languageName(code.split(RegExp('[-_]')).first);
+    final wanted = name(first);
+    return wanted != null && wanted == name(second);
+  }
+
   /// Consulted first; null (the default) uses the built-in table only.
   static LanguageNameResolver? resolver;
 
