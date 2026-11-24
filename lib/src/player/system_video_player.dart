@@ -95,8 +95,9 @@ class SystemVideoPlayer extends StatefulWidget {
   final bool useSharedOverlay;
 
   /// Shows a Cast button with the native controls: inside Media3's controls
-  /// on Android (it fades with them), top right over the player on iOS. The
-  /// host sets it once it found a Cast device. Never with [useSharedOverlay].
+  /// on Android (it fades with them), under the trailing end of AVKit's top
+  /// bar on iOS. The host sets it once it found a Cast device. Never with
+  /// [useSharedOverlay].
   final bool castAvailable;
 
   /// A tap on the Cast button, with the playback position. Playback goes on;
@@ -158,6 +159,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   void _onOverlayChanged() {
     if (!mounted) return;
     setState(() {});
+    _syncCastButton();
     // AVKit's (and Android's) native full screen covers everything Flutter
     // draws: the end screen or the app's overlay would show behind it. Leave
     // it, so the viewer sees them.
@@ -214,11 +216,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   void didUpdateWidget(SystemVideoPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     _events?.onEvent = widget.onPlaybackEvent;
-    if (oldWidget._showsCast != widget._showsCast) {
-      unawaited(
-        _nativeController?.setAndroidCastButtonVisible(widget._showsCast),
-      );
-    }
+    if (oldWidget._showsCast != widget._showsCast) _syncCastButton();
     // useSharedOverlay is captured in the controller's `showNativeControls`
     // when it is built, so a flip needs a new controller: reusing the old one
     // would leave the plugin's native controls live underneath the shared
@@ -454,7 +452,21 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
 
   void _onAdsChanged() {
     if (mounted) setState(() {});
+    _syncCastButton();
     _updateAdCountdown(_lastValue, jumped: false);
+  }
+
+  /// The native Cast button: once a Cast device is found. On iOS, where it
+  /// sits in the video, it is hidden during an ad break (as AVKit's controls
+  /// are) and while the end screen or the app's overlay is up (they can
+  /// shrink the video into a corner).
+  bool get _castButtonShown =>
+      widget._showsCast &&
+      !(defaultTargetPlatform == TargetPlatform.iOS &&
+          ((_ads?.inBreak ?? false) || _overlay.active));
+
+  void _syncCastButton() {
+    unawaited(_nativeController?.setCastButtonVisible(_castButtonShown));
   }
 
   /// The notice before a mid-roll, from the latest position report. Hidden
@@ -580,12 +592,12 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         );
       }
     });
-    _castRequests = nativeController.androidCastRequests.listen((position) {
+    _castRequests = nativeController.castRequests.listen((position) {
       if (!mounted || !identical(_nativeController, nativeController)) return;
       widget.onCastRequested?.call(position);
     });
     if (widget._showsCast) {
-      unawaited(nativeController.setAndroidCastButtonVisible(true));
+      unawaited(nativeController.setCastButtonVisible(_castButtonShown));
     }
     _pipEvents = nativeController.isPipEnabledStream.listen((enabled) {
       if (!mounted || !identical(_nativeController, nativeController)) return;
@@ -731,9 +743,9 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         : null;
 
     if (!widget.useSharedOverlay) {
-      // iOS: the Cast button sits over the native controls (AVKit has no slot
-      // for it). One Stack from the first frame, surface at index 0, so the
-      // button or the ads appearing never re-parent the platform view.
+      // The Cast button is native (over AVKit's controls on iOS, on the
+      // fullscreen route on Android). One Stack from the first frame, surface
+      // at index 0, so the ads appearing never re-parent the platform view.
       return Stack(
         fit: StackFit.expand,
         children: <Widget>[
@@ -747,17 +759,6 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
             ),
           ?adLayer,
           ?countdown,
-          if (widget._showsCast && controller != null && !inAdBreak)
-            Positioned(
-              top: MediaQuery.paddingOf(context).top + 8,
-              right: 8,
-              child: IconButton(
-                onPressed: () =>
-                    widget.onCastRequested?.call(controller.currentPosition),
-                icon: const Icon(Icons.cast, color: Colors.white),
-                tooltip: streamingL10n.castTo,
-              ),
-            ),
         ],
       );
     }

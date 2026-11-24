@@ -1,3 +1,12 @@
+## 0.8.1
+
+- Cast button on iOS (EYF-495): the button no longer sits on AVKit's top bar
+  over the volume control. It is now a native round button, the same size as
+  AVKit's, under the trailing end of that bar and lined up with the volume
+  button, in portrait, landscape and on iPad. It follows AVKit when the bar
+  moves with the safe area (after a rotation). Hidden during ad breaks, as
+  before; iOS 15 and later. Android's Cast button is unchanged.
+
 ## 0.8.0
 
 - Watch progress (EYF-493): the player saves the viewer's place in a film to

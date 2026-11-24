@@ -15,17 +15,29 @@ class AndroidPlaybackEvent {
 extension AndroidPlaybackController on NativeVideoPlayerController {
   bool get _isAndroidPlayback =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  bool get _isIOSPlayback =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
   Stream<AndroidPlaybackEvent> get androidPlaybackEvents =>
       _androidPlaybackEvents.stream;
 
-  /// Taps on the fullscreen route's Cast button, with the playback position
-  /// at the tap (EYZFlow patch). Playback goes on; the app decides.
-  Stream<Duration> get androidCastRequests => _androidCastRequests.stream;
+  /// Taps on the Cast button, with the playback position at the tap
+  /// (EYZFlow patch). Playback goes on; the app decides.
+  Stream<Duration> get castRequests => _castRequests.stream;
 
-  /// Shows or hides the fullscreen route's Cast button (EYZFlow patch). The
-  /// app shows it once it found a Cast device.
-  Future<void> setAndroidCastButtonVisible(bool visible) async {
-    await _androidInvoke<void>('setCastButtonVisible', {'visible': visible});
+  /// Shows or hides the Cast button (EYZFlow patch): on Android the
+  /// fullscreen route's, on iOS one over AVKit's controls. The app shows it
+  /// once it found a Cast device.
+  Future<void> setCastButtonVisible(bool visible) async {
+    if (_castButtonVisible == visible) return;
+    _castButtonVisible = visible;
+    if (_isAndroidPlayback) {
+      await _androidInvoke<void>('setCastButtonVisible', {'visible': visible});
+    } else if (_isIOSPlayback && !_isDisposed) {
+      await _methodChannel?.setCastButtonVisible(
+        visible,
+        label: androidCastLabel,
+      );
+    }
   }
 
   Future<T?> _androidInvoke<T>(
@@ -58,16 +70,18 @@ extension AndroidPlaybackController on NativeVideoPlayerController {
   }
 
   bool _handleAndroidPlaybackEvent(Map<dynamic, dynamic> map) {
-    if (!_isAndroidPlayback || _isDisposed) return false;
+    if (_isDisposed) return false;
     final name = map['event'];
+    // Android and iOS both send it.
     if (name == 'castRequested') {
-      if (!_androidCastRequests.isClosed) {
-        _androidCastRequests.add(
+      if (!_castRequests.isClosed) {
+        _castRequests.add(
           Duration(milliseconds: (map['positionMs'] as num?)?.toInt() ?? 0),
         );
       }
       return true;
     }
+    if (!_isAndroidPlayback) return false;
     if (name != 'playbackPaused' && name != 'playbackClosed') return false;
     final reason = map['reason'];
     const reasons = {

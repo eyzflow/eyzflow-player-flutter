@@ -166,9 +166,10 @@ class NativeVideoPlayerController {
   /// Localized accessibility label for the Android fullscreen route Close.
   final String androidCloseLabel;
 
-  /// Localized accessibility label for the Android fullscreen route Cast
-  /// button (EYZFlow patch). The button stays hidden until
-  /// [setAndroidCastButtonVisible]; taps arrive on [androidCastRequests].
+  /// Localized accessibility label for the Cast button (EYZFlow patch): on
+  /// the Android fullscreen route and over AVKit's controls on iOS. The
+  /// button stays hidden until [setCastButtonVisible]; taps arrive on
+  /// [castRequests].
   final String androidCastLabel;
 
   /// Whether swipe/pinch gestures are disabled in native iOS fullscreen
@@ -264,9 +265,12 @@ class NativeVideoPlayerController {
   final _androidPlaybackEvents =
       StreamController<AndroidPlaybackEvent>.broadcast();
 
-  /// Taps on the Android fullscreen route's Cast button, with the playback
-  /// position at the tap (EYZFlow patch).
-  final _androidCastRequests = StreamController<Duration>.broadcast();
+  /// Taps on the Cast button, with the playback position at the tap
+  /// (EYZFlow patch).
+  final _castRequests = StreamController<Duration>.broadcast();
+
+  /// Whether the Cast button is shown; applied again to each new iOS view.
+  bool _castButtonVisible = false;
 
   /// Set of platform view IDs that are using this controller
   final Set<int> _platformViewIds = <int>{};
@@ -1262,6 +1266,13 @@ class NativeVideoPlayerController {
     // Always update to use the most recent platform view
     // This ensures commands go to the active view
     _updateMethodChannel(platformViewId);
+
+    // A new iOS view has no Cast button yet (EYZFlow patch).
+    if (_castButtonVisible && _isIOSPlayback && _methodChannel != null) {
+      unawaited(
+        _methodChannel!.setCastButtonVisible(true, label: androidCastLabel),
+      );
+    }
 
     // If we're reconnecting after all platform views were disposed, refresh availability flags
     if (wasDisconnected) {
@@ -2417,7 +2428,7 @@ class NativeVideoPlayerController {
     _isDisposed = true;
 
     await _androidPlaybackEvents.close();
-    await _androidCastRequests.close();
+    await _castRequests.close();
 
     // Stop the stalled-playback watchdogs.
     _cancelWatchdogs();

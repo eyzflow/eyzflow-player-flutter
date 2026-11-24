@@ -693,6 +693,8 @@ import QuartzCore
             handleSetSubtitleTrack(call: call, result: result)
         case "setEmbeddedTextScale":
             handleSetEmbeddedTextScale(call: call, result: result)
+        case "setCastButtonVisible":
+            handleSetCastButtonVisible(call: call, result: result)
         case "getAvailableAudioTracks":
             handleGetAvailableAudioTracks(result: result)
         case "setAudioTrack":
