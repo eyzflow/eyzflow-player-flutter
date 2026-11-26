@@ -264,11 +264,15 @@ class _PlayerControlsState extends State<PlayerControls> {
   void initState() {
     super.initState();
     _previous = context.read<PlayerControlsBloc>().state;
+    // A bloc that starts hidden has nothing to fade out first.
+    _fullyHidden = !_previous.visible;
     unawaited(_loadThumbnails());
     FocusManager.instance.addListener(_onFocusChanged);
     widget.signal?.addListener(_onSignalChanged);
     // The first frame has no render objects to focus yet.
-    // The first frame has no render objects to focus yet.
+    // The first frame has no render objects to focus yet. Taken whether or
+    // not the overlay starts hidden, so the remote reaches it even when the
+    // host had focus elsewhere.
     WidgetsBinding.instance.addPostFrameCallback((_) => _focusPlayPause());
   }
 

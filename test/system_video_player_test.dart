@@ -440,6 +440,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    // The film opens without the overlay; a key brings it up.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
     final int before = controller.playCount + controller.pauseCount;
     await tester.tap(find.byKey(const Key('player_controls_play_pause')));
     await tester.pump();

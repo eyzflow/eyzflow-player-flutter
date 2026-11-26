@@ -779,6 +779,9 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       tracks: tracks,
       subtitlePreferenceStore: getSubtitlePreferenceStoreOrNull(),
       hidesWhenIdle: widget.options.autoHideControls,
+      // Playback starts on its own: the film opens without the overlay,
+      // unless the config keeps the controls up.
+      startsHidden: widget.options.autoHideControls,
       captions: widget.options.captions,
       onSeeked: _events?.seeked,
       onAudioTrackChanged: _events?.audioTrackChanged,

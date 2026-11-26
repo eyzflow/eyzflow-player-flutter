@@ -26,6 +26,9 @@ const Duration kPlayerSkipCommitDelay = Duration(milliseconds: 600);
 /// track lists, and the two selected ids, and delegates every side effect to
 /// [VideoplaybackController] + [VideoplaybackTracks]. Remembers subtitle
 /// language across films through [SubtitlePreferenceStore] when one exists.
+///
+/// `startsHidden` keeps the overlay off screen until the first key press,
+/// for a player that starts playback on its own: the film opens clean.
 class PlayerControlsBloc
     extends Bloc<PlayerControlsEvent, PlayerControlsState> {
   PlayerControlsBloc({
@@ -37,6 +40,7 @@ class PlayerControlsBloc
     this.captions = true,
     this.skipStep = kPlayerSkipStep,
     this.skipCommitDelay = kPlayerSkipCommitDelay,
+    bool startsHidden = false,
     this.onSeeked,
     this.onAudioTrackChanged,
     this.onSubtitleTrackChanged,
@@ -44,7 +48,7 @@ class PlayerControlsBloc
        _tracks = tracks, // ignore: prefer_initializing_formals
        // ignore: prefer_initializing_formals
        _subtitlePreferenceStore = subtitlePreferenceStore,
-       super(const PlayerControlsState()) {
+       super(PlayerControlsState(visible: !startsHidden)) {
     on<PlayerControlsActivity>(_onActivity);
     on<PlayerControlsHideRequested>(_onHideRequested);
     on<PlayerControlsPanelOpened>(_onPanelOpened);

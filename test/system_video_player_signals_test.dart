@@ -212,14 +212,24 @@ void main() {
 
     f.content.tick(6);
     await tester.pump();
-    // The overlay is up after start: no button over it, and OK acts on the
+    await tester.pump();
+    // The film opens without the overlay: the button shows and has focus.
+    expect(find.text('Skip intro'), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'controls.skipSignal',
+    );
+
+    // A key brings the overlay up: no button over it, and OK acts on the
     // focused control (play/pause), not the signal.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
     expect(_button(), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
     expect(f.content.seeks, isEmpty);
 
-    // Idle: the overlay fades out and focus goes to the button.
+    // Idle: the overlay fades out and focus goes back to the button.
     await tester.pump(const Duration(seconds: 31));
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
