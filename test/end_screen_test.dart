@@ -371,6 +371,32 @@ void main() {
   });
 
   testWidgets(
+    'TV: a 1920-wide screen (Tizen) draws the end screen twice as large',
+    (tester) async {
+      Future<Rect> playButton(Size screen) async {
+        tester.view.physicalSize = screen;
+        tester.view.devicePixelRatio = 1;
+        final _Fixture f = _Fixture(tester);
+        await f.mount(tv: true, endScreen: f.endScreen(autoplaySeconds: 0));
+        f.content.tick(541);
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+        final Rect rect = tester.getRect(_key('eyzflow-end-screen-play'));
+        await tester.pumpWidget(const SizedBox());
+        return rect;
+      }
+
+      addTearDown(tester.view.reset);
+      final Rect small = await playButton(const Size(960, 540));
+      final Rect large = await playButton(const Size(1920, 1080));
+      expect(large.width, closeTo(small.width * 2, 0.5));
+      expect(large.height, closeTo(small.height * 2, 0.5));
+      expect(large.left, closeTo(small.left * 2, 0.5));
+    },
+  );
+
+  testWidgets(
     'TV: the end screen takes the focus; Select plays the next stream',
     (tester) async {
       final _Fixture f = _Fixture(tester);
