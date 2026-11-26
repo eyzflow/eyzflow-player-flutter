@@ -1,3 +1,21 @@
+## 0.9.0
+
+- TV controls, new design (EYF-517): on Android TV and Tizen the title sits
+  top left; the seek bar, elapsed and remaining time, and one row of round
+  buttons (back 15, play/pause, forward 15 on the left; audio and subtitles
+  on the right) sit at the bottom. The seek bar has a glowing knob that
+  takes a ring when focused, and its preview is a rounded card with the
+  time. Audio and subtitle panels are a floating card; the TV skip button
+  is a light pill with the OK key. Colours still come from the config's
+  theme.
+- TV remote (EYF-517): Up and Down now walk back button, seek bar, bottom
+  row. Play/pause is still where focus starts and where it lands entering
+  the bottom row.
+- Tizen (EYF-517): the controls, track panels, skip button, ad screen,
+  "Ad in 5" notice and end screen are no longer drawn at half size; they
+  cover the same share of the screen as on Android TV.
+- New "Remaining" text in en/de/fr/nl.
+
 ## 0.8.4
 
 - Android TV play/pause (EYF-513): the play/pause button no longer shows
