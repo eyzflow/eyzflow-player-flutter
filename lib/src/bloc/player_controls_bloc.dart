@@ -317,7 +317,14 @@ class PlayerControlsBloc
       state.duration,
     );
     _skipPreview = target;
-    emit(state.copyWith(visible: true, position: target, isPreviewing: true));
+    emit(
+      state.copyWith(
+        visible: true,
+        position: target,
+        isPreviewing: true,
+        previewFromSkipButton: event.fromSkipButton,
+      ),
+    );
     _skipTimer?.cancel();
     // The overlay stays up while the burst is open.
     _hideTimer?.cancel();

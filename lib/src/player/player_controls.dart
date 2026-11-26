@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import 'package:flutter/material.dart';
@@ -266,6 +267,7 @@ class _PlayerControlsState extends State<PlayerControls> {
     unawaited(_loadThumbnails());
     FocusManager.instance.addListener(_onFocusChanged);
     widget.signal?.addListener(_onSignalChanged);
+    // The first frame has no render objects to focus yet.
     // The first frame has no render objects to focus yet.
     WidgetsBinding.instance.addPostFrameCallback((_) => _focusPlayPause());
   }
@@ -922,48 +924,63 @@ class _MiddleRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final bloc = context.read<PlayerControlsBloc>();
     return BlocBuilder<PlayerControlsBloc, PlayerControlsState>(
-      buildWhen: (a, b) => a.isPlaying != b.isPlaying,
+      buildWhen: (a, b) =>
+          a.isPlaying != b.isPlaying || a.hidesMiddleRow != b.hidesMiddleRow,
       builder: (context, state) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            _FocusIconButton(
-              key: const Key('player_controls_skip_back'),
-              focusNode: nodes.skipBack,
-              // The real step is 15 s. Material has no replay_15, so we use the
-              // closest glyph (replay_10) and keep the accurate count in the
-              // label rather than implying a 10 s step in the icon.
-              icon: Icons.replay_10,
-              semanticLabel: streamingL10n.rewind15Seconds,
-              size: 36,
-              onPressed: () => bloc.add(const PlayerControlsSkipBy(-1)),
-              onFocused: () => _focusMoved(bloc),
+        final bool hidden = state.hidesMiddleRow;
+        return IgnorePointer(
+          ignoring: hidden,
+          child: AnimatedOpacity(
+            key: const Key('player_controls_middle_row'),
+            opacity: hidden ? 0 : 1,
+            duration: const Duration(milliseconds: 200),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                _FocusIconButton(
+                  key: const Key('player_controls_skip_back'),
+                  focusNode: nodes.skipBack,
+                  // The real step is 15 s. Material has no replay_15, so we use the
+                  // closest glyph (replay_10) and keep the accurate count in the
+                  // label rather than implying a 10 s step in the icon.
+                  icon: Icons.replay_10,
+                  semanticLabel: streamingL10n.rewind15Seconds,
+                  size: 36,
+                  onPressed: () => bloc.add(
+                    const PlayerControlsSkipBy(-1, fromSkipButton: true),
+                  ),
+                  onFocused: () => _focusMoved(bloc),
+                ),
+                const SizedBox(width: 36),
+                _FocusIconButton(
+                  key: const Key('player_controls_play_pause'),
+                  focusNode: nodes.playPause,
+                  icon: state.isPlaying ? Icons.pause : Icons.play_arrow,
+                  semanticLabel: state.isPlaying
+                      ? streamingL10n.pause
+                      : streamingL10n.play,
+                  size: 48,
+                  onPressed: () =>
+                      bloc.add(const PlayerControlsPlayPauseToggled()),
+                  onFocused: () => _focusMoved(bloc),
+                ),
+                const SizedBox(width: 48),
+                _FocusIconButton(
+                  key: const Key('player_controls_skip_forward'),
+                  focusNode: nodes.skipForward,
+                  // 15 s step; Material has no forward_15, so forward_10 is the
+                  // closest glyph and the label carries the accurate count.
+                  icon: Icons.forward_10,
+                  semanticLabel: streamingL10n.forward15Seconds,
+                  size: 36,
+                  onPressed: () => bloc.add(
+                    const PlayerControlsSkipBy(1, fromSkipButton: true),
+                  ),
+                  onFocused: () => _focusMoved(bloc),
+                ),
+              ],
             ),
-            const SizedBox(width: 36),
-            _FocusIconButton(
-              key: const Key('player_controls_play_pause'),
-              focusNode: nodes.playPause,
-              icon: state.isPlaying ? Icons.pause : Icons.play_arrow,
-              semanticLabel: state.isPlaying
-                  ? streamingL10n.pause
-                  : streamingL10n.play,
-              size: 48,
-              onPressed: () => bloc.add(const PlayerControlsPlayPauseToggled()),
-              onFocused: () => _focusMoved(bloc),
-            ),
-            const SizedBox(width: 48),
-            _FocusIconButton(
-              key: const Key('player_controls_skip_forward'),
-              focusNode: nodes.skipForward,
-              // 15 s step; Material has no forward_15, so forward_10 is the
-              // closest glyph and the label carries the accurate count.
-              icon: Icons.forward_10,
-              semanticLabel: streamingL10n.forward15Seconds,
-              size: 36,
-              onPressed: () => bloc.add(const PlayerControlsSkipBy(1)),
-              onFocused: () => _focusMoved(bloc),
-            ),
-          ],
+          ),
         );
       },
     );

@@ -11,6 +11,7 @@ final class PlayerControlsState extends Equatable {
     this.isScrubbing = false,
     this.wasPlayingBeforeScrub = false,
     this.isPreviewing = false,
+    this.previewFromSkipButton = false,
     this.position = Duration.zero,
     this.duration = Duration.zero,
     this.audioTracks = const <PlayerAudioTrack>[],
@@ -29,6 +30,9 @@ final class PlayerControlsState extends Equatable {
   /// A skip burst is open: [position] is where it will seek, not where
   /// playback is. The overlay shows the thumbnail of that point.
   final bool isPreviewing;
+
+  /// The open skip burst came from the middle back or forward button.
+  final bool previewFromSkipButton;
   final Duration position;
   final Duration duration;
   final List<PlayerAudioTrack> audioTracks;
@@ -37,6 +41,11 @@ final class PlayerControlsState extends Equatable {
   final int? selectedTextTrackId;
   final PlayerPanel activePanel;
 
+  /// The viewer is looking for a frame: the back, play/pause and forward
+  /// buttons in the middle step aside so the picture is clear.
+  bool get hidesMiddleRow =>
+      isScrubbing || (isPreviewing && !previewFromSkipButton);
+
   PlayerControlsState copyWith({
     bool? visible,
     bool? isPlaying,
@@ -44,6 +53,7 @@ final class PlayerControlsState extends Equatable {
     bool? isScrubbing,
     bool? wasPlayingBeforeScrub,
     bool? isPreviewing,
+    bool? previewFromSkipButton,
     Duration? position,
     Duration? duration,
     List<PlayerAudioTrack>? audioTracks,
@@ -61,6 +71,7 @@ final class PlayerControlsState extends Equatable {
     isScrubbing: isScrubbing ?? this.isScrubbing,
     wasPlayingBeforeScrub: wasPlayingBeforeScrub ?? this.wasPlayingBeforeScrub,
     isPreviewing: isPreviewing ?? this.isPreviewing,
+    previewFromSkipButton: previewFromSkipButton ?? this.previewFromSkipButton,
     position: position ?? this.position,
     duration: duration ?? this.duration,
     audioTracks: audioTracks ?? this.audioTracks,
@@ -80,6 +91,7 @@ final class PlayerControlsState extends Equatable {
     isScrubbing,
     wasPlayingBeforeScrub,
     isPreviewing,
+    previewFromSkipButton,
     position,
     duration,
     audioTracks,
