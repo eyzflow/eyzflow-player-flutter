@@ -529,6 +529,88 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
   });
 
+  group('on every TV canvas', () {
+    // Android TV reports 960 logical pixels, Tizen 1920: the overlay must
+    // cover the same share of the screen on both.
+    late double inset;
+
+    Widget harness(PlayerControlsBloc bloc) => MaterialApp(
+      home: Scaffold(
+        body: BlocProvider<PlayerControlsBloc>.value(
+          value: bloc,
+          child: PlayerControls(
+            title: 'Film A',
+            captionsBuilder: (BuildContext context, double bottomInset) {
+              inset = bottomInset;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    Future<({Rect play, double inset})> render(
+      WidgetTester tester,
+      Size screen,
+    ) async {
+      tester.view.physicalSize = screen;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bloc = _bloc(_FakePlayback());
+      _loadTracks(bloc);
+      await tester.pumpWidget(harness(bloc));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final Rect play = tester.getRect(
+        find.byKey(const Key('player_controls_play_pause')),
+      );
+      return (play: play, inset: inset);
+    }
+
+    testWidgets('a 1920-wide screen draws the overlay twice as large', (
+      tester,
+    ) async {
+      final small = await render(tester, const Size(960, 540));
+      await tester.pump(const Duration(seconds: 31));
+      final large = await render(tester, const Size(1920, 1080));
+
+      expect(large.play.width, closeTo(small.play.width * 2, 0.5));
+      expect(large.play.left, closeTo(small.play.left * 2, 0.5));
+      expect(large.play.top, closeTo(small.play.top * 2, 0.5));
+      // The captions are lifted clear of the larger bar.
+      expect(large.inset, closeTo(small.inset * 2, 0.5));
+      await tester.pump(const Duration(seconds: 31));
+    });
+
+    testWidgets('a scaled overlay still takes taps and the remote', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final p = _FakePlayback();
+      final bloc = _bloc(p);
+      bloc.add(
+        const PlayerControlsValueTicked(
+          position: Duration.zero,
+          duration: Duration(seconds: 20),
+          isPlaying: true,
+        ),
+      );
+      await tester.pumpWidget(harness(bloc));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('player_controls_play_pause')));
+      await tester.pump();
+      expect(p.pauseCount, 1);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(focusedControl(), 'progress');
+      await tester.pump(const Duration(seconds: 31));
+    });
+  });
+
   testWidgets('a control takes focus on first frame, arming auto-hide', (
     tester,
   ) async {
@@ -766,9 +848,7 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
   });
 
-  testWidgets('left and right move within the bottom row only', (
-    tester,
-  ) async {
+  testWidgets('left and right move within the bottom row only', (tester) async {
     final bloc = _bloc(_FakePlayback());
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();

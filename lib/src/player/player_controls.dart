@@ -492,8 +492,20 @@ class _PlayerControlsState extends State<PlayerControls> {
     }
   }
 
+  /// How much the overlay is drawn larger than its layout: see [_TvCanvas].
+  double _scale = 1;
+
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        _scale = _TvCanvas.scaleFor(constraints);
+        return _build(context);
+      },
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final bloc = context.read<PlayerControlsBloc>();
     if (!widget.showControls) {
       final Widget remote = _BareRemote(
@@ -501,12 +513,23 @@ class _PlayerControlsState extends State<PlayerControls> {
         onBack: () => _leave(context),
         skipSignal: _skipSignalWhileHidden,
         skipButton: _skipButton(),
+        scale: _scale,
       );
       final Widget? captions = _captions(0);
       if (captions == null) return remote;
       return Stack(fit: StackFit.expand, children: <Widget>[captions, remote]);
     }
     return _ThemeScope(theme: widget.theme, child: _buildOverlay(bloc));
+  }
+
+  /// The skip button on its own canvas, so it scales with the overlay.
+  Widget? _scaledSkipButton() {
+    final Widget? button = _skipButton();
+    if (button == null) return null;
+    return _TvCanvas(
+      scale: _scale,
+      child: Stack(fit: StackFit.expand, children: <Widget>[button]),
+    );
   }
 
   Widget _buildOverlay(PlayerControlsBloc bloc) {
@@ -546,31 +569,40 @@ class _PlayerControlsState extends State<PlayerControls> {
                 // beside, and a stall would otherwise show nothing at all.
                 if (state.isBuffering && _fullyHidden)
                   const Center(child: PlayerLoadingIndicator(isTv: true)),
-                IgnorePointer(
-                  ignoring: !state.visible,
-                  child: AnimatedOpacity(
-                    opacity: state.visible ? 1 : 0,
-                    duration: _fadeDuration,
-                    onEnd: () {
-                      if (!mounted || state.visible || _fullyHidden) return;
-                      setState(() => _fullyHidden = true);
-                      // Only now: the overlay is off screen, so the focus
-                      // move cannot be seen.
-                      _focusWhileHidden();
-                    },
-                    child: _ControlsScaffold(
-                      title: widget.title,
-                      onBack: widget.onBack,
-                      nodes: _nodes,
-                      thumbnails: _thumbnails,
-                      onBottomBarHeight: _onBottomBarHeight,
+                _TvCanvas(
+                  scale: _scale,
+                  child: IgnorePointer(
+                    ignoring: !state.visible,
+                    child: AnimatedOpacity(
+                      opacity: state.visible ? 1 : 0,
+                      duration: _fadeDuration,
+                      onEnd: () {
+                        if (!mounted || state.visible || _fullyHidden) return;
+                        setState(() => _fullyHidden = true);
+                        // Only now: the overlay is off screen, so the focus
+                        // move cannot be seen.
+                        _focusWhileHidden();
+                      },
+                      child: _ControlsScaffold(
+                        title: widget.title,
+                        onBack: widget.onBack,
+                        nodes: _nodes,
+                        thumbnails: _thumbnails,
+                        onBottomBarHeight: _onBottomBarHeight,
+                      ),
                     ),
                   ),
                 ),
-                ?_captions(state.visible ? _bottomBarHeight : 0),
+                // Not scaled: the player sizes its subtitles for the screen.
+                // Only the lift is, as the bar's height is laid out on the
+                // overlay's canvas.
+                ?_captions(state.visible ? _bottomBarHeight * _scale : 0),
                 if (state.activePanel != PlayerPanel.none)
-                  _TrackPanel(panel: state.activePanel),
-                if (!state.visible) ?_skipButton(),
+                  _TvCanvas(
+                    scale: _scale,
+                    child: _TrackPanel(panel: state.activePanel),
+                  ),
+                if (!state.visible) ?_scaledSkipButton(),
               ],
             ),
           ),
@@ -653,6 +685,60 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 }
 
+/// Lays the overlay out on a canvas [canvasWidth] wide and draws it scaled up
+/// to the space it has, so it looks the same on every TV.
+///
+/// Its sizes are logical pixels on Android TV, which reports 960 whatever the
+/// panel. Tizen reports 1920, where the same numbers drew everything at half
+/// size. Narrower than the canvas (a test, a small window), nothing scales.
+/// The canvas's [MediaQuery] is the canvas's own size, so widgets inside that
+/// size themselves from the screen (the loading spinner) are not scaled twice.
+class _TvCanvas extends StatelessWidget {
+  const _TvCanvas({required this.scale, required this.child});
+
+  static const double canvasWidth = 960;
+
+  /// The scale for a canvas laid out in [constraints]: 1 up to
+  /// [canvasWidth], the width over it beyond.
+  static double scaleFor(BoxConstraints constraints) =>
+      constraints.hasBoundedWidth && constraints.maxWidth > canvasWidth
+      ? constraints.maxWidth / canvasWidth
+      : 1;
+
+  final double scale;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (scale == 1) return child;
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final Size canvas = Size(
+          constraints.maxWidth / scale,
+          constraints.maxHeight / scale,
+        );
+        final MediaQueryData media = MediaQuery.of(context);
+        return FittedBox(
+          fit: BoxFit.fill,
+          alignment: Alignment.topLeft,
+          child: SizedBox.fromSize(
+            size: canvas,
+            child: MediaQuery(
+              data: media.copyWith(
+                size: canvas,
+                padding: media.padding / scale,
+                viewPadding: media.viewPadding / scale,
+                viewInsets: media.viewInsets / scale,
+              ),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// The overlay's [PlayerControlsTheme], for the widgets inside it.
 class _ThemeScope extends InheritedWidget {
   const _ThemeScope({required this.theme, required super.child});
@@ -674,10 +760,14 @@ class _BareRemote extends StatelessWidget {
     required this.onBack,
     required this.skipSignal,
     this.skipButton,
+    this.scale = 1,
   });
 
   final PlayerControlsBloc bloc;
   final VoidCallback onBack;
+
+  /// The overlay's [_TvCanvas] scale, for the skip button.
+  final double scale;
 
   /// OK first offers this the press: true when it skipped a signal.
   final bool Function() skipSignal;
@@ -729,9 +819,12 @@ class _BareRemote extends StatelessWidget {
           }
           return KeyEventResult.ignored;
         },
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[const SizedBox.expand(), ?skipButton],
+        child: _TvCanvas(
+          scale: scale,
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[const SizedBox.expand(), ?skipButton],
+          ),
         ),
       ),
     );
