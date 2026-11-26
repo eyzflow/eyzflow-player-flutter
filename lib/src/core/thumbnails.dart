@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:http/http.dart' as http;
 
 /// One preview image: a whole image, or a tile cut from a sprite with
@@ -163,6 +165,23 @@ final class ThumbnailLoader {
         if (track == null) _cache.remove(url);
         return track;
       });
+
+  /// The bytes of one of a track's images, or null when it cannot be
+  /// loaded. Not cached here: the caller keeps them for as long as its film.
+  Future<Uint8List?> loadImage(Uri url) async {
+    try {
+      final client = _client;
+      final response = client == null
+          ? await http.get(url)
+          : await client.get(url);
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
+        return null;
+      }
+      return response.bodyBytes;
+    } on Object {
+      return null;
+    }
+  }
 
   Future<ThumbnailTrack?> _fetch(Uri url) async {
     try {

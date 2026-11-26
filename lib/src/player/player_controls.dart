@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/foundation.dart' show ValueListenable;
 
@@ -12,6 +13,7 @@ import '../l10n/language_names.dart';
 
 import '../bloc/player_controls_bloc.dart';
 import '../core/thumbnails.dart';
+import 'thumbnail_images.dart';
 import 'player_policy.dart';
 import '../l10n/streaming_l10n.dart';
 import 'player_loading_indicator.dart';
@@ -228,7 +230,8 @@ class _PlayerControlsState extends State<PlayerControls> {
   /// rather than only a destination.
   late PlayerControlsState _previous;
 
-  ThumbnailTrack? _thumbnails;
+  /// The film's thumbnail images, downloaded once the track loads.
+  ThumbnailImages? _thumbnails;
 
   /// The bottom bar's laid-out height, which the captions are lifted by while
   /// the overlay shows. It changes with the track buttons coming and going.
@@ -281,15 +284,21 @@ class _PlayerControlsState extends State<PlayerControls> {
     widget.signal?.removeListener(_onSignalChanged);
     FocusManager.instance.removeListener(_onFocusChanged);
     _nodes.dispose();
+    _thumbnails?.dispose();
     super.dispose();
   }
 
   Future<void> _loadThumbnails() async {
     final Uri? url = widget.thumbnailsUrl;
     if (url == null) return;
-    final ThumbnailTrack? track =
-        await (widget.thumbnailLoader ?? ThumbnailLoader.shared).load(url);
-    if (mounted && track != null) setState(() => _thumbnails = track);
+    final ThumbnailLoader loader =
+        widget.thumbnailLoader ?? ThumbnailLoader.shared;
+    final ThumbnailTrack? track = await loader.load(url);
+    if (!mounted || track == null) return;
+    final ThumbnailImages images = ThumbnailImages(track, loader: loader);
+    setState(() => _thumbnails = images);
+    // In the background: the bar shows the track's frames as they arrive.
+    unawaited(images.preload());
   }
 
   void _focusPlayPause() {
@@ -819,7 +828,7 @@ class _ControlsScaffold extends StatelessWidget {
   final String title;
   final VoidCallback? onBack;
   final _ControlNodes nodes;
-  final ThumbnailTrack? thumbnails;
+  final ThumbnailImages? thumbnails;
   final ValueChanged<double> onBottomBarHeight;
 
   @override
@@ -965,7 +974,7 @@ class _BottomBar extends StatelessWidget {
   const _BottomBar({required this.nodes, this.thumbnails});
 
   final _ControlNodes nodes;
-  final ThumbnailTrack? thumbnails;
+  final ThumbnailImages? thumbnails;
 
   @override
   Widget build(BuildContext context) {
@@ -1091,7 +1100,7 @@ class _ProgressSlider extends StatefulWidget {
   final Duration duration;
 
   /// Shown above the thumb while dragging or while [previewing].
-  final ThumbnailTrack? thumbnails;
+  final ThumbnailImages? thumbnails;
 
   /// A skip burst is open: [position] is where it will seek.
   final bool previewing;
@@ -1176,7 +1185,8 @@ class _ProgressSliderState extends State<_ProgressSlider> {
   /// The slider, with the previewed frame above its thumb while the viewer
   /// is choosing where to go.
   Widget _withThumbnail(Widget slider, double max, double value) {
-    final ThumbnailTrack? track = widget.thumbnails;
+    final ThumbnailImages? images = widget.thumbnails;
+    final ThumbnailTrack? track = images?.track;
     final bool choosing = _dragValue != null || widget.previewing;
     final ThumbnailTile? tile = track == null || !choosing || max == 0
         ? null
@@ -1205,7 +1215,7 @@ class _ProgressSliderState extends State<_ProgressSlider> {
             Positioned(
               left: left,
               bottom: 44,
-              child: _ThumbnailPreview(tile: tile),
+              child: _ThumbnailPreview(tile: tile, images: images!),
             ),
           ],
         );
@@ -1238,51 +1248,75 @@ class _ProgressSliderState extends State<_ProgressSlider> {
 }
 
 /// One frame of the thumbnail track: a tile cut from its sprite, or a whole
-/// image, at a fixed width.
-class _ThumbnailPreview extends StatelessWidget {
-  const _ThumbnailPreview({required this.tile});
+/// image, at a fixed width. Until the frame is ready the last one stays up.
+class _ThumbnailPreview extends StatefulWidget {
+  const _ThumbnailPreview({required this.tile, required this.images});
 
   static const double width = 192;
 
   final ThumbnailTile tile;
+  final ThumbnailImages images;
+
+  @override
+  State<_ThumbnailPreview> createState() => _ThumbnailPreviewState();
+}
+
+class _ThumbnailPreviewState extends State<_ThumbnailPreview> {
+  /// Our own handle on the frame shown: the cache may dispose its own.
+  ui.Image? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.images.addListener(_onImagesChanged);
+    _take();
+  }
+
+  @override
+  void didUpdateWidget(_ThumbnailPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.images, widget.images)) {
+      oldWidget.images.removeListener(_onImagesChanged);
+      widget.images.addListener(_onImagesChanged);
+    }
+    if (!identical(oldWidget.tile, widget.tile) ||
+        !identical(oldWidget.images, widget.images)) {
+      _take();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.images.removeListener(_onImagesChanged);
+    _image?.dispose();
+    super.dispose();
+  }
+
+  /// Takes the tile's frame when it is ready; false when nothing changed.
+  bool _take() {
+    final ui.Image? next = widget.images.imageFor(widget.tile);
+    if (next == null || (_image?.isCloneOf(next) ?? false)) return false;
+    final ui.Image? old = _image;
+    _image = next.clone();
+    old?.dispose();
+    return true;
+  }
+
+  void _onImagesChanged() {
+    if (mounted && _take()) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
+    final ThumbnailTile tile = widget.tile;
     final int? tileWidth = tile.width;
     final int? tileHeight = tile.height;
+    const double width = _ThumbnailPreview.width;
     final double height =
         tileWidth != null && tileHeight != null && tileWidth > 0
         ? width * tileHeight / tileWidth
         : width * 9 / 16;
-    final Widget image;
-    if (tile.isSprite) {
-      final double scale = width / tileWidth!;
-      // The whole sprite at the tile's scale, moved so the tile sits at the
-      // origin, and clipped to it.
-      image = OverflowBox(
-        alignment: Alignment.topLeft,
-        minWidth: 0,
-        minHeight: 0,
-        maxWidth: double.infinity,
-        maxHeight: double.infinity,
-        child: Transform.translate(
-          offset: Offset(-tile.x! * scale, -tile.y! * scale),
-          child: Image(
-            image: NetworkImage(tile.image.toString(), scale: 1 / scale),
-            filterQuality: FilterQuality.medium,
-            gaplessPlayback: true,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
-        ),
-      );
-    } else {
-      image = Image.network(
-        tile.image.toString(),
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-      );
-    }
+    final ui.Image? image = _image;
     return Container(
       key: ValueKey<String>(
         'player_controls_thumbnail:${tile.image}#${tile.x},${tile.y}',
@@ -1295,7 +1329,13 @@ class _ThumbnailPreview extends StatelessWidget {
         border: Border.all(color: _ThemeScope.of(context).focusColor, width: 2),
       ),
       clipBehavior: Clip.antiAlias,
-      child: image,
+      child: image == null
+          ? null
+          : RawImage(
+              image: image,
+              fit: tile.isSprite ? BoxFit.fill : BoxFit.cover,
+              filterQuality: FilterQuality.low,
+            ),
     );
   }
 }
