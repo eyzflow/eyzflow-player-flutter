@@ -451,6 +451,67 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
   });
 
+  testWidgets('overlay mode keeps Pause up while a seek buffers', (
+    tester,
+  ) async {
+    final _TrackingController controller = _TrackingController();
+    await tester.pumpWidget(
+      _player(
+        target: _trailerA,
+        createController: (VideoplayerTarget target) async => controller,
+        useSharedOverlay: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    final PlayerControlsBloc bloc = tester
+        .element(find.byType(PlayerControls))
+        .read<PlayerControlsBloc>();
+    controller.report(
+      const VideoplaybackValue(
+        position: Duration(seconds: 10),
+        duration: Duration(seconds: 600),
+        isPlaying: true,
+      ),
+    );
+    await tester.pump();
+    expect(bloc.state.isPlaying, isTrue);
+
+    // After a seek the native player buffers before it plays again.
+    controller.report(
+      const VideoplaybackValue(
+        position: Duration(seconds: 15),
+        duration: Duration(seconds: 600),
+        isBuffering: true,
+      ),
+    );
+    await tester.pump();
+    expect(bloc.state.isPlaying, isTrue);
+
+    // A real pause still shows Play.
+    controller.report(
+      const VideoplaybackValue(
+        position: Duration(seconds: 15),
+        duration: Duration(seconds: 600),
+        isPaused: true,
+      ),
+    );
+    await tester.pump();
+    expect(bloc.state.isPlaying, isFalse);
+
+    // Buffering while paused does not turn it back to Pause.
+    controller.report(
+      const VideoplaybackValue(
+        position: Duration(seconds: 30),
+        duration: Duration(seconds: 600),
+        isBuffering: true,
+      ),
+    );
+    await tester.pump();
+    expect(bloc.state.isPlaying, isFalse);
+    await tester.pump(const Duration(seconds: 31));
+  });
+
   testWidgets('overlay mode loads tracks once', (tester) async {
     final _TrackingController controller = _TrackingController();
 
@@ -864,11 +925,19 @@ final class _TrackingController
       <void Function(VideoplaybackValue)>[];
 
   @override
-  VideoplaybackValue get value => const VideoplaybackValue(
+  VideoplaybackValue value = const VideoplaybackValue(
     position: Duration.zero,
     duration: Duration(seconds: 600),
     isPlaying: true,
   );
+
+  /// Reports [next] to the listeners, as the native player's ticks do.
+  void report(VideoplaybackValue next) {
+    value = next;
+    for (final void Function(VideoplaybackValue) l in List.of(_listeners)) {
+      l(next);
+    }
+  }
 
   @override
   Future<void> initialize() async {}

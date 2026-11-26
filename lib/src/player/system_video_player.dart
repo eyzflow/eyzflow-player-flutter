@@ -848,11 +848,24 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
   /// exactly as the real adapter does. Separate from the
   /// [VideoplaybackSession] listener that records watch progress, so neither
   /// disturbs the other.
+  ///
+  /// The native player reports buffering, not playing, for a moment after
+  /// every seek. Play/pause follows the viewer's intent instead: only a real
+  /// pause, the end or an error turns it to Play, so the icon does not flip
+  /// to Play and back each time a seek lands.
   void _bridgeTick(VideoplaybackController playback, PlayerControlsBloc bloc) {
     if (_tickBridged) return;
     _tickBridged = true;
+    var playing = false;
     playback.addListener((VideoplaybackValue value) {
       if (bloc.isClosed) return;
+      if (value.isPlaying) {
+        playing = true;
+      } else if (value.isPaused ||
+          value.isCompleted ||
+          value.errorMessage != null) {
+        playing = false;
+      }
       final Duration? position = value.position;
       final Duration? duration = value.duration;
       if (position == null || duration == null) return;
@@ -860,7 +873,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         PlayerControlsValueTicked(
           position: position,
           duration: duration,
-          isPlaying: value.isPlaying,
+          isPlaying: playing,
         ),
       );
       bloc.add(PlayerControlsBufferingChanged(value.isBuffering));
