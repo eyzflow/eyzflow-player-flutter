@@ -1,3 +1,15 @@
+## 0.8.3
+
+- TV seeking (EYF-511): while the viewer seeks with the seek bar or FF/RW,
+  the back, play/pause and forward buttons in the middle fade out so the
+  frame they are looking for is clear, and come back once the seek is made.
+  Pressing the middle back or forward button itself keeps them up.
+- TV start (EYF-512): a film opens without the controls overlay, and
+  without play/pause flipping from Play to Pause; only the spinner shows
+  while it loads. The first key press brings the controls up on
+  play/pause. With `autoHideControls: false` they are up from the start,
+  as before.
+
 ## 0.8.2
 
 - Seek thumbnails (EYF-505): every sprite of a film's thumbnail track now
