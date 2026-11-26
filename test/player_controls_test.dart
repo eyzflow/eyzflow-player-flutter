@@ -574,6 +574,42 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
   });
 
+  testWidgets('a bloc that starts hidden opens the film without the overlay', (
+    tester,
+  ) async {
+    final p = _FakePlayback();
+    final bloc = PlayerControlsBloc(
+      controller: p,
+      tracks: p,
+      autoHide: const Duration(seconds: 30),
+      startsHidden: true,
+    );
+    addTearDown(bloc.close);
+    await tester.pumpWidget(_harness(bloc));
+    await tester.pump();
+    // Playback starts on its own; the play/pause flip happens off screen.
+    bloc.add(
+      const PlayerControlsValueTicked(
+        position: Duration(seconds: 1),
+        duration: Duration(seconds: 600),
+        isPlaying: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(bloc.state.visible, isFalse);
+    expect(focusedControl(), 'playPause');
+
+    // The first press only brings the overlay up, on the transport.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.pump();
+    expect(p.seekTargets, isEmpty);
+    expect(bloc.state.visible, isTrue);
+    expect(focusedControl(), 'playPause');
+    await tester.pump(const Duration(seconds: 31));
+  });
+
   testWidgets('a drag produces exactly one seek', (tester) async {
     final p = _FakePlayback();
     final bloc = _bloc(p);
