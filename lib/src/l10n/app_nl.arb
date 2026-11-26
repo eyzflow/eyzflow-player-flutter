@@ -38,5 +38,6 @@
   "endScreenBackToCredits": "Terug naar de aftiteling",
   "adPosition": "Reclame {index} van {count}",
   "adSkip": "Reclame overslaan",
-  "adSkipIn": "Overslaan over {seconds}"
+  "adSkipIn": "Overslaan over {seconds}",
+  "remainingTime": "Nog {time}"
 }

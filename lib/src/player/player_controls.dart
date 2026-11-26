@@ -119,7 +119,9 @@ final class _ControlNodes {
     progress,
   ];
 
-  /// The rows as they currently stand on screen.
+  /// The rows as they currently stand on screen, top to bottom: the back
+  /// button, the seek bar, and the bottom row with the transport on the left
+  /// and the audio/subtitle pair on the right.
   ///
   /// The audio/subtitle pair shrinks, or goes altogether, when a panel would
   /// have nothing to offer — and the D-pad must not walk onto a button that
@@ -130,14 +132,19 @@ final class _ControlNodes {
     required bool hasSubtitles,
   }) => <List<FocusNode>>[
     <FocusNode>[back],
-    <FocusNode>[skipBack, playPause, skipForward],
-    <FocusNode>[if (hasAudio) audio, if (hasSubtitles) subtitles],
     <FocusNode>[progress],
-  ]..removeWhere((List<FocusNode> row) => row.isEmpty);
+    <FocusNode>[
+      skipBack,
+      playPause,
+      skipForward,
+      if (hasAudio) audio,
+      if (hasSubtitles) subtitles,
+    ],
+  ];
 
   /// Where focus lands when [row] is entered from above or below. Carrying
-  /// the column across instead would drop the viewer on skip-back coming
-  /// down from the title bar, and on subtitles coming down from play/pause.
+  /// the column across instead would drop the viewer on skip-back or on a
+  /// track button coming down from the seek bar, not on play/pause.
   int entryColumn(List<FocusNode> row) {
     final int transport = row.indexOf(playPause);
     return transport == -1 ? 0 : transport;
@@ -846,19 +853,20 @@ class _ControlsScaffold extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: <Color>[
-            // The top is lighter: black54 over the default black87.
-            bar.withValues(alpha: bar.a * 138 / 221),
-            Colors.transparent,
-            Colors.transparent,
+            // The top is lighter than the bottom, where the controls sit.
+            bar.withValues(alpha: bar.a * 0.7),
+            bar.withValues(alpha: 0),
+            bar.withValues(alpha: 0),
+            bar.withValues(alpha: bar.a * 0.75),
             bar,
           ],
-          stops: const <double>[0, 0.25, 0.6, 1],
+          stops: const <double>[0, 0.3, 0.45, 0.78, 1],
         ),
       ),
       child: Column(
         children: <Widget>[
           _TopBar(title: title, onBack: onBack, nodes: nodes),
-          Expanded(child: _MiddleRow(nodes: nodes)),
+          const Spacer(),
           _HeightReporter(
             onHeight: onBottomBarHeight,
             child: _BottomBar(nodes: nodes, thumbnails: thumbnails),
@@ -868,6 +876,9 @@ class _ControlsScaffold extends StatelessWidget {
     );
   }
 }
+
+/// The overlay's edge margin: the title, seek bar and buttons line up on it.
+const double _edge = 32;
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
@@ -884,13 +895,15 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final bloc = context.read<PlayerControlsBloc>();
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(_edge, 24, _edge, 0),
       child: Row(
         children: <Widget>[
           _FocusIconButton(
             focusNode: nodes.back,
-            icon: Icons.arrow_back,
+            icon: Icons.chevron_left,
             semanticLabel: streamingL10n.back,
+            diameter: 40,
+            size: 22,
             onPressed: () {
               if (onBack != null) {
                 onBack!();
@@ -900,7 +913,7 @@ class _TopBar extends StatelessWidget {
             },
             onFocused: () => _focusMoved(bloc),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Text(
               title,
@@ -908,8 +921,13 @@ class _TopBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: _ThemeScope.of(context).textColor,
-                fontSize: 21,
-                fontWeight: FontWeight.w600,
+                fontSize: 24,
+                height: 1.15,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+                shadows: const <Shadow>[
+                  Shadow(blurRadius: 12, color: Color(0x66000000)),
+                ],
               ),
             ),
           ),
@@ -919,8 +937,11 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _MiddleRow extends StatelessWidget {
-  const _MiddleRow({required this.nodes});
+/// Back, play/pause and forward, bottom left. They step aside while the
+/// viewer is looking for a frame (a drag, or a skip previewed from the seek
+/// bar), so only the seek bar and its thumbnail hold the eye.
+class _Transport extends StatelessWidget {
+  const _Transport({required this.nodes});
 
   final _ControlNodes nodes;
 
@@ -939,7 +960,7 @@ class _MiddleRow extends StatelessWidget {
             opacity: hidden ? 0 : 1,
             duration: const Duration(milliseconds: 200),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 _FocusIconButton(
                   key: const Key('player_controls_skip_back'),
@@ -949,26 +970,28 @@ class _MiddleRow extends StatelessWidget {
                   // label rather than implying a 10 s step in the icon.
                   icon: Icons.replay_10,
                   semanticLabel: streamingL10n.rewind15Seconds,
-                  size: 36,
                   onPressed: () => bloc.add(
                     const PlayerControlsSkipBy(-1, fromSkipButton: true),
                   ),
                   onFocused: () => _focusMoved(bloc),
                 ),
-                const SizedBox(width: 36),
+                const SizedBox(width: 12),
                 _FocusIconButton(
                   key: const Key('player_controls_play_pause'),
                   focusNode: nodes.playPause,
-                  icon: state.isPlaying ? Icons.pause : Icons.play_arrow,
+                  icon: state.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
                   semanticLabel: state.isPlaying
                       ? streamingL10n.pause
                       : streamingL10n.play,
-                  size: 48,
+                  diameter: 54,
+                  size: 30,
                   onPressed: () =>
                       bloc.add(const PlayerControlsPlayPauseToggled()),
                   onFocused: () => _focusMoved(bloc),
                 ),
-                const SizedBox(width: 48),
+                const SizedBox(width: 12),
                 _FocusIconButton(
                   key: const Key('player_controls_skip_forward'),
                   focusNode: nodes.skipForward,
@@ -976,7 +999,6 @@ class _MiddleRow extends StatelessWidget {
                   // closest glyph and the label carries the accurate count.
                   icon: Icons.forward_10,
                   semanticLabel: streamingL10n.forward15Seconds,
-                  size: 36,
                   onPressed: () => bloc.add(
                     const PlayerControlsSkipBy(1, fromSkipButton: true),
                   ),
@@ -1001,8 +1023,20 @@ class _BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final bloc = context.read<PlayerControlsBloc>();
     final PlayerControlsTheme theme = _ThemeScope.of(context);
+    final TextStyle timeStyle = TextStyle(
+      color: theme.textColor.withValues(alpha: theme.textColor.a * 0.85),
+      fontSize: 13,
+      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+      // The slider insets its track by the thumb's halo, so the bar starts
+      // that much further out and its track lines up with the margin.
+      padding: const EdgeInsets.fromLTRB(
+        _edge - _ProgressSlider.inset,
+        0,
+        _edge - _ProgressSlider.inset,
+        20,
+      ),
       child: BlocBuilder<PlayerControlsBloc, PlayerControlsState>(
         builder: (context, state) {
           // A button whose panel would have nothing to offer is not shown:
@@ -1011,37 +1045,12 @@ class _BottomBar extends StatelessWidget {
           final bool hasSubtitles = _namedTextTracks(
             state.textTracks,
           ).isNotEmpty;
+          final Duration remaining = state.duration > state.position
+              ? state.duration - state.position
+              : Duration.zero;
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: <Widget>[
-                  if (hasAudio)
-                    _FocusIconButton(
-                      key: const Key('player_controls_audio'),
-                      focusNode: nodes.audio,
-                      icon: Icons.audiotrack,
-                      semanticLabel: streamingL10n.audio,
-                      onPressed: () => bloc.add(
-                        const PlayerControlsPanelOpened(PlayerPanel.audio),
-                      ),
-                      onFocused: () => _focusMoved(bloc),
-                    ),
-                  if (hasAudio && hasSubtitles) const SizedBox(width: 12),
-                  if (hasSubtitles)
-                    _FocusIconButton(
-                      key: const Key('player_controls_subtitles'),
-                      focusNode: nodes.subtitles,
-                      icon: Icons.closed_caption,
-                      semanticLabel: streamingL10n.subtitles,
-                      onPressed: () => bloc.add(
-                        const PlayerControlsPanelOpened(PlayerPanel.subtitles),
-                      ),
-                      onFocused: () => _focusMoved(bloc),
-                    ),
-                ],
-              ),
               _ProgressSlider(
                 focusNode: nodes.progress,
                 position: state.position,
@@ -1059,15 +1068,14 @@ class _BottomBar extends StatelessWidget {
                 ),
               ),
               // Under the bar, where the eye already is after reading the
-              // thumb — not competing with the track buttons above it.
+              // thumb.
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: _ProgressSlider.inset,
+                ),
                 child: Row(
                   children: <Widget>[
-                    Text(
-                      _format(state.position),
-                      style: TextStyle(color: theme.textColor, fontSize: 12),
-                    ),
+                    Text(_format(state.position), style: timeStyle),
                     // Beside the elapsed time rather than centred: in the
                     // middle it sat on top of the transport, competing with
                     // the control the viewer is looking at.
@@ -1084,14 +1092,46 @@ class _BottomBar extends StatelessWidget {
                     ],
                     const Spacer(),
                     Text(
-                      _format(state.duration),
-                      style: TextStyle(
-                        color: theme.textColor.withValues(
-                          alpha: theme.textColor.a * 0.7,
-                        ),
-                        fontSize: 12,
-                      ),
+                      streamingL10n.remainingTime(_format(remaining)),
+                      style: timeStyle,
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: _ProgressSlider.inset,
+                ),
+                child: Row(
+                  children: <Widget>[
+                    _Transport(nodes: nodes),
+                    const Spacer(),
+                    if (hasAudio)
+                      _FocusIconButton(
+                        key: const Key('player_controls_audio'),
+                        focusNode: nodes.audio,
+                        icon: Icons.graphic_eq_rounded,
+                        semanticLabel: streamingL10n.audio,
+                        onPressed: () => bloc.add(
+                          const PlayerControlsPanelOpened(PlayerPanel.audio),
+                        ),
+                        onFocused: () => _focusMoved(bloc),
+                      ),
+                    if (hasAudio && hasSubtitles) const SizedBox(width: 12),
+                    if (hasSubtitles)
+                      _FocusIconButton(
+                        key: const Key('player_controls_subtitles'),
+                        focusNode: nodes.subtitles,
+                        icon: Icons.closed_caption_outlined,
+                        semanticLabel: streamingL10n.subtitles,
+                        onPressed: () => bloc.add(
+                          const PlayerControlsPanelOpened(
+                            PlayerPanel.subtitles,
+                          ),
+                        ),
+                        onFocused: () => _focusMoved(bloc),
+                      ),
                   ],
                 ),
               ),
@@ -1109,6 +1149,10 @@ class _BottomBar extends StatelessWidget {
 /// intermediate value — a seek storm the native players cannot keep up with.
 /// The drag is local; exactly one seek leaves here, from `onChangeEnd`.
 class _ProgressSlider extends StatefulWidget {
+  /// How far the slider insets its track from each side: the thumb's halo
+  /// radius. The bottom bar and the thumbnail both line up on it.
+  static const double inset = 16;
+
   const _ProgressSlider({
     required this.position,
     required this.duration,
@@ -1172,44 +1216,40 @@ class _ProgressSliderState extends State<_ProgressSlider> {
         builder: (BuildContext context) {
           final bool focused = Focus.of(context).hasFocus;
           final PlayerControlsTheme theme = _ThemeScope.of(context);
-          final Color focus = theme.focusColor;
-          final Color? accent = theme.accentColor;
-          final Widget slider = _buildSlider(max, value);
-          return AnimatedContainer(
+          final Color accent = theme.focusColor;
+          // Focus is the knob growing, ringed and glowing, on a thicker
+          // track: no box around the bar, which would hide the film.
+          return KeyedSubtree(
             key: const Key('player_controls_progress'),
-            duration: const Duration(milliseconds: 120),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(theme.radius + 6),
-              color: focused
-                  ? focus.withValues(alpha: 0.12)
-                  : Colors.transparent,
-              border: Border.all(
-                color: focused ? focus : Colors.transparent,
-                width: 2,
-              ),
-              boxShadow: focused
-                  ? <BoxShadow>[
-                      BoxShadow(
-                        blurRadius: 16,
-                        color: focus.withValues(alpha: 0.38),
-                      ),
-                    ]
-                  : null,
-            ),
             child: ExcludeFocus(
               child: _withThumbnail(
-                accent == null
-                    ? slider
-                    : SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          activeTrackColor: accent,
-                          thumbColor: accent,
-                          inactiveTrackColor: accent.withValues(alpha: 0.3),
-                          overlayColor: accent.withValues(alpha: 0.12),
-                        ),
-                        child: slider,
-                      ),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: focused ? 7 : 5,
+                    activeTrackColor: accent,
+                    inactiveTrackColor: theme.textColor.withValues(
+                      alpha: theme.textColor.a * 0.22,
+                    ),
+                    disabledActiveTrackColor: accent,
+                    disabledInactiveTrackColor: theme.textColor.withValues(
+                      alpha: theme.textColor.a * 0.22,
+                    ),
+                    thumbColor: accent,
+                    disabledThumbColor: accent,
+                    overlayColor: Colors.transparent,
+                    trackShape: const RoundedRectSliderTrackShape(),
+                    thumbShape: _GlowThumbShape(
+                      radius: focused ? 9 : 7,
+                      glow: accent,
+                      ring: focused ? theme.textColor : null,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: _ProgressSlider.inset,
+                    ),
+                    showValueIndicator: ShowValueIndicator.never,
+                  ),
+                  child: _buildSlider(max, value),
+                ),
                 max,
                 value,
               ),
@@ -1232,8 +1272,8 @@ class _ProgressSliderState extends State<_ProgressSlider> {
     if (tile == null) return slider;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        // Material's slider insets its track by the thumb's overlay radius.
-        const double inset = 24;
+        // The slider insets its track by the thumb's overlay radius.
+        const double inset = _ProgressSlider.inset;
         final double track = (constraints.maxWidth - inset * 2).clamp(
           0,
           double.infinity,
@@ -1252,8 +1292,12 @@ class _ProgressSliderState extends State<_ProgressSlider> {
             slider,
             Positioned(
               left: left,
-              bottom: 44,
-              child: _ThumbnailPreview(tile: tile, images: images!),
+              bottom: 32,
+              child: _ThumbnailPreview(
+                tile: tile,
+                images: images!,
+                time: _format(Duration(milliseconds: value.round())),
+              ),
             ),
           ],
         );
@@ -1288,12 +1332,19 @@ class _ProgressSliderState extends State<_ProgressSlider> {
 /// One frame of the thumbnail track: a tile cut from its sprite, or a whole
 /// image, at a fixed width. Until the frame is ready the last one stays up.
 class _ThumbnailPreview extends StatefulWidget {
-  const _ThumbnailPreview({required this.tile, required this.images});
+  const _ThumbnailPreview({
+    required this.tile,
+    required this.images,
+    required this.time,
+  });
 
-  static const double width = 192;
+  static const double width = 176;
 
   final ThumbnailTile tile;
   final ThumbnailImages images;
+
+  /// The previewed time, on a strip under the frame.
+  final String time;
 
   @override
   State<_ThumbnailPreview> createState() => _ThumbnailPreviewState();
@@ -1355,26 +1406,109 @@ class _ThumbnailPreviewState extends State<_ThumbnailPreview> {
         ? width * tileHeight / tileWidth
         : width * 9 / 16;
     final ui.Image? image = _image;
+    final PlayerControlsTheme theme = _ThemeScope.of(context);
     return Container(
       key: ValueKey<String>(
         'player_controls_thumbnail:${tile.image}#${tile.x},${tile.y}',
       ),
       width: width,
-      height: height,
       decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _ThemeScope.of(context).focusColor, width: 2),
+        color: theme.panelColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.textColor.withValues(alpha: theme.textColor.a * 0.12),
+        ),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            blurRadius: 24,
+            offset: Offset(0, 8),
+            color: Color(0x80000000),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: image == null
-          ? null
-          : RawImage(
-              image: image,
-              fit: tile.isSprite ? BoxFit.fill : BoxFit.cover,
-              filterQuality: FilterQuality.low,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          SizedBox(
+            width: width,
+            height: height,
+            child: image == null
+                ? const ColoredBox(color: Colors.black)
+                : RawImage(
+                    image: image,
+                    fit: tile.isSprite ? BoxFit.fill : BoxFit.cover,
+                    filterQuality: FilterQuality.low,
+                  ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              widget.time,
+              style: TextStyle(
+                color: theme.textColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+              ),
             ),
+          ),
+        ],
+      ),
     );
+  }
+}
+
+/// The seek bar's knob: a disc in the accent with a soft glow of the same
+/// colour. While the bar has focus a ring circles it at a small gap, so focus
+/// reads even when the accent and the ring are the same colour (no accent:
+/// both white).
+class _GlowThumbShape extends SliderComponentShape {
+  const _GlowThumbShape({required this.radius, required this.glow, this.ring});
+
+  final double radius;
+  final Color glow;
+  final Color? ring;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
+      Size.fromRadius(radius + 5);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final Canvas canvas = context.canvas;
+    canvas.drawCircle(
+      center,
+      radius + 4,
+      Paint()
+        ..color = glow.withValues(alpha: 0.55)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+    );
+    canvas.drawCircle(center, radius, Paint()..color = glow);
+    final Color? ring = this.ring;
+    if (ring != null) {
+      canvas.drawCircle(
+        center,
+        radius + 4,
+        Paint()
+          ..color = ring
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    }
   }
 }
 
@@ -1442,14 +1576,20 @@ class _FocusIconButton extends StatelessWidget {
     required this.onPressed,
     required this.onFocused,
     required this.focusNode,
-    this.size = 24,
+    this.size = 22,
+    this.diameter = 44,
   });
 
   final IconData icon;
   final String semanticLabel;
   final VoidCallback onPressed;
   final VoidCallback onFocused;
+
+  /// The icon's size.
   final double size;
+
+  /// The disc's.
+  final double diameter;
 
   /// Owned by the overlay's row model, not by this button — the model has to
   /// be able to move focus here without going through the widget tree.
@@ -1478,43 +1618,63 @@ class _FocusIconButton extends StatelessWidget {
         builder: (context) {
           final bool focused = Focus.of(context).hasFocus;
           final PlayerControlsTheme theme = _ThemeScope.of(context);
+          final Color text = theme.textColor;
           return GestureDetector(
             onTap: onPressed,
-            // Unfocused, the disc is frosted glass rather than flat grey: the
-            // film reads through it, and the focus halo stays the only solid
-            // shape on screen.
-            // ponytail: a BackdropFilter per button, always on. Cheap enough
-            // on Android TV; if a weak Tizen set stutters with the overlay
-            // up, drop the filter and keep the translucent fill alone.
-            child: ClipOval(
-              child: BackdropFilter(
-                filter: focused
-                    ? ImageFilter.blur()
-                    : ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: focused
-                        ? theme.focusColor
-                        : theme.textColor.withValues(alpha: 0.12),
-                    boxShadow: focused
-                        ? <BoxShadow>[
-                            BoxShadow(
-                              blurRadius: 16,
-                              color: theme.focusColor.withValues(alpha: 0.7),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Semantics(
-                    label: semanticLabel,
-                    button: true,
-                    child: Icon(
-                      icon,
-                      size: size,
-                      color: focused ? theme.onFocusColor : theme.textColor,
+            // Focused, the disc fills with the accent and glows: on a TV
+            // across the room it has to be the one solid shape on screen.
+            // The glow sits outside the clip, so it is not cut off.
+            child: AnimatedScale(
+              scale: focused ? 1.06 : 1,
+              duration: const Duration(milliseconds: 120),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: focused
+                      ? <BoxShadow>[
+                          BoxShadow(
+                            blurRadius: 22,
+                            spreadRadius: 1,
+                            color: theme.focusColor.withValues(alpha: 0.55),
+                          ),
+                        ]
+                      : null,
+                ),
+                // Unfocused, the disc is frosted glass rather than flat grey:
+                // the film reads through it.
+                // ponytail: a BackdropFilter per button, always on. Cheap
+                // enough on Android TV; if a weak Tizen set stutters with the
+                // overlay up, drop the filter and keep the translucent fill.
+                child: ClipOval(
+                  child: BackdropFilter(
+                    filter: focused
+                        ? ImageFilter.blur()
+                        : ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      width: diameter,
+                      height: diameter,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: focused
+                            ? theme.focusColor
+                            : text.withValues(alpha: text.a * 0.08),
+                        border: Border.all(
+                          color: focused
+                              ? theme.focusColor
+                              : text.withValues(alpha: text.a * 0.14),
+                        ),
+                      ),
+                      child: Semantics(
+                        label: semanticLabel,
+                        button: true,
+                        child: Icon(
+                          icon,
+                          size: size,
+                          color: focused ? theme.onFocusColor : text,
+                        ),
+                      ),
                     ),
                   ),
                 ),

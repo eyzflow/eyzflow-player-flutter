@@ -42,7 +42,8 @@ final class PlayerControlsState extends Equatable {
   final PlayerPanel activePanel;
 
   /// The viewer is looking for a frame: the back, play/pause and forward
-  /// buttons in the middle step aside so the picture is clear.
+  /// buttons under the seek bar step aside so only the bar and its thumbnail
+  /// hold the eye.
   bool get hidesMiddleRow =>
       isScrubbing || (isPreviewing && !previewFromSkipButton);
 

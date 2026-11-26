@@ -38,5 +38,6 @@
   "endScreenBackToCredits": "Revenir au générique",
   "adPosition": "Publicité {index} sur {count}",
   "adSkip": "Ignorer la publicité",
-  "adSkipIn": "Ignorer dans {seconds}"
+  "adSkipIn": "Ignorer dans {seconds}",
+  "remainingTime": "Reste {time}"
 }

@@ -338,6 +338,12 @@ abstract class EYZFlowStreamingLocalizations {
   /// In en, this message translates to:
   /// **'Skip in {seconds}'**
   String adSkipIn(int seconds);
+
+  /// TV controls: the time left in the film, under the right end of the seek bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining {time}'**
+  String remainingTime(String time);
 }
 
 class _EYZFlowStreamingLocalizationsDelegate
