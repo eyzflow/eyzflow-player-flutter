@@ -1,3 +1,9 @@
+## 0.8.4
+
+- Android TV play/pause (EYF-513): the play/pause button no longer shows
+  Play for a moment after each seek. It follows the viewer's intent; only a
+  pause, the end of the film or an error turns it to Play.
+
 ## 0.8.3
 
 - TV seeking (EYF-511): while the viewer seeks with the seek bar or FF/RW,
