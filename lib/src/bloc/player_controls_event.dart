@@ -74,9 +74,14 @@ final class PlayerControlsSeekBarActivated extends PlayerControlsEvent {
 /// Positive [steps] = forward, negative = backward; multiplied by the skip
 /// step (default 15 s).
 final class PlayerControlsSkipBy extends PlayerControlsEvent {
-  const PlayerControlsSkipBy(this.steps);
+  const PlayerControlsSkipBy(this.steps, {this.fromSkipButton = false});
 
   final int steps;
+
+  /// Pressed on the middle back or forward button, which then stays on
+  /// screen; any other skip (seek bar, remote) clears the middle of the
+  /// picture while it previews.
+  final bool fromSkipButton;
 }
 
 /// The skip burst is over: seek once to where it left the preview.

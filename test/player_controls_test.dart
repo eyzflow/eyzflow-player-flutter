@@ -603,6 +603,84 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
   });
 
+  group('the middle buttons', () {
+    double middleOpacity(WidgetTester tester) => tester
+        .widget<AnimatedOpacity>(
+          find.byKey(const Key('player_controls_middle_row')),
+        )
+        .opacity;
+
+    PlayerControlsBloc playing(_FakePlayback p) {
+      final bloc = _bloc(p);
+      bloc.add(
+        const PlayerControlsValueTicked(
+          position: Duration(seconds: 60),
+          duration: Duration(seconds: 600),
+          isPlaying: true,
+        ),
+      );
+      return bloc;
+    }
+
+    testWidgets('step aside while the seek bar is dragged', (tester) async {
+      final bloc = playing(_FakePlayback());
+      await tester.pumpWidget(_harness(bloc));
+      await tester.pump();
+      expect(middleOpacity(tester), 1);
+
+      final TestGesture gesture = await tester.startGesture(
+        tester.getCenter(find.byType(Slider)),
+      );
+      await gesture.moveBy(const Offset(20, 0));
+      await tester.pump();
+      expect(middleOpacity(tester), 0);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(middleOpacity(tester), 1);
+      await tester.pump(const Duration(seconds: 31));
+    });
+
+    testWidgets('step aside while a seek bar skip previews', (tester) async {
+      final bloc = playing(_FakePlayback());
+      await tester.pumpWidget(_harness(bloc));
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(middleOpacity(tester), 0);
+
+      await tester.pump(kPlayerSkipCommitDelay);
+      await tester.pump();
+      expect(middleOpacity(tester), 1);
+      await tester.pump(const Duration(seconds: 31));
+    });
+
+    testWidgets('stay up while they are pressed themselves', (tester) async {
+      final p = _FakePlayback();
+      final bloc = playing(p);
+      await tester.pumpWidget(_harness(bloc));
+      await tester.pump();
+
+      final Finder forward = find.byKey(
+        const Key('player_controls_skip_forward'),
+      );
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(forward);
+        await tester.pump();
+        expect(middleOpacity(tester), 1);
+      }
+      await tester.pump(kPlayerSkipCommitDelay);
+      await tester.pump();
+      expect(p.seekTargets, <Duration>[const Duration(seconds: 105)]);
+      await tester.pump(const Duration(seconds: 31));
+    });
+  });
+
   testWidgets('down walks transport -> tracks -> progress, up walks back', (
     tester,
   ) async {
