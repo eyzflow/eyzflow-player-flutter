@@ -1,3 +1,15 @@
+## 0.8.2
+
+- Seek thumbnails (EYF-505): every sprite of a film's thumbnail track now
+  downloads once, as soon as the track loads, and stays for that film, so
+  seeking no longer fetches images and previews show without a wait. Only a
+  few sprites are decoded at a time, to keep memory low on TVs. Each tile is
+  cut out of its sprite pixel for pixel, so the thin line from the tile above
+  (or beside it) no longer shows on the preview.
+- TV seek bar (EYF-506): OK on the focused seek bar plays and pauses. After
+  Left or Right, OK seeks to the previewed point at once instead of waiting
+  for the skip delay, and leaves play/pause as it was.
+
 ## 0.8.1
 
 - Cast button on iOS (EYF-495): the button no longer sits on AVKit's top bar
