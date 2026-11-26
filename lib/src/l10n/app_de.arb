@@ -38,5 +38,6 @@
   "endScreenBackToCredits": "Zurück zum Abspann",
   "adPosition": "Werbung {index} von {count}",
   "adSkip": "Werbung überspringen",
-  "adSkipIn": "Überspringen in {seconds}"
+  "adSkipIn": "Überspringen in {seconds}",
+  "remainingTime": "Noch {time}"
 }

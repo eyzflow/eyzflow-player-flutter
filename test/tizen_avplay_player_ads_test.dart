@@ -231,6 +231,43 @@ void main() {
     await f.unmount();
   });
 
+  // On-screen rects, not getSize: the canvas lays out at 960 and draws scaled.
+  testWidgets('a 1920-wide screen draws the ad layer and countdown twice as '
+      'large', (tester) async {
+    addTearDown(tester.view.reset);
+    Future<({Size label, Size countdown})> sizes(Size screen) async {
+      tester.view.physicalSize = screen;
+      tester.view.devicePixelRatio = 1;
+      final _Fixture countdown = _Fixture(
+        tester,
+        tagBody: vastOf(vastAd()),
+        markers: const <int>[20],
+      );
+      await countdown.mount();
+      await countdown.play(0, 16);
+      final Size notice = tester
+          .getRect(find.byKey(const ValueKey<String>('eyzflow-ad-countdown')))
+          .size;
+      await countdown.unmount();
+
+      final _Fixture preRoll = _Fixture(tester, tagBody: vastOf(vastAd()));
+      await preRoll.mount();
+      preRoll.ad.advance(const Duration(seconds: 3));
+      await tester.pump();
+      final Size label = tester
+          .getRect(find.byKey(const ValueKey<String>('eyzflow-ad-label')))
+          .size;
+      await preRoll.unmount();
+      return (label: label, countdown: notice);
+    }
+
+    final small = await sizes(const Size(960, 540));
+    final large = await sizes(const Size(1920, 1080));
+    expect(large.label.width, closeTo(small.label.width * 2, 0.5));
+    expect(large.label.height, closeTo(small.label.height * 2, 0.5));
+    expect(large.countdown.width, closeTo(small.countdown.width * 2, 0.5));
+  });
+
   testWidgets('the countdown shows before a mid-roll', (tester) async {
     final _Fixture f = _Fixture(
       tester,

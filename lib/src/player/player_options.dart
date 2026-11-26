@@ -33,22 +33,22 @@ final class PlayerControlsTheme {
     );
   }
 
-  /// The focused control and the progress bar. Null keeps white focus and the
-  /// app's own slider colours.
+  /// The focused control, the seek bar and its knob, and the playing track
+  /// row's outline. Null draws them white.
   final Color? accentColor;
 
   /// The title, times and unfocused icons.
   final Color textColor;
 
-  /// The audio and subtitle panels.
+  /// The audio and subtitle panels, the seek bar's thumbnail card, and the
+  /// text on the TV skip button.
   final Color panelColor;
 
-  /// The shade behind the transport and progress bar, at the bottom (and,
-  /// lighter, at the top).
+  /// The shade behind the seek bar and buttons, at the bottom (and, lighter,
+  /// at the top).
   final Color barColor;
 
-  /// The corners of track rows and the focused progress bar, in logical
-  /// pixels.
+  /// The corners of track rows and the skip button, in logical pixels.
   final double radius;
 
   /// The focused button's disc and the focused track row.

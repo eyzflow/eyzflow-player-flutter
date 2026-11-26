@@ -24,6 +24,7 @@ import 'ad_countdown_notice.dart';
 import 'avplay_ad_player.dart';
 import 'hls_renditions.dart';
 import 'tv_ad_layer.dart';
+import 'tv_canvas.dart';
 import 'playback_event.dart';
 import 'playback_event_emitter.dart';
 import 'playback_target.dart';
@@ -642,20 +643,31 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
         content,
         // Over the video and the controls, never focusable: it stays up
         // while the controls are hidden.
+        // Both on the TV canvas, like the controls: sized for Android TV's
+        // 960 logical pixels, scaled up to the TV's width.
         if (ads != null && widget.options.adCountdown)
-          AdCountdownNotice(
-            seconds: _adCountdown,
-            // Up out of the skip button's way while one shows.
-            liftedBy: widget.options.skipButtons && !_overlay.active
-                ? _signals
-                : null,
+          TvCanvas(
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                AdCountdownNotice(
+                  seconds: _adCountdown,
+                  // Up out of the skip button's way while one shows.
+                  liftedBy: widget.options.skipButtons && !_overlay.active
+                      ? _signals
+                      : null,
+                ),
+              ],
+            ),
           ),
         if (ads != null && driver != null)
-          TvAdLayer(
-            scheduler: ads,
-            driver: driver,
-            theme: widget.options.controlsTheme,
-            onBack: () => _closeFromControls(context),
+          TvCanvas(
+            child: TvAdLayer(
+              scheduler: ads,
+              driver: driver,
+              theme: widget.options.controlsTheme,
+              onBack: () => _closeFromControls(context),
+            ),
           ),
       ],
     );

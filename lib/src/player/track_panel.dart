@@ -46,25 +46,46 @@ class TrackPanel extends StatelessWidget {
       // stayed outside the sidebar entirely.
       child: FocusScope(
         child: FocusTraversalGroup(
+          // A card floating over the film's right side, not a sidebar.
           child: Container(
-            width: 270,
-            alignment: Alignment.center,
-            color: theme.panelColor,
-            padding: const EdgeInsets.all(18),
+            width: 260,
+            margin: const EdgeInsets.fromLTRB(0, 24, 32, 24),
+            decoration: BoxDecoration(
+              color: theme.panelColor,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: theme.textColor.withValues(
+                  alpha: theme.textColor.a * 0.1,
+                ),
+              ),
+              boxShadow: const <BoxShadow>[
+                BoxShadow(
+                  blurRadius: 40,
+                  offset: Offset(0, 12),
+                  color: Color(0x99000000),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            padding: const EdgeInsets.fromLTRB(10, 16, 10, 10),
             child: SingleChildScrollView(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
                   Text(
-                    title,
+                    title.toUpperCase(),
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: theme.textColor,
-                      fontSize: 18,
+                      color: theme.textColor.withValues(
+                        alpha: theme.textColor.a * 0.7,
+                      ),
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
+                      letterSpacing: 2.5,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   for (final (int index, TrackPanelRow row) in rows.indexed)
                     _TrackRow(
                       theme: theme,
@@ -118,16 +139,26 @@ class _TrackRow extends StatelessWidget {
         builder: (context) {
           final bool focused = Focus.of(context).hasFocus;
           final Color text = theme.textColor;
+          final Color accent = theme.focusColor;
+          // Focused: filled with the accent. Playing: outlined in it, so the
+          // viewer sees both where they are and what is on.
           return GestureDetector(
             onTap: onSelected,
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
               margin: const EdgeInsets.symmetric(vertical: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: focused
-                    ? theme.focusColor
-                    : text.withValues(alpha: text.a * 0.1),
-                borderRadius: BorderRadius.circular(theme.radius),
+                    ? accent
+                    : selected
+                    ? accent.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(theme.radius + 6),
+                border: Border.all(
+                  color: focused || selected ? accent : Colors.transparent,
+                  width: 1.5,
+                ),
               ),
               child: Row(
                 children: <Widget>[
@@ -139,9 +170,7 @@ class _TrackRow extends StatelessWidget {
                     child: selected
                         ? Icon(
                             Icons.check,
-                            color: focused
-                                ? theme.onFocusColor
-                                : text.withValues(alpha: text.a * 0.7),
+                            color: focused ? theme.onFocusColor : accent,
                           )
                         : null,
                   ),
@@ -154,6 +183,7 @@ class _TrackRow extends StatelessWidget {
                       style: TextStyle(
                         color: focused ? theme.onFocusColor : text,
                         fontSize: 15,
+                        fontWeight: selected ? FontWeight.w600 : null,
                       ),
                     ),
                   ),

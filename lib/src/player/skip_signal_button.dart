@@ -30,8 +30,8 @@ const double skipSignalButtonBottom = 72;
 /// "Skip intro", "Skip recap" or "Skip credits", bottom right, while
 /// [signal] has one.
 ///
-/// On phones and tablets it is tapped. On TV ([remote]) it is drawn as the
-/// focused control; with a [focusNode] the overlay puts focus on it while its
+/// On phones and tablets it is tapped. On TV ([remote]) it is a light pill
+/// with the OK key beside its label; with a [focusNode] the overlay puts focus on it while its
 /// own controls are hidden, and OK skips. Without one it never takes focus
 /// and the remote's OK reaches [onSkip] some other way. Colours and corners
 /// come from the player config's theme, like the TV overlay's bar.
@@ -64,32 +64,32 @@ class SkipSignalButton extends StatelessWidget {
         return const Positioned(right: 0, bottom: 0, child: SizedBox.shrink());
       }
       final String label = skipSignalLabel(current.type);
-      final Color background = remote ? theme.focusColor : theme.barColor;
-      final Color foreground = remote ? theme.onFocusColor : theme.textColor;
-      final Widget face = DecoratedBox(
-        key: const ValueKey<String>('eyzflow-skip-signal'),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(theme.radius),
-          border: Border.all(
-            color: remote ? background : foreground.withValues(alpha: 0.55),
-          ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: remote ? 24 : 18,
-            vertical: remote ? 12 : 11,
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: foreground,
-              fontSize: remote ? 18 : 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
+      final Widget face = remote
+          ? _remoteFace(label)
+          : DecoratedBox(
+              key: const ValueKey<String>('eyzflow-skip-signal'),
+              decoration: BoxDecoration(
+                color: theme.barColor,
+                borderRadius: BorderRadius.circular(theme.radius),
+                border: Border.all(
+                  color: theme.textColor.withValues(alpha: 0.55),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 11,
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: theme.textColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            );
       return Positioned(
         right: remote ? 48 : 16,
         bottom: skipSignalButtonBottom + MediaQuery.paddingOf(context).bottom,
@@ -110,6 +110,54 @@ class SkipSignalButton extends StatelessWidget {
       );
     },
   );
+
+  /// On TV: a light pill, the one bright shape over the film, with the
+  /// remote key that presses it. The theme's text colour is its fill and the
+  /// panel colour its ink, so the pair stays readable with any config.
+  Widget _remoteFace(String label) {
+    final Color ink = theme.panelColor.withValues(alpha: 1);
+    return DecoratedBox(
+      key: const ValueKey<String>('eyzflow-skip-signal'),
+      decoration: BoxDecoration(
+        color: theme.textColor.withValues(alpha: theme.textColor.a * 0.94),
+        borderRadius: BorderRadius.circular(theme.radius + 6),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            blurRadius: 24,
+            offset: Offset(0, 8),
+            color: Color(0x66000000),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 11, 16, 11),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Text(
+              label,
+              style: TextStyle(
+                color: ink,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'OK',
+              style: TextStyle(
+                color: ink.withValues(alpha: 0.55),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _remoteButton(String label, Widget face) {
     final Widget announced = Semantics(

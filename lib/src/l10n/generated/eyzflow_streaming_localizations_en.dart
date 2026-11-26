@@ -141,4 +141,9 @@ class EYZFlowStreamingLocalizationsEn extends EYZFlowStreamingLocalizations {
   String adSkipIn(int seconds) {
     return 'Skip in $seconds';
   }
+
+  @override
+  String remainingTime(String time) {
+    return 'Remaining $time';
+  }
 }

@@ -195,7 +195,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Film A'), findsOneWidget);
-    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     // The skip-back button legitimately renders replay_10 (closest glyph to a
     // 15 s step; see the widget's comment).
     expect(find.byIcon(Icons.replay_10), findsOneWidget);
@@ -222,7 +222,7 @@ void main() {
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();
 
-    expect(find.byIcon(Icons.pause), findsOneWidget);
+    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
     await tester.tap(find.byKey(const Key('player_controls_play_pause')));
     await tester.pump();
     expect(p.pauseCount, 1);
@@ -488,14 +488,14 @@ void main() {
 
     expect(find.byKey(const Key('player_controls_audio')), findsNothing);
     expect(find.byKey(const Key('player_controls_subtitles')), findsNothing);
-    // And the D-pad skips the row rather than landing on a button that is not
-    // there — focusing a detached node loses focus outright.
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    // And the D-pad stops at the end of the transport rather than landing on
+    // a button that is not there — focusing a detached node loses focus
+    // outright.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
-    expect(focusedControl(), 'progress');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
-    expect(focusedControl(), 'playPause');
+    expect(focusedControl(), 'skipForward');
     await tester.pump(const Duration(seconds: 31));
   });
 
@@ -517,7 +517,9 @@ void main() {
     expect(find.byKey(const Key('player_controls_audio')), findsOneWidget);
     expect(find.byKey(const Key('player_controls_subtitles')), findsNothing);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(focusedControl(), 'audio');
     // Right would have walked onto the subtitles button that is not there.
@@ -525,6 +527,88 @@ void main() {
     await tester.pump();
     expect(focusedControl(), 'audio');
     await tester.pump(const Duration(seconds: 31));
+  });
+
+  group('on every TV canvas', () {
+    // Android TV reports 960 logical pixels, Tizen 1920: the overlay must
+    // cover the same share of the screen on both.
+    late double inset;
+
+    Widget harness(PlayerControlsBloc bloc) => MaterialApp(
+      home: Scaffold(
+        body: BlocProvider<PlayerControlsBloc>.value(
+          value: bloc,
+          child: PlayerControls(
+            title: 'Film A',
+            captionsBuilder: (BuildContext context, double bottomInset) {
+              inset = bottomInset;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    Future<({Rect play, double inset})> render(
+      WidgetTester tester,
+      Size screen,
+    ) async {
+      tester.view.physicalSize = screen;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bloc = _bloc(_FakePlayback());
+      _loadTracks(bloc);
+      await tester.pumpWidget(harness(bloc));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final Rect play = tester.getRect(
+        find.byKey(const Key('player_controls_play_pause')),
+      );
+      return (play: play, inset: inset);
+    }
+
+    testWidgets('a 1920-wide screen draws the overlay twice as large', (
+      tester,
+    ) async {
+      final small = await render(tester, const Size(960, 540));
+      await tester.pump(const Duration(seconds: 31));
+      final large = await render(tester, const Size(1920, 1080));
+
+      expect(large.play.width, closeTo(small.play.width * 2, 0.5));
+      expect(large.play.left, closeTo(small.play.left * 2, 0.5));
+      expect(large.play.top, closeTo(small.play.top * 2, 0.5));
+      // The captions are lifted clear of the larger bar.
+      expect(large.inset, closeTo(small.inset * 2, 0.5));
+      await tester.pump(const Duration(seconds: 31));
+    });
+
+    testWidgets('a scaled overlay still takes taps and the remote', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final p = _FakePlayback();
+      final bloc = _bloc(p);
+      bloc.add(
+        const PlayerControlsValueTicked(
+          position: Duration.zero,
+          duration: Duration(seconds: 20),
+          isPlaying: true,
+        ),
+      );
+      await tester.pumpWidget(harness(bloc));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('player_controls_play_pause')));
+      await tester.pump();
+      expect(p.pauseCount, 1);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(focusedControl(), 'progress');
+      await tester.pump(const Duration(seconds: 31));
+    });
   });
 
   testWidgets('a control takes focus on first frame, arming auto-hide', (
@@ -682,9 +766,7 @@ void main() {
       await tester.pumpWidget(_harness(bloc));
       await tester.pump();
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
@@ -717,7 +799,7 @@ void main() {
     });
   });
 
-  testWidgets('down walks transport -> tracks -> progress, up walks back', (
+  testWidgets('up walks transport -> seek bar -> back, down walks back', (
     tester,
   ) async {
     final bloc = _bloc(_FakePlayback());
@@ -727,26 +809,14 @@ void main() {
 
     expect(focusedControl(), 'playPause');
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    expect(focusedControl(), 'audio');
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    expect(focusedControl(), 'progress');
-
     // The bottom row is the end of the line — focus must not fall off it.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
-    expect(focusedControl(), 'progress');
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pump();
-    expect(focusedControl(), 'audio');
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pump();
     expect(focusedControl(), 'playPause');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(focusedControl(), 'progress');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
@@ -756,12 +826,29 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
     expect(focusedControl(), 'back');
+
+    // Back down, the row is entered on play/pause, not on the column focus
+    // came from.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(focusedControl(), 'progress');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(focusedControl(), 'playPause');
+
+    // From a track button, up goes to the seek bar too.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(focusedControl(), 'audio');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(focusedControl(), 'progress');
     await tester.pump(const Duration(seconds: 31));
   });
 
-  testWidgets('left and right move within the transport row only', (
-    tester,
-  ) async {
+  testWidgets('left and right move within the bottom row only', (tester) async {
     final bloc = _bloc(_FakePlayback());
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();
@@ -794,9 +881,7 @@ void main() {
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
     expect(focusedControl(), 'progress');
 
@@ -826,9 +911,7 @@ void main() {
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
     expect(focusedControl(), 'progress');
 
@@ -855,9 +938,7 @@ void main() {
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
@@ -900,9 +981,7 @@ void main() {
     await tester.pump();
     expect(_anyThumbnail, findsNothing);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
@@ -960,7 +1039,9 @@ void main() {
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(focusedControl(), 'audio');
 
@@ -980,7 +1061,9 @@ void main() {
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(focusedControl(), 'audio');
 
@@ -1180,11 +1263,11 @@ void main() {
       find.byKey(const Key('player_controls_play_pause')),
     );
 
-    // Beside the elapsed time, down in the bottom bar — not over the
-    // transport, where it used to sit.
+    // Beside the elapsed time, under the seek bar — not on the transport
+    // below it.
     expect((spinner.dy - elapsed.dy).abs(), lessThan(8));
     expect(spinner.dx, greaterThan(elapsed.dx));
-    expect(spinner.dy, greaterThan(playPause.dy + 100));
+    expect(spinner.dy, lessThan(playPause.dy - 20));
     await tester.pump(const Duration(seconds: 31));
   });
 
@@ -1196,7 +1279,9 @@ void main() {
     await tester.pumpWidget(_harness(bloc));
     await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(focusedControl(), 'audio');
 

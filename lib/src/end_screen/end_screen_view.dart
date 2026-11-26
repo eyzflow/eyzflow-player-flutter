@@ -9,6 +9,7 @@ import '../l10n/player_language.dart';
 import '../player/player_options.dart';
 import '../signals/stream_signals.dart';
 import 'end_screen.dart';
+import '../player/tv_canvas.dart';
 
 /// Whether the end screen takes over when the film ends, so the player stays
 /// open on it instead of closing.
@@ -207,6 +208,7 @@ class _PlayerOverlayLayerState extends State<PlayerOverlayLayer> {
                     height * scale,
                   );
             final Rect full = Rect.fromLTWH(0, 0, width, height);
+            final double tvScale = widget.remote ? TvCanvas.scaleFor(box) : 1;
             final Rect rect = shrunk ? small : full;
             const Duration motion = Duration(milliseconds: 350);
             return Stack(
@@ -223,23 +225,29 @@ class _PlayerOverlayLayerState extends State<PlayerOverlayLayer> {
                 ),
                 ?custom,
                 if (phase != null)
-                  EndScreenView(
-                    options: scope!.endScreen!,
-                    settings: scope.settings,
-                    phase: phase,
-                    counting: facts.playing || facts.atEnd,
-                    theme: widget.theme,
-                    remote: widget.remote,
-                    leaveRightFor: shrunk ? small.width + 32 : 0,
-                    onPick: (EYZFlowEndScreenItem item, bool autoplay) {
-                      final EndScreenSelection selection = EndScreenSelection(
-                        item,
-                        autoplay: autoplay,
-                      );
-                      scope.endScreen!.onSelect?.call(selection);
-                      if (!selection.isPrevented) scope.onPick(item);
-                    },
-                    onBack: () => _dismiss('end:${phase!.name}'),
+                  // On TV the panel is on the TV canvas, like the controls;
+                  // the video above stays in the screen's own coordinates.
+                  _onTvCanvas(
+                    tv: widget.remote,
+                    scale: tvScale,
+                    child: EndScreenView(
+                      options: scope!.endScreen!,
+                      settings: scope.settings,
+                      phase: phase,
+                      counting: facts.playing || facts.atEnd,
+                      theme: widget.theme,
+                      remote: widget.remote,
+                      leaveRightFor: shrunk ? (small.width + 32) / tvScale : 0,
+                      onPick: (EYZFlowEndScreenItem item, bool autoplay) {
+                        final EndScreenSelection selection = EndScreenSelection(
+                          item,
+                          autoplay: autoplay,
+                        );
+                        scope.endScreen!.onSelect?.call(selection);
+                        if (!selection.isPrevented) scope.onPick(item);
+                      },
+                      onBack: () => _dismiss('end:${phase!.name}'),
+                    ),
                   ),
                 // The small video goes back to the credits when tapped.
                 if (shrunk)
@@ -262,6 +270,18 @@ class _PlayerOverlayLayerState extends State<PlayerOverlayLayer> {
 
 /// "Up next" with its countdown and a row of films. Every part is focusable
 /// for the TV remote; on TV the first button takes the focus.
+Widget _onTvCanvas({
+  required bool tv,
+  required double scale,
+  required Widget child,
+}) => tv
+    // Its own Stack: the view is a Positioned.
+    ? TvCanvas(
+        scale: scale,
+        child: Stack(fit: StackFit.expand, children: <Widget>[child]),
+      )
+    : child;
+
 class EndScreenView extends StatefulWidget {
   const EndScreenView({
     super.key,

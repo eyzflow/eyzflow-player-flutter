@@ -254,11 +254,11 @@ Android and iOS; Android TV and Tizen use the player's own TV overlay):
 
 | Field | Phones | Android TV | Tizen |
 |---|---|---|---|
-| `theme.accentColor` | – | focused control (the skip button too), progress bar | same |
-| `theme.textColor` | skip button text | title, times, icons, track rows | same |
-| `theme.backgroundColor` | – | audio/subtitle panel | same |
+| `theme.accentColor` | – | focused control, seek bar and knob, playing track row | same |
+| `theme.textColor` | skip button text | title, times, icons, track rows, skip button fill | same |
+| `theme.backgroundColor` | – | audio/subtitle panel, thumbnail card, skip button text | same |
 | `theme.controlsBarColor` | skip button | shade behind the controls | same |
-| `theme.borderRadius` (px) | skip button | track rows, focused progress bar, skip button | same |
+| `theme.borderRadius` (px) | skip button | track rows, skip button | same |
 | `features.controls` | – (the native controls hold Close) | false: no overlay; Back closes, OK plays/pauses, left/right and media keys skip | same |
 | `features.autoHideControls` | – | false: the overlay stays up | same |
 | `features.captions` | – (the native menu offers subtitles) | false: no subtitles, none offered | same |

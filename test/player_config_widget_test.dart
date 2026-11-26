@@ -538,16 +538,20 @@ void main() {
         const Color.fromARGB(128, 0, 0, 0),
       );
 
-      // Down to the progress bar: its focus box takes the radius.
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      // Up to the seek bar: focus thickens its track.
+      double trackHeight() => tester
+          .widget<SliderTheme>(
+            find.descendant(
+              of: find.byKey(const Key('player_controls_progress')),
+              matching: find.byType(SliderTheme),
+            ),
+          )
+          .data
+          .trackHeight!;
+      final double unfocused = trackHeight();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pump(const Duration(milliseconds: 200));
-      final progress = tester.widget<AnimatedContainer>(
-        find.byKey(const Key('player_controls_progress')),
-      );
-      final box = progress.decoration! as BoxDecoration;
-      expect(box.borderRadius, BorderRadius.circular(10));
-      expect(box.border, Border.all(color: _red, width: 2));
+      expect(trackHeight(), greaterThan(unfocused));
       await tester.pump(const Duration(seconds: 5));
     });
 
@@ -557,7 +561,14 @@ void main() {
       await tester.pump();
 
       expect(disc(tester, 'player_controls_play_pause').color, Colors.white);
-      expect(find.byType(SliderTheme), findsNothing);
+      // The seek bar is white too.
+      final slider = tester.widget<SliderTheme>(
+        find.descendant(
+          of: find.byKey(const Key('player_controls_progress')),
+          matching: find.byType(SliderTheme),
+        ),
+      );
+      expect(slider.data.activeTrackColor, Colors.white);
       await tester.pump(const Duration(seconds: 5));
     });
 
