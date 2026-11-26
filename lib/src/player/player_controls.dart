@@ -1018,6 +1018,8 @@ class _BottomBar extends StatelessWidget {
                 duration: state.duration,
                 thumbnails: thumbnails,
                 previewing: state.isPreviewing,
+                onActivate: () =>
+                    bloc.add(const PlayerControlsSeekBarActivated()),
                 onChangeStart: (_) =>
                     bloc.add(const PlayerControlsScrubStarted()),
                 onChangeEnd: (value) => bloc.add(
@@ -1081,6 +1083,7 @@ class _ProgressSlider extends StatefulWidget {
     required this.position,
     required this.duration,
     required this.focusNode,
+    required this.onActivate,
     required this.onChangeStart,
     required this.onChangeEnd,
     this.thumbnails,
@@ -1101,6 +1104,9 @@ class _ProgressSlider extends StatefulWidget {
   /// through `onChanged`, which never commits a seek — the overlay's own
   /// skip is what the arrows mean here.
   final FocusNode focusNode;
+
+  /// OK (`select` / `enter`) while the bar has focus.
+  final VoidCallback onActivate;
   final ValueChanged<double> onChangeStart;
   final ValueChanged<double> onChangeEnd;
 
@@ -1121,6 +1127,17 @@ class _ProgressSliderState extends State<_ProgressSlider> {
     final double value = (_dragValue ?? position).clamp(0, max == 0 ? 0 : max);
     return Focus(
       focusNode: widget.focusNode,
+      onKeyEvent: (FocusNode node, KeyEvent event) {
+        if (event is KeyUpEvent) return KeyEventResult.ignored;
+        final LogicalKeyboardKey key = event.logicalKey;
+        if (key != LogicalKeyboardKey.select &&
+            key != LogicalKeyboardKey.enter) {
+          return KeyEventResult.ignored;
+        }
+        // Holding OK toggles once, not on every repeat.
+        if (event is KeyDownEvent) widget.onActivate();
+        return KeyEventResult.handled;
+      },
       child: Builder(
         builder: (BuildContext context) {
           final bool focused = Focus.of(context).hasFocus;

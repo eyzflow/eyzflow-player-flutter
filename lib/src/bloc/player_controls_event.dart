@@ -65,6 +65,12 @@ final class PlayerControlsPlayPauseToggled extends PlayerControlsEvent {
   const PlayerControlsPlayPauseToggled();
 }
 
+/// OK on the focused seek bar. Seeks at once to an open skip burst's
+/// preview; with no burst open, toggles play/pause.
+final class PlayerControlsSeekBarActivated extends PlayerControlsEvent {
+  const PlayerControlsSeekBarActivated();
+}
+
 /// Positive [steps] = forward, negative = backward; multiplied by the skip
 /// step (default 15 s).
 final class PlayerControlsSkipBy extends PlayerControlsEvent {

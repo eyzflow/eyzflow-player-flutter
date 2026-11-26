@@ -53,6 +53,7 @@ class PlayerControlsBloc
     on<PlayerControlsBufferingChanged>(_onBufferingChanged);
     on<PlayerControlsTracksLoaded>(_onTracksLoaded);
     on<PlayerControlsPlayPauseToggled>(_onPlayPauseToggled);
+    on<PlayerControlsSeekBarActivated>(_onSeekBarActivated);
     on<PlayerControlsSkipBy>(_onSkipBy);
     on<_PlayerControlsSkipCommitted>(_onSkipCommitted);
     on<PlayerControlsSeekRequested>(_onSeekRequested);
@@ -276,6 +277,19 @@ class PlayerControlsBloc
       await _controller.play();
     }
     _restartHideTimer();
+  }
+
+  Future<void> _onSeekBarActivated(
+    PlayerControlsSeekBarActivated event,
+    Emitter<PlayerControlsState> emit,
+  ) async {
+    if (_skipPreview == null) {
+      await _onPlayPauseToggled(const PlayerControlsPlayPauseToggled(), emit);
+      return;
+    }
+    // OK confirms the preview: seek now instead of waiting out the burst,
+    // and leave playing or paused as it was.
+    await _onSkipCommitted(const _PlayerControlsSkipCommitted(), emit);
   }
 
   Future<void> _onSkipBy(

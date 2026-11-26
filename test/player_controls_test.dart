@@ -699,6 +699,70 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
   });
 
+  testWidgets('OK on the progress row toggles play/pause', (tester) async {
+    final p = _FakePlayback();
+    final bloc = _bloc(p);
+    bloc.add(
+      const PlayerControlsValueTicked(
+        position: Duration(seconds: 60),
+        duration: Duration(seconds: 600),
+        isPlaying: true,
+      ),
+    );
+    await tester.pumpWidget(_harness(bloc));
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(focusedControl(), 'progress');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(p.pauseCount, 1);
+    expect(p.playCount, 0);
+    expect(focusedControl(), 'progress');
+    await tester.pump(const Duration(seconds: 31));
+  });
+
+  testWidgets('OK on the progress row seeks a skip preview at once', (
+    tester,
+  ) async {
+    final p = _FakePlayback();
+    final bloc = _bloc(p);
+    bloc.add(
+      const PlayerControlsValueTicked(
+        position: Duration(seconds: 60),
+        duration: Duration(seconds: 600),
+        isPlaying: true,
+      ),
+    );
+    await tester.pumpWidget(_harness(bloc));
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(p.seekTargets, isEmpty);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(p.seekTargets, <Duration>[const Duration(seconds: 90)]);
+    expect(p.pauseCount, 0);
+    expect(p.playCount, 0);
+
+    await tester.pump(kPlayerSkipCommitDelay);
+    await tester.pump();
+    expect(p.seekTargets, hasLength(1));
+    await tester.pump(const Duration(seconds: 31));
+  });
+
   testWidgets('a skip preview shows the thumbnail of where it will seek', (
     tester,
   ) async {

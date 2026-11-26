@@ -113,6 +113,31 @@ void main() {
       });
     });
 
+    test('OK on the seek bar seeks at once and keeps playing', () {
+      fakeAsync((async) {
+        final playback = _FakePlayback();
+        final bloc = burstBloc(playback);
+        async.flushMicrotasks();
+
+        bloc.add(const PlayerControlsSkipBy(1));
+        bloc.add(const PlayerControlsSkipBy(1));
+        async.flushMicrotasks();
+        expect(playback.seeks, isEmpty);
+
+        bloc.add(const PlayerControlsSeekBarActivated());
+        async.flushMicrotasks();
+        expect(playback.seeks, [const Duration(minutes: 10, seconds: 30)]);
+        expect(bloc.state.isPreviewing, isFalse);
+        expect(playback.pauseCount, 0);
+        expect(playback.playCount, 0);
+
+        // The burst is over: its timer seeks nothing more.
+        async.elapse(delay * 2);
+        expect(playback.seeks, hasLength(1));
+        bloc.close();
+      });
+    });
+
     test('ticks do not pull the preview back while the burst is open', () {
       fakeAsync((async) {
         final bloc = burstBloc(_FakePlayback());
@@ -274,6 +299,24 @@ void main() {
     );
     await bloc.stream.first;
     bloc.add(const PlayerControlsPlayPauseToggled());
+    await bloc.stream.first;
+    expect(p.pauseCount, 1);
+    expect(p.playCount, 0);
+    await bloc.close();
+  });
+
+  test('OK on the seek bar with no burst open toggles play/pause', () async {
+    final p = _FakePlayback();
+    final bloc = _bloc(playback: p);
+    bloc.add(
+      const PlayerControlsValueTicked(
+        position: Duration.zero,
+        duration: Duration(seconds: 20),
+        isPlaying: true,
+      ),
+    );
+    await bloc.stream.first;
+    bloc.add(const PlayerControlsSeekBarActivated());
     await bloc.stream.first;
     expect(p.pauseCount, 1);
     expect(p.playCount, 0);
