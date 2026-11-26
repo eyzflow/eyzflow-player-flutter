@@ -49,7 +49,9 @@ class _LoaderPageState extends State<LoaderPage> {
     text: const String.fromEnvironment('EYZFLOW_STOREFRONT_ID'),
   );
   final _playerKey = TextEditingController();
-  final _configId = TextEditingController();
+  final _configId = TextEditingController(
+    text: const String.fromEnvironment('EYZFLOW_CONFIG_ID'),
+  );
   // A VAST or VMAP tag, e.g. one of Google's IMA sample tags. Turns ads on
   // over whatever the player config says.
   final _adTagUrl = TextEditingController(
