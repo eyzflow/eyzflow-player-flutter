@@ -314,10 +314,12 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
         final text = await phone.textTracks();
         if (!current()) return;
         final matches = text.where(
-          (t) => EYZFlowLanguageNames.sameBaseLanguage(
-            _subtitleLanguage,
-            t.language,
-          ),
+          (t) =>
+              !t.forced &&
+              EYZFlowLanguageNames.sameBaseLanguage(
+                _subtitleLanguage,
+                t.language,
+              ),
         );
         if (matches.isNotEmpty &&
             !matches.any((t) => t.trackId == phone.selectedTextTrackId)) {

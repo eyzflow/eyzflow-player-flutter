@@ -47,11 +47,15 @@ extension VideoPlayerView {
                 displayName = languageCode
             }
 
+            // HLS FORCED=YES: only the lines in another language. Listed so
+            // the index stays the option's place in the group; Dart leaves
+            // it out of the subtitle menu.
             let trackInfo: [String: Any] = [
                 "index": index,
                 "language": languageCode,
                 "displayName": displayName,
-                "isSelected": isSelected
+                "isSelected": isSelected,
+                "isForced": option.hasMediaCharacteristic(.containsOnlyForcedSubtitles)
             ]
 
             tracks.append(trackInfo)

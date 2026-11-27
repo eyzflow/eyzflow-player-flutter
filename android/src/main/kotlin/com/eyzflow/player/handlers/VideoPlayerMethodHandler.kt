@@ -19,6 +19,7 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -395,13 +396,25 @@ class VideoPlayerMethodHandler(
     }
 
     /**
-     * Seeks to a specific position
+     * Seeks to a specific position. With `notBefore` (a skip past the intro
+     * or credits) the seek lands on that exact time: the player's
+     * CLOSEST_SYNC can snap to a keyframe seconds before it, back inside the
+     * skipped part. Exact costs a short decode from the previous keyframe,
+     * once per skip; other seeks keep the fast keyframe seek.
      */
     private fun handleSeekTo(call: MethodCall, result: MethodChannel.Result) {
         val args = call.arguments as? Map<*, *>
         val milliseconds = args?.get("milliseconds") as? Int
+        val notBefore = args?.get("notBefore") as? Boolean ?: false
         if (milliseconds != null) {
-            player.seekTo(milliseconds.toLong())
+            if (notBefore) {
+                val keyframeSeek = player.seekParameters
+                player.setSeekParameters(SeekParameters.EXACT)
+                player.seekTo(milliseconds.toLong())
+                player.setSeekParameters(keyframeSeek)
+            } else {
+                player.seekTo(milliseconds.toLong())
+            }
             eventHandler.sendEvent("seek", mapOf("position" to milliseconds))
         }
         result.success(null)
@@ -948,11 +961,19 @@ class VideoPlayerMethodHandler(
                                 }
                             }
 
+                        // HLS FORCED=YES: only the lines in another language
+                        // (signs, a foreign scene). Listed so the flat index
+                        // stays the one handleSetSubtitleTrack walks; Dart
+                        // leaves it out of the subtitle menu.
+                        val isForced =
+                            (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0
+
                         val trackInfo = mapOf(
                             "index" to flatIndex,
                             "language" to languageCode,
                             "displayName" to displayName,
-                            "isSelected" to isSelected
+                            "isSelected" to isSelected,
+                            "isForced" to isForced
                         )
 
                         tracks.add(trackInfo)

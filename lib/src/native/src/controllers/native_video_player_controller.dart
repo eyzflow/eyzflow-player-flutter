@@ -1689,9 +1689,10 @@ class NativeVideoPlayerController {
     await _methodChannel?.restoreAfterAd();
   }
 
-  /// Seeks to a specific position
-  Future<void> seekTo(Duration position) async {
-    await _methodChannel?.seekTo(position);
+  /// Seeks to a specific position. With [notBefore] (skipping the intro or
+  /// credits) playback never lands before it.
+  Future<void> seekTo(Duration position, {bool notBefore = false}) async {
+    await _methodChannel?.seekTo(position, notBefore: notBefore);
   }
 
   /// The active A-B playback range, or null when playback is unrestricted.

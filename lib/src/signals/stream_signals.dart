@@ -291,15 +291,16 @@ final class SignalTracker extends ValueNotifier<StreamSignal?> {
   StreamSignal? _skipped;
   Duration? _skipTarget;
 
-  /// Position reports in a row at or past [_skipTarget]. One is not enough:
-  /// Tizen's AVPlay reports the target itself the moment `seekTo` returns,
-  /// then goes on polling the old position (inside the signal) until
-  /// PlusPlayer has landed, which takes seconds on a DRM stream. Counting
-  /// only from the first report kept the button away for that one report and
-  /// brought it back for those seconds.
+  /// Position reports in a row at or past [_skipTarget] that also moved
+  /// forward from the one before. Reaching the target is not enough: Tizen's
+  /// AVPlay reports the target the moment `seekTo` returns, then the old
+  /// position until PlusPlayer has landed (seconds on a DRM stream), and
+  /// Android's ExoPlayer reports the target while it seeks, then the keyframe
+  /// it snapped to, which can be inside the signal. Neither moves forward
+  /// past the target until playback really runs there.
   var _landedReports = 0;
 
-  /// How many reports in a row past the target mean the seek has landed.
+  /// How many such reports mean the seek has landed.
   static const int _landedAfter = 2;
 
   List<StreamSignal> get signals => _signals;
@@ -313,36 +314,53 @@ final class SignalTracker extends ValueNotifier<StreamSignal?> {
   /// A position report. Null (no position yet, or the content ended) leaves
   /// any signal.
   void position(Duration? position) {
+    final Duration? previous = _position;
     _position = position;
     final StreamSignal? skipped = _skipped;
     final Duration? target = _skipTarget;
     if (skipped != null) {
-      final bool atTarget =
+      final bool landing =
           position != null &&
           target != null &&
+          previous != null &&
+          position > previous &&
           position >= target - signalEndSlack;
-      _landedReports = atTarget ? _landedReports + 1 : 0;
+      _landedReports = landing ? _landedReports + 1 : 0;
       if (position == null ||
           target == null ||
           _landedReports >= _landedAfter ||
           position < skipped.start) {
-        _skipped = null;
-        _skipTarget = null;
-        _landedReports = 0;
+        _clearSkip();
       }
     }
     _update();
   }
 
   /// The viewer skipped [signal]: it is left at once, and stays left while
-  /// the native player still reports positions inside it from before the
-  /// seek to [target] landed. Two reports in a row at [target] or past it
-  /// (or one before the signal's start) end that.
+  /// the native player reports positions inside it before the seek to
+  /// [target] has landed. Two reports in a row past [target] and moving
+  /// forward, a position before the signal's start, or a seek elsewhere
+  /// ([seeked]) end that.
   void skipped(StreamSignal signal, Duration target) {
     _skipped = signal;
     _skipTarget = target;
     _landedReports = 0;
     _update();
+  }
+
+  /// A seek the player asked for. Any seek but the skip's own (to its
+  /// target) ends the skip, so a viewer who seeks back into a skipped intro
+  /// gets the button again.
+  void seeked(Duration target) {
+    if (_skipped == null || target == _skipTarget) return;
+    _clearSkip();
+    _update();
+  }
+
+  void _clearSkip() {
+    _skipped = null;
+    _skipTarget = null;
+    _landedReports = 0;
   }
 
   void _update() {
