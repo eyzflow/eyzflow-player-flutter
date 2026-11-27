@@ -166,7 +166,9 @@ class _CastingViewState extends State<CastingView> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           for (final kind in CastTrackKind.values)
-                            if (playback.tracks.any((t) => t.kind == kind))
+                            if (playback.tracks.any(
+                              (t) => t.kind == kind && t.isOffered,
+                            ))
                               TextButton.icon(
                                 onPressed: () => _showPanel(context, kind),
                                 style: TextButton.styleFrom(
@@ -229,9 +231,10 @@ class _CastingViewState extends State<CastingView> {
             return const SizedBox.shrink();
           }
           final playback = state.playback;
+          // A forced track playing counts as Off: it is not a choice.
           final tracks = [
             for (final t in playback.tracks)
-              if (t.kind == kind) t,
+              if (t.kind == kind && t.isOffered) t,
           ];
           final isAudio = kind == CastTrackKind.audio;
           void pick(VoidCallback switchTv) {

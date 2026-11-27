@@ -17,6 +17,7 @@ import '../cast/cast_controller.dart';
 import '../cast/cast_media.dart';
 import '../cast/cast_picker.dart';
 import '../cast/cast_track_scope.dart';
+import '../player/hls_renditions.dart';
 import '../player/player_policy.dart';
 import '../player/subtitle_preference_store.dart';
 import '../cast/casting_view.dart';
@@ -309,7 +310,20 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
       }
       if (!current()) return;
       if (_subtitlesOff) {
-        await phone.selectTextTrack(null);
+        // Off on the TV is Off here too, where the forced track in the
+        // audio's language still plays.
+        final text = await phone.textTracks();
+        final audio = await phone.audioTracks();
+        if (!current()) return;
+        final forced = forcedTrackFor(
+          [
+            for (final t in text)
+              if (t.forced) t,
+          ],
+          audio,
+          phone.selectedAudioTrackId,
+        );
+        await phone.selectTextTrack(forced?.trackId);
       } else if (_subtitleLanguage != null) {
         final text = await phone.textTracks();
         if (!current()) return;
@@ -661,11 +675,12 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
               ?.language ??
           audio;
       if (textTracks.isNotEmpty) {
-        subtitles = textTracks
-            .where((t) => t.trackId == tracks.selectedTextTrackId)
-            .firstOrNull
-            ?.language;
-        off = tracks.selectedTextTrackId == null;
+        // A forced track playing means subtitles are off.
+        final selected = textTracks
+            .where((t) => t.trackId == tracks.selectedTextTrackId && !t.forced)
+            .firstOrNull;
+        subtitles = selected?.language;
+        off = selected == null;
       }
     }
     // The phone stops: the player unmounts as the casting screen takes over.
@@ -780,8 +795,9 @@ class _EYZFlowPlayerState extends State<EYZFlowPlayer> {
               ?.language ??
           _audioLanguage;
       if (report.tracks.any((t) => t.kind == CastTrackKind.subtitles)) {
+        // A forced track on the TV means its subtitles were off.
         final text = active
-            .where((t) => t.kind == CastTrackKind.subtitles)
+            .where((t) => t.kind == CastTrackKind.subtitles && t.isOffered)
             .firstOrNull;
         _subtitleLanguage = text?.language;
         _subtitlesOff = text == null;

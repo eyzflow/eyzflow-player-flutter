@@ -779,8 +779,10 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       // instead: the plugin's only lever is `setTrackSelection`, which needs
       // a track to select.
       child: BlocSelector<PlayerControlsBloc, PlayerControlsState, bool>(
+        // Off still draws a forced track (the lines in another language).
         selector: (PlayerControlsState state) =>
-            state.selectedTextTrackId != null,
+            state.selectedTextTrackId != null ||
+            state.forcedTextTrackId != null,
         builder: (BuildContext context, bool isEnabled) =>
             AvplaySubtitleOverlay(controller: controller, isEnabled: isEnabled),
       ),
@@ -885,6 +887,7 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       PlayerControlsTracksLoaded(
         audioTracks: annotated.audio,
         textTracks: annotated.text,
+        forcedTextTracks: annotated.forcedText,
       ),
     );
   }

@@ -55,10 +55,17 @@ final class PlayerControlsTracksLoaded extends PlayerControlsEvent {
   const PlayerControlsTracksLoaded({
     required this.audioTracks,
     required this.textTracks,
+    this.forcedTextTracks = const <PlayerTextTrack>[],
   });
 
   final List<PlayerAudioTrack> audioTracks;
+
+  /// The subtitle tracks the menu offers.
   final List<PlayerTextTrack> textTracks;
+
+  /// Forced subtitle tracks (HLS `FORCED=YES`): never in the menu, played
+  /// while subtitles are off.
+  final List<PlayerTextTrack> forcedTextTracks;
 }
 
 final class PlayerControlsPlayPauseToggled extends PlayerControlsEvent {

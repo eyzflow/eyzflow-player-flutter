@@ -907,6 +907,7 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       PlayerControlsTracksLoaded(
         audioTracks: annotated.audio,
         textTracks: annotated.text,
+        forcedTextTracks: annotated.forcedText,
       ),
     );
   }

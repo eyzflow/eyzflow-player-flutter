@@ -300,12 +300,24 @@ final class EYZFlowCastController extends ChangeNotifier {
       CastTrackKind.audio,
       audio ?? _active(playback, CastTrackKind.audio),
     );
+    // Full subtitles when the phone had them and the TV has them; otherwise
+    // the forced track in the audio's language.
+    final int? full = _subtitlesOff
+        ? null
+        : subtitles ??
+              playback.tracks
+                  .where(
+                    (t) =>
+                        t.kind == CastTrackKind.subtitles &&
+                        t.isOffered &&
+                        playback.activeTrackIds.contains(t.id),
+                  )
+                  .map((t) => t.id)
+                  .firstOrNull;
     final List<int> next = _withTrack(
       CastPlayback(tracks: playback.tracks, activeTrackIds: withAudio),
       CastTrackKind.subtitles,
-      _subtitlesOff
-          ? null
-          : subtitles ?? _active(playback, CastTrackKind.subtitles),
+      full ?? _forcedFor(playback.tracks, withAudio),
     );
     if (playback.hasActiveTrackIds &&
         listEquals(next, playback.activeTrackIds)) {
@@ -314,16 +326,34 @@ final class EYZFlowCastController extends ChangeNotifier {
     unawaited(_setTracks(next));
   }
 
-  /// Plays audio track [id] on the TV; the subtitles stay as they are.
+  /// Plays audio track [id] on the TV; the subtitles stay as they are, and
+  /// while they are off the forced track follows the new language.
   Future<void> selectAudio(int id) => _select(CastTrackKind.audio, id);
 
   /// Shows subtitle track [id] on the TV, or none for null; the audio stays.
+  /// None still plays the forced track in the audio's language.
   Future<void> selectSubtitles(int? id) => _select(CastTrackKind.subtitles, id);
 
   Future<void> _select(CastTrackKind kind, int? id) async {
     final state = _state;
     if (state is! CastActive) return;
-    final List<int> next = _withTrack(state.playback, kind, id);
+    final CastPlayback playback = state.playback;
+    List<int> next = _withTrack(playback, kind, id);
+    final bool subtitlesOff = kind == CastTrackKind.subtitles
+        ? id == null
+        : !playback.tracks.any(
+            (t) =>
+                t.kind == CastTrackKind.subtitles &&
+                t.isOffered &&
+                playback.activeTrackIds.contains(t.id),
+          );
+    if (subtitlesOff) {
+      next = _withTrack(
+        CastPlayback(tracks: playback.tracks, activeTrackIds: next),
+        CastTrackKind.subtitles,
+        _forcedFor(playback.tracks, next),
+      );
+    }
     if (state.playback.hasActiveTrackIds &&
         listEquals(next, state.playback.activeTrackIds)) {
       return;
@@ -374,6 +404,25 @@ final class EYZFlowCastController extends ChangeNotifier {
         .where(
           (t) =>
               t.kind == kind &&
+              t.isOffered &&
+              EYZFlowLanguageNames.sameBaseLanguage(language, t.language),
+        )
+        .map((t) => t.id)
+        .firstOrNull;
+  }
+
+  /// The forced subtitle track in the language of the audio among
+  /// [activeIds], or null.
+  static int? _forcedFor(List<CastTrack> tracks, List<int> activeIds) {
+    final String? language = tracks
+        .where((t) => t.kind == CastTrackKind.audio && activeIds.contains(t.id))
+        .firstOrNull
+        ?.language;
+    if (language == null) return null;
+    return tracks
+        .where(
+          (t) =>
+              t.isForced &&
               EYZFlowLanguageNames.sameBaseLanguage(language, t.language),
         )
         .map((t) => t.id)

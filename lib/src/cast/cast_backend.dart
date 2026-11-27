@@ -69,6 +69,19 @@ final class CastTrack {
   final String? name;
   final List<String> roles;
   final int? channelCount;
+
+  /// A forced subtitle track (DASH role `forced-subtitle`): only the lines
+  /// in another language than the audio. Never offered in the menu; it
+  /// plays on the TV while subtitles are off.
+  bool get isForced =>
+      kind == CastTrackKind.subtitles &&
+      roles.any(
+        (String r) =>
+            r == 'forced-subtitle' || r == 'forced_subtitle' || r == 'forced',
+      );
+
+  /// A track the phone's menus offer: any but a forced one.
+  bool get isOffered => !isForced;
 }
 
 /// The receiver's state, as its last status said.

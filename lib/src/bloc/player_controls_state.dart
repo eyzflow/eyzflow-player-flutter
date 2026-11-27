@@ -18,6 +18,8 @@ final class PlayerControlsState extends Equatable {
     this.textTracks = const <PlayerTextTrack>[],
     this.selectedAudioTrackId,
     this.selectedTextTrackId,
+    this.forcedTextTracks = const <PlayerTextTrack>[],
+    this.forcedTextTrackId,
     this.activePanel = PlayerPanel.none,
   });
 
@@ -39,6 +41,15 @@ final class PlayerControlsState extends Equatable {
   final List<PlayerTextTrack> textTracks;
   final int? selectedAudioTrackId;
   final int? selectedTextTrackId;
+
+  /// Forced subtitle tracks (only the lines in another language than the
+  /// audio). Never offered in the menu.
+  final List<PlayerTextTrack> forcedTextTracks;
+
+  /// The forced track playing while subtitles are off ([selectedTextTrackId]
+  /// null): the one in the audio's language. Null when there is none, or
+  /// while full subtitles are on.
+  final int? forcedTextTrackId;
   final PlayerPanel activePanel;
 
   /// The viewer is looking for a frame: the back, play/pause and forward
@@ -64,6 +75,9 @@ final class PlayerControlsState extends Equatable {
     // `selectedTextTrackId` is nullable, so copyWith needs an explicit way to
     // set it to null: pass `clearSelectedTextTrackId: true`.
     bool clearSelectedTextTrackId = false,
+    List<PlayerTextTrack>? forcedTextTracks,
+    int? forcedTextTrackId,
+    bool clearForcedTextTrackId = false,
     PlayerPanel? activePanel,
   }) => PlayerControlsState(
     visible: visible ?? this.visible,
@@ -81,6 +95,10 @@ final class PlayerControlsState extends Equatable {
     selectedTextTrackId: clearSelectedTextTrackId
         ? null
         : (selectedTextTrackId ?? this.selectedTextTrackId),
+    forcedTextTracks: forcedTextTracks ?? this.forcedTextTracks,
+    forcedTextTrackId: clearForcedTextTrackId
+        ? null
+        : (forcedTextTrackId ?? this.forcedTextTrackId),
     activePanel: activePanel ?? this.activePanel,
   );
 
@@ -99,6 +117,8 @@ final class PlayerControlsState extends Equatable {
     textTracks,
     selectedAudioTrackId,
     selectedTextTrackId,
+    forcedTextTracks,
+    forcedTextTrackId,
     activePanel,
   ];
 }

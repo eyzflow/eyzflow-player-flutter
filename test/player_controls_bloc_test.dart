@@ -369,6 +369,98 @@ void main() {
     await bloc.close();
   });
 
+  group('forced subtitles', () {
+    const audio = <PlayerAudioTrack>[
+      PlayerAudioTrack(trackId: 10, language: 'de'),
+      PlayerAudioTrack(trackId: 11, language: 'en'),
+    ];
+    const text = <PlayerTextTrack>[
+      PlayerTextTrack(trackId: 1, language: 'de'),
+      PlayerTextTrack(trackId: 2, language: 'en'),
+    ];
+    const forced = <PlayerTextTrack>[
+      PlayerTextTrack(trackId: 3, language: 'de', forced: true),
+      PlayerTextTrack(trackId: 4, language: 'en', forced: true),
+    ];
+    const loaded = PlayerControlsTracksLoaded(
+      audioTracks: audio,
+      textTracks: text,
+      forcedTextTracks: forced,
+    );
+
+    test('play in the audio\'s language while subtitles are off', () async {
+      final p = _FakePlayback()..selectedAudioTrackId = 10;
+      final bloc = _bloc(playback: p);
+      bloc.add(loaded);
+      await bloc.stream.first;
+      expect(bloc.state.selectedTextTrackId, isNull);
+      expect(bloc.state.forcedTextTrackId, 3);
+      expect(p.lastTextSelection, 3);
+      expect(bloc.state.textTracks, text);
+      await bloc.close();
+    });
+
+    test('play when Off is remembered', () async {
+      final store = SubtitlePreferenceStore()..rememberOff();
+      final p = _FakePlayback()..selectedAudioTrackId = 11;
+      final bloc = _bloc(playback: p, store: store);
+      bloc.add(loaded);
+      await bloc.stream.first;
+      expect(bloc.state.forcedTextTrackId, 4);
+      expect(p.selectedTextTrackId, 4);
+      await bloc.close();
+    });
+
+    test('give way to full subtitles and come back on Off', () async {
+      final p = _FakePlayback()..selectedAudioTrackId = 10;
+      final bloc = _bloc(playback: p);
+      bloc.add(loaded);
+      await bloc.stream.first;
+
+      bloc.add(const PlayerControlsTextSelected(2));
+      await bloc.stream.firstWhere((s) => s.selectedTextTrackId == 2);
+      expect(bloc.state.forcedTextTrackId, isNull);
+      expect(p.selectedTextTrackId, 2);
+
+      bloc.add(const PlayerControlsTextSelected(null));
+      await bloc.stream.firstWhere((s) => s.selectedTextTrackId == null);
+      expect(bloc.state.forcedTextTrackId, 3);
+      expect(p.selectedTextTrackId, 3);
+      await bloc.close();
+    });
+
+    test('follow the audio while subtitles are off', () async {
+      final p = _FakePlayback()..selectedAudioTrackId = 10;
+      final bloc = _bloc(playback: p);
+      bloc.add(loaded);
+      await bloc.stream.first;
+
+      bloc.add(const PlayerControlsAudioSelected(11));
+      await bloc.stream.firstWhere((s) => s.selectedAudioTrackId == 11);
+      expect(bloc.state.forcedTextTrackId, 4);
+      expect(p.selectedTextTrackId, 4);
+      await bloc.close();
+    });
+
+    test('a language without one turns text off', () async {
+      final p = _FakePlayback()..selectedAudioTrackId = 10;
+      final bloc = _bloc(playback: p);
+      bloc.add(
+        const PlayerControlsTracksLoaded(
+          audioTracks: audio,
+          textTracks: text,
+          forcedTextTracks: <PlayerTextTrack>[
+            PlayerTextTrack(trackId: 4, language: 'en', forced: true),
+          ],
+        ),
+      );
+      await bloc.stream.first;
+      expect(bloc.state.forcedTextTrackId, isNull);
+      expect(p.lastTextSelection, isNull);
+      await bloc.close();
+    });
+  });
+
   test('TracksLoaded restores a matching remembered language', () async {
     final store = SubtitlePreferenceStore()..remember('en');
     final p = _FakePlayback();
