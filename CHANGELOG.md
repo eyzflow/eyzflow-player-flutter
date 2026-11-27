@@ -1,4 +1,4 @@
-## Unreleased
+## 0.9.2
 
 - Forced subtitles (EYF-520): forced tracks now play whenever full
   subtitles are off: at the start, after the viewer picks Off, and in the
