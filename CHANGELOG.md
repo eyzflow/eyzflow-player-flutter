@@ -1,4 +1,4 @@
-## Unreleased
+## 0.9.1
 
 - Subtitles (EYF-520): forced subtitle tracks (HLS `FORCED=YES`, only the
   lines in another language) are no longer offered in the subtitle menu or

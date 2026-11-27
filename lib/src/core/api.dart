@@ -23,8 +23,8 @@ final class EYZFlowEndpoints {
 }
 
 /// This library's version, sent with licence checks and beats. Prefixed so
-/// the backend can tell app players from the web player (`0.9.0`).
-const String eyzflowPlayerVersion = 'flutter/0.9.0';
+/// the backend can tell app players from the web player (`0.9.1`).
+const String eyzflowPlayerVersion = 'flutter/0.9.1';
 
 /// Where the player runs, as playback sessions, licence checks and beats name
 /// it. The wire values are the backend's (`playback-sessions.controller.ts`).
