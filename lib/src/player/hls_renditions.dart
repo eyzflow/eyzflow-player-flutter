@@ -95,15 +95,23 @@ String _normalized(String? language) =>
     EYZFlowLanguageNames.languageName(language ?? '') ?? (language ?? '');
 
 /// Stamps each native track with its rendition's characteristics and channel count, read from
-/// the [master] playlist, and leaves forced subtitle tracks out. A failed
-/// fetch leaves tracks as they were: labels are an accessibility aid, never
-/// a reason to block playback.
+/// the [master] playlist, and moves forced subtitle tracks out of [text]
+/// into their own list: they are not offered in the menu, but play whenever
+/// subtitles are off (see `PlayerControlsBloc`). A failed fetch leaves
+/// tracks as they were: labels are an accessibility aid, never a reason to
+/// block playback.
 ///
 /// A text track is forced when the native player says so (Android, iOS) or,
 /// where it cannot (Tizen's AVPlay), when its `SUBTITLES` rendition has
 /// `FORCED=YES` and the player lists as many tracks in that language as the
 /// playlist has renditions, so the occurrence match is sure to line up.
-Future<({List<PlayerAudioTrack> audio, List<PlayerTextTrack> text})>
+Future<
+  ({
+    List<PlayerAudioTrack> audio,
+    List<PlayerTextTrack> text,
+    List<PlayerTextTrack> forcedText,
+  })
+>
 annotateHlsTracks(
   Uri master,
   List<PlayerAudioTrack> audio,
@@ -164,5 +172,38 @@ annotateHlsTracks(
             characteristics: textMatch[i]?.characteristics ?? const <String>{},
           ),
     ],
+    forcedText: <PlayerTextTrack>[
+      for (final (int i, PlayerTextTrack t) in text.indexed)
+        if (forced(i, t))
+          PlayerTextTrack(
+            trackId: t.trackId,
+            language: t.language,
+            forced: true,
+          ),
+    ],
+  );
+}
+
+/// The forced subtitle track for audio track [audioId]: the one in its
+/// language. Null when the audio's language is unknown or has none.
+PlayerTextTrack? forcedTrackFor(
+  List<PlayerTextTrack> forced,
+  List<PlayerAudioTrack> audioTracks,
+  int? audioId,
+) {
+  if (forced.isEmpty) return null;
+  final String? language = audioTracks
+      .cast<PlayerAudioTrack?>()
+      .firstWhere(
+        (PlayerAudioTrack? t) => t?.trackId == audioId,
+        orElse: () => null,
+      )
+      ?.language;
+  if (language == null) return null;
+  return forced.cast<PlayerTextTrack?>().firstWhere(
+    (PlayerTextTrack? t) =>
+        t != null &&
+        EYZFlowLanguageNames.sameBaseLanguage(language, t.language),
+    orElse: () => null,
   );
 }

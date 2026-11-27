@@ -5,6 +5,7 @@ import 'package:equatable/equatable.dart';
 import '../l10n/language_names.dart';
 import 'package:flutter/foundation.dart';
 
+import '../player/hls_renditions.dart';
 import '../player/player_log.dart';
 import '../player/player_policy.dart';
 import '../player/subtitle_preference_store.dart';
@@ -208,18 +209,28 @@ class PlayerControlsBloc
     emit(state.copyWith(isBuffering: event.isBuffering));
   }
 
-  void _onTracksLoaded(
+  Future<void> _onTracksLoaded(
     PlayerControlsTracksLoaded event,
     Emitter<PlayerControlsState> emit,
-  ) {
+  ) async {
+    final List<PlayerTextTrack> forced = event.forcedTextTracks;
+    final int? audio = _tracks.selectedAudioTrackId;
     if (!captions) {
-      unawaited(_tracks.selectTextTrack(null));
+      // No subtitle menu, but the forced lines are part of the film.
+      final int? forcedId = await _subtitlesOff(
+        forced,
+        event.audioTracks,
+        audio,
+      );
       emit(
         state.copyWith(
           audioTracks: event.audioTracks,
           textTracks: const <PlayerTextTrack>[],
-          selectedAudioTrackId: _tracks.selectedAudioTrackId,
+          forcedTextTracks: forced,
+          selectedAudioTrackId: audio,
           clearSelectedTextTrackId: true,
+          forcedTextTrackId: forcedId,
+          clearForcedTextTrackId: forcedId == null,
         ),
       );
       return;
@@ -237,7 +248,6 @@ class PlayerControlsBloc
       final String? preferred = store.languageCode;
       if (preferred == null) {
         selectedText = null;
-        unawaited(_tracks.selectTextTrack(null));
       } else {
         // Matched on the resolved display name, not the raw code: EYZFlow
         // tags the same language differently across streams (`deu` here,
@@ -261,19 +271,56 @@ class PlayerControlsBloc
         // Product rule: no match means nothing selected, not the plugin
         // default.
         selectedText = match?.trackId;
-        unawaited(_tracks.selectTextTrack(match?.trackId));
+        if (match != null) unawaited(_tracks.selectTextTrack(match.trackId));
       }
+    }
+    // Subtitles off, by preference or because the player started without
+    // any: the forced track in the audio's language plays.
+    int? forcedId;
+    if (selectedText == null) {
+      forcedId = await _subtitlesOff(
+        forced,
+        event.audioTracks,
+        audio,
+        // Off by preference clears whatever the player picked; a player
+        // that started without subtitles is only given the forced track.
+        clear: store != null && store.hasPreference,
+      );
     }
 
     emit(
       state.copyWith(
         audioTracks: event.audioTracks,
         textTracks: event.textTracks,
-        selectedAudioTrackId: _tracks.selectedAudioTrackId,
+        forcedTextTracks: forced,
+        selectedAudioTrackId: audio,
         selectedTextTrackId: selectedText,
         clearSelectedTextTrackId: selectedText == null,
+        forcedTextTrackId: forcedId,
+        clearForcedTextTrackId: forcedId == null,
       ),
     );
+  }
+
+  /// Turns full subtitles off. The forced track in the language of audio
+  /// track [audioId] plays instead, so lines spoken in another language
+  /// (a sign, a foreign scene) still show; with none, nothing does. Returns
+  /// the forced track's id. With [clear] false and no forced track, the
+  /// player is left as it is (it started without subtitles).
+  Future<int?> _subtitlesOff(
+    List<PlayerTextTrack> forced,
+    List<PlayerAudioTrack> audioTracks,
+    int? audioId, {
+    bool clear = true,
+  }) async {
+    final PlayerTextTrack? track = forcedTrackFor(forced, audioTracks, audioId);
+    if (track == null) {
+      if (clear) await _tracks.selectTextTrack(null);
+      return null;
+    }
+    final bool ok = await _tracks.selectTextTrack(track.trackId);
+    if (!ok && clear) await _tracks.selectTextTrack(null);
+    return ok ? track.trackId : null;
   }
 
   Future<void> _onPlayPauseToggled(
@@ -460,9 +507,20 @@ class PlayerControlsBloc
     // sidebar, and a native refusal used to leave them holding one that
     // answered nothing; `null` keeps the current id, so the unmoved checkmark
     // is what says the switch did not take.
+    // Off follows the audio: the forced track of the new language plays.
+    int? forcedId = state.forcedTextTrackId;
+    if (ok && isSwitch && state.selectedTextTrackId == null) {
+      forcedId = await _subtitlesOff(
+        state.forcedTextTracks,
+        state.audioTracks,
+        event.trackId,
+      );
+    }
     emit(
       state.copyWith(
         selectedAudioTrackId: ok ? event.trackId : null,
+        forcedTextTrackId: forcedId,
+        clearForcedTextTrackId: forcedId == null,
         activePanel: PlayerPanel.none,
       ),
     );
@@ -478,7 +536,22 @@ class PlayerControlsBloc
     // says "and keep it off", and there is no selection change to infer it
     // from.
     final bool isSwitch = state.selectedTextTrackId != event.trackId;
-    final bool ok = !isSwitch || await _tracks.selectTextTrack(event.trackId);
+    int? forcedId = state.forcedTextTrackId;
+    final bool ok;
+    if (!isSwitch) {
+      ok = true;
+    } else if (event.trackId == null) {
+      // Off: the forced track in the audio's language takes over.
+      forcedId = await _subtitlesOff(
+        state.forcedTextTracks,
+        state.audioTracks,
+        state.selectedAudioTrackId,
+      );
+      ok = true;
+    } else {
+      ok = await _tracks.selectTextTrack(event.trackId);
+      if (ok) forcedId = null;
+    }
 
     final PlayerTextTrack? track = state.textTracks
         .cast<PlayerTextTrack?>()
@@ -506,6 +579,8 @@ class PlayerControlsBloc
       state.copyWith(
         selectedTextTrackId: ok ? event.trackId : null,
         clearSelectedTextTrackId: ok && event.trackId == null,
+        forcedTextTrackId: forcedId,
+        clearForcedTextTrackId: forcedId == null,
         activePanel: PlayerPanel.none,
       ),
     );

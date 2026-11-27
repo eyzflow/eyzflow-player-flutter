@@ -496,6 +496,83 @@ void main() {
     );
   });
 
+  group('forced subtitles on the TV', () {
+    late _FakeBackend backend;
+    late EYZFlowCastController cast;
+    const tracks = <CastTrack>[
+      CastTrack(id: 1, kind: CastTrackKind.audio, language: 'de'),
+      CastTrack(id: 2, kind: CastTrackKind.audio, language: 'en'),
+      CastTrack(id: 3, kind: CastTrackKind.subtitles, language: 'de'),
+      CastTrack(
+        id: 5,
+        kind: CastTrackKind.subtitles,
+        language: 'de',
+        roles: ['forced-subtitle'],
+      ),
+      CastTrack(
+        id: 6,
+        kind: CastTrackKind.subtitles,
+        language: 'en',
+        roles: ['forced-subtitle'],
+      ),
+    ];
+    CastPlayback playing(List<int> active) => CastPlayback(
+      state: CastPlayerState.playing,
+      position: _min(1),
+      tracks: tracks,
+      activeTrackIds: active,
+    );
+    List<String> trackCalls() =>
+        backend.tv.calls.where((c) => c.startsWith('tracks')).toList();
+
+    setUp(() {
+      backend = _FakeBackend();
+      cast = EYZFlowCastController(backend: backend);
+    });
+
+    test('a forced role marks the track forced', () {
+      expect(tracks.map((t) => t.isForced), [false, false, false, true, true]);
+    });
+
+    test('Off plays the forced track in the audio\'s language', () async {
+      await cast.cast(_tv, _media, appId: 'A');
+      backend.tv.report(playing(const [1, 3]));
+      await cast.selectSubtitles(null);
+      expect(trackCalls(), ['tracks [1, 5]']);
+    });
+
+    test('with subtitles off, the forced track follows the audio', () async {
+      await cast.cast(_tv, _media, appId: 'A');
+      backend.tv.report(playing(const [1, 5]));
+      await cast.selectAudio(2);
+      expect(trackCalls(), ['tracks [2, 6]']);
+    });
+
+    test('the phone\'s Off carries over as the forced track', () async {
+      await cast.cast(
+        _tv,
+        _media,
+        appId: 'A',
+        audioLanguage: 'de',
+        subtitlesOff: true,
+      );
+      backend.tv.report(playing(const [1, 3]));
+      expect(trackCalls(), ['tracks [1, 5]']);
+    });
+
+    test('a remembered language never picks a forced track', () async {
+      await cast.cast(
+        _tv,
+        _media,
+        appId: 'A',
+        audioLanguage: 'en',
+        subtitleLanguage: 'en',
+      );
+      backend.tv.report(playing(const [1]));
+      expect(trackCalls(), ['tracks [2, 6]']);
+    });
+  });
+
   testWidgets('the casting screen offers the phone panels, labelled alike', (
     tester,
   ) async {

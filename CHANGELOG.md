@@ -1,3 +1,15 @@
+## Unreleased
+
+- Forced subtitles (EYF-520): forced tracks now play whenever full
+  subtitles are off: at the start, after the viewer picks Off, and in the
+  new language after an audio switch. 0.9.1 only took them out of the menu,
+  so their lines (a sign, a scene in another language) never showed. Picking
+  full subtitles replaces them. Tizen draws them too.
+- Casting (EYF-520): the subtitle menu while casting no longer lists the
+  TV's forced tracks (DASH role `forced-subtitle`); Off on the TV, and the
+  phone's Off or a language the TV lacks, play the forced track in the TV's
+  audio language.
+
 ## 0.9.1
 
 - Subtitles (EYF-520): forced subtitle tracks (HLS `FORCED=YES`, only the

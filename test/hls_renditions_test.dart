@@ -123,6 +123,8 @@ v/720.m3u8
         client: client(),
       );
       expect(result.text.map((t) => t.trackId), <int>[1, 2]);
+      expect(result.forcedText.map((t) => t.trackId), <int>[0]);
+      expect(result.forcedText.single.forced, isTrue);
     });
 
     test('a failed fetch still leaves out a natively forced track', () async {
