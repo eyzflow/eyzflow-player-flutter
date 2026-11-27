@@ -90,4 +90,78 @@ void main() {
     );
     expect(result.text.single.isSdh, isFalse);
   });
+
+  group('forced subtitles', () {
+    const String forcedMaster = '''
+#EXTM3U
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",LANGUAGE="de",NAME="Deutsch (forced)",FORCED=YES,URI="s/de-forced.m3u8"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",LANGUAGE="de",NAME="Deutsch",URI="s/de.m3u8"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",LANGUAGE="en",NAME="English",URI="s/en.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000000,SUBTITLES="sub"
+v/720.m3u8
+''';
+    MockClient client() =>
+        MockClient((_) async => http.Response(forcedMaster, 200));
+
+    test('reads FORCED', () {
+      expect(parseHlsRenditions(forcedMaster).map((r) => r.forced), <bool>[
+        true,
+        false,
+        false,
+      ]);
+    });
+
+    test('a track the native player marks forced is left out', () async {
+      final result = await annotateHlsTracks(
+        Uri.parse('https://cdn.example/master.m3u8'),
+        const <PlayerAudioTrack>[],
+        const <PlayerTextTrack>[
+          PlayerTextTrack(trackId: 0, language: 'de', forced: true),
+          PlayerTextTrack(trackId: 1, language: 'de'),
+          PlayerTextTrack(trackId: 2, language: 'en'),
+        ],
+        client: client(),
+      );
+      expect(result.text.map((t) => t.trackId), <int>[1, 2]);
+    });
+
+    test('a failed fetch still leaves out a natively forced track', () async {
+      final result = await annotateHlsTracks(
+        Uri.parse('https://cdn.example/master.m3u8'),
+        const <PlayerAudioTrack>[],
+        const <PlayerTextTrack>[
+          PlayerTextTrack(trackId: 0, language: 'de', forced: true),
+          PlayerTextTrack(trackId: 1, language: 'de'),
+        ],
+        client: MockClient((_) async => http.Response('', 403)),
+      );
+      expect(result.text.map((t) => t.trackId), <int>[1]);
+    });
+
+    test('without a native flag (Tizen) the playlist\'s FORCED=YES leaves '
+        'the track out', () async {
+      final result = await annotateHlsTracks(
+        Uri.parse('https://cdn.example/master.m3u8'),
+        const <PlayerAudioTrack>[],
+        const <PlayerTextTrack>[
+          PlayerTextTrack(trackId: 0, language: 'de'),
+          PlayerTextTrack(trackId: 1, language: 'de'),
+          PlayerTextTrack(trackId: 2, language: 'en'),
+        ],
+        client: client(),
+      );
+      expect(result.text.map((t) => t.trackId), <int>[1, 2]);
+    });
+
+    test('a player listing fewer tracks than the playlist keeps them all, '
+        'rather than drop a real subtitle', () async {
+      final result = await annotateHlsTracks(
+        Uri.parse('https://cdn.example/master.m3u8'),
+        const <PlayerAudioTrack>[],
+        const <PlayerTextTrack>[PlayerTextTrack(trackId: 0, language: 'de')],
+        client: client(),
+      );
+      expect(result.text.map((t) => t.trackId), <int>[0]);
+    });
+  });
 }

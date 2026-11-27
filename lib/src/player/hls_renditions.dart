@@ -23,6 +23,7 @@ typedef HlsRendition = ({
   String? name,
   Set<String> characteristics,
   int? channels,
+  bool forced,
 });
 
 /// The `AUDIO` and `SUBTITLES` renditions of [playlist], in playlist order.
@@ -43,6 +44,7 @@ List<HlsRendition> parseHlsRenditions(String playlist) => <HlsRendition>[
           // count of independent channels ("6" is 5.1). Later parameters
           // ("16/JOC") are ignored.
           channels: int.tryParse((a['CHANNELS'] ?? '').split('/').first),
+          forced: a['FORCED'] == 'YES',
         ),
 ];
 
@@ -93,8 +95,14 @@ String _normalized(String? language) =>
     EYZFlowLanguageNames.languageName(language ?? '') ?? (language ?? '');
 
 /// Stamps each native track with its rendition's characteristics and channel count, read from
-/// the [master] playlist. A failed fetch leaves tracks as they
-/// were: labels are an accessibility aid, never a reason to block playback.
+/// the [master] playlist, and leaves forced subtitle tracks out. A failed
+/// fetch leaves tracks as they were: labels are an accessibility aid, never
+/// a reason to block playback.
+///
+/// A text track is forced when the native player says so (Android, iOS) or,
+/// where it cannot (Tizen's AVPlay), when its `SUBTITLES` rendition has
+/// `FORCED=YES` and the player lists as many tracks in that language as the
+/// playlist has renditions, so the occurrence match is sure to line up.
 Future<({List<PlayerAudioTrack> audio, List<PlayerTextTrack> text})>
 annotateHlsTracks(
   Uri master,
@@ -118,6 +126,24 @@ annotateHlsTracks(
   final List<HlsRendition?> textMatch = hlsRenditionsFor('SUBTITLES', <String>[
     for (final PlayerTextTrack t in text) t.language,
   ], renditions);
+  final Map<String, int> nativeCount = <String, int>{};
+  for (final PlayerTextTrack t in text) {
+    final String key = _normalized(t.language);
+    nativeCount[key] = (nativeCount[key] ?? 0) + 1;
+  }
+  final Map<String, int> playlistCount = <String, int>{};
+  for (final HlsRendition r in renditions) {
+    if (r.type != 'SUBTITLES') continue;
+    final String key = _normalized(r.language);
+    playlistCount[key] = (playlistCount[key] ?? 0) + 1;
+  }
+  bool forced(int i, PlayerTextTrack t) {
+    if (t.forced) return true;
+    if (textMatch[i]?.forced != true) return false;
+    final String key = _normalized(t.language);
+    return nativeCount[key] == playlistCount[key];
+  }
+
   return (
     audio: <PlayerAudioTrack>[
       for (final (int i, PlayerAudioTrack t) in audio.indexed)
@@ -131,11 +157,12 @@ annotateHlsTracks(
     ],
     text: <PlayerTextTrack>[
       for (final (int i, PlayerTextTrack t) in text.indexed)
-        PlayerTextTrack(
-          trackId: t.trackId,
-          language: t.language,
-          characteristics: textMatch[i]?.characteristics ?? const <String>{},
-        ),
+        if (!forced(i, t))
+          PlayerTextTrack(
+            trackId: t.trackId,
+            language: t.language,
+            characteristics: textMatch[i]?.characteristics ?? const <String>{},
+          ),
     ],
   );
 }

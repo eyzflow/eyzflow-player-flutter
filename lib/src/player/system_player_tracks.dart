@@ -14,12 +14,18 @@ List<PlayerAudioTrack> systemAudioTracks(
 
 /// Maps the plugin's subtitle tracks. Both embedded and sidecar sources come
 /// through here — the overlay treats them alike, and the plugin's
-/// `setSubtitleTrack` dispatches on the track's own `source`.
+/// `setSubtitleTrack` dispatches on the track's own `source`. Forced tracks
+/// stay in, marked, so ids and the playlist matching in `annotateHlsTracks`
+/// line up; that drops them.
 List<PlayerTextTrack> systemTextTracks(
   List<NativeVideoPlayerSubtitleTrack> tracks,
 ) => <PlayerTextTrack>[
   for (final NativeVideoPlayerSubtitleTrack track in tracks)
-    PlayerTextTrack(trackId: track.index, language: track.language),
+    PlayerTextTrack(
+      trackId: track.index,
+      language: track.language,
+      forced: track.isForced,
+    ),
 ];
 
 /// The index the plugin reports as already selected, or `null` when nothing is

@@ -178,10 +178,15 @@ final class PlayerTextTrack {
     required this.trackId,
     required this.language,
     this.characteristics = const <String>{},
+    this.forced = false,
   });
 
   final int trackId;
   final String language;
+
+  /// A forced track (HLS `FORCED=YES`): only the lines in another language
+  /// than the audio. Never offered in the subtitle menu.
+  final bool forced;
 
   /// The rendition's HLS `CHARACTERISTICS` UTIs (RFC 8216 §4.3.4.2.1).
   final Set<String> characteristics;

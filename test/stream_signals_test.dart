@@ -283,4 +283,41 @@ void main() {
       tracker.dispose();
     },
   );
+
+  test('SignalTracker: Android reports the target, then lands on an earlier '
+      'keyframe inside the signal', () {
+    final SignalTracker tracker = SignalTracker()
+      ..signals = parseHlsSignals(_mediaPlaylist)
+      ..position(_s(20));
+    tracker.skipped(tracker.value!, _s(30));
+    // ExoPlayer reports the requested position while it seeks …
+    tracker
+      ..position(_s(30))
+      ..position(_s(30))
+      ..position(_s(30));
+    expect(tracker.value, isNull);
+    // … then the keyframe it snapped to, 2 s before the intro's end.
+    for (final double s in <double>[28, 28.5, 29, 29.5, 30.5, 31]) {
+      tracker.position(_s(s));
+      expect(tracker.value, isNull, reason: 'landed early, $s s');
+    }
+    tracker.dispose();
+  });
+
+  test('SignalTracker: only a seek elsewhere ends a skip', () {
+    final SignalTracker tracker = SignalTracker()
+      ..signals = parseHlsSignals(_mediaPlaylist)
+      ..position(_s(20));
+    tracker
+      ..skipped(tracker.value!, _s(30))
+      // The skip's own seek.
+      ..seeked(_s(30))
+      ..position(_s(28));
+    expect(tracker.value, isNull);
+    tracker
+      ..seeked(_s(18))
+      ..position(_s(18));
+    expect(tracker.value?.id, 'eyz-intro');
+    tracker.dispose();
+  });
 }

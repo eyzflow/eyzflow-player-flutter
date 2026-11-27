@@ -428,7 +428,11 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
         : signal.end;
     _events?.seeked(playback.value.position ?? signal.start, target);
     _signals.skipped(signal, target);
-    unawaited(playback.seekTo(target));
+    unawaited(
+      playback is _SystemPlayerController
+          ? playback.seekNotBefore(target)
+          : playback.seekTo(target),
+    );
   }
 
   /// The content stops for a mid-roll. On Android its player also lets go
@@ -717,8 +721,10 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
       remote: widget.useSharedOverlay,
       controls: PlayerOverlayControls(
         skip: _skipSignal,
-        seek: (Duration position) =>
-            unawaited(_playback?.seekTo(position) ?? Future<void>.value()),
+        seek: (Duration position) {
+          _signals.seeked(position);
+          unawaited(_playback?.seekTo(position) ?? Future<void>.value());
+        },
         play: () => unawaited(_playback?.play() ?? Future<void>.value()),
         pause: () => unawaited(_playback?.pause() ?? Future<void>.value()),
         dismiss: () {},
@@ -838,7 +844,12 @@ class _SystemVideoPlayerState extends State<SystemVideoPlayer> {
     // unless the config keeps the controls up.
     startsHidden: widget.options.autoHideControls,
     captions: widget.options.captions,
-    onSeeked: _events?.seeked,
+    onSeeked: (Duration from, Duration to) {
+      _events?.seeked(from, to);
+      // A seek by the viewer ends a skip: back in the intro, the button
+      // shows again.
+      _signals.seeked(to);
+    },
     onAudioTrackChanged: _events?.audioTrackChanged,
     onSubtitleTrackChanged: _events?.subtitleTrackChanged,
   );
@@ -1023,9 +1034,11 @@ final class _SystemPlayerController
   Future<List<PlayerTextTrack>> textTracks() async {
     final List<NativeVideoPlayerSubtitleTrack> tracks = _nativeTextTracks =
         await controller.getAvailableSubtitleTracks();
+    // A forced track the player picked on its own is not a subtitle choice:
+    // the menu shows Off.
     selectedTextTrackId = systemSelectedIndex(
       tracks,
-      (NativeVideoPlayerSubtitleTrack t) => t.isSelected,
+      (NativeVideoPlayerSubtitleTrack t) => t.isSelected && !t.isForced,
       (NativeVideoPlayerSubtitleTrack t) => t.index,
     );
     return systemTextTracks(tracks);
@@ -1083,6 +1096,10 @@ final class _SystemPlayerController
 
   @override
   Future<void> seekTo(Duration position) => controller.seekTo(position);
+
+  /// A seek that never lands before [position], for skipping a signal.
+  Future<void> seekNotBefore(Duration position) =>
+      controller.seekTo(position, notBefore: true);
 
   @override
   void addListener(void Function(VideoplaybackValue) listener) {

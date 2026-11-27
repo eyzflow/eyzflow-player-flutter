@@ -1,3 +1,13 @@
+## Unreleased
+
+- Subtitles (EYF-520): forced subtitle tracks (HLS `FORCED=YES`, only the
+  lines in another language) are no longer offered in the subtitle menu or
+  picked for a remembered language. Android and iOS report the flag from the
+  player; on Tizen it is read from the master playlist.
+- Skip intro (EYF-520): on Android a skip lands on the end of the intro,
+  recap or credits instead of a keyframe up to a few seconds before it, and
+  the button no longer comes back while the player is still landing.
+
 ## 0.9.0
 
 - TV controls, new design (EYF-517): on Android TV and Tizen the title sits

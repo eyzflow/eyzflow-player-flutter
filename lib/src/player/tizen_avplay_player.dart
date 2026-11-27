@@ -5,10 +5,12 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
+
 import '../core/source.dart';
 import '../end_screen/end_screen.dart' show PlayerOverlayControls;
 import '../end_screen/end_screen_view.dart';
 import '../signals/stream_signals.dart';
+
 import 'package:video_player_avplay/video_player.dart';
 import 'package:video_player_avplay/video_player_platform_interface.dart'
     as avplay;
@@ -705,7 +707,10 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
             remote: true,
             controls: PlayerOverlayControls(
               skip: _skipSignal,
-              seek: (Duration position) => unawaited(playback.seekTo(position)),
+              seek: (Duration position) {
+                _signals.seeked(position);
+                unawaited(playback.seekTo(position));
+              },
               play: () => unawaited(playback.play()),
               pause: () => unawaited(playback.pause()),
               dismiss: () {},
@@ -795,7 +800,12 @@ class _TizenAvplayPlayerState extends State<TizenAvplayPlayer> {
       // unless the config keeps the controls up.
       startsHidden: widget.options.autoHideControls,
       captions: widget.options.captions,
-      onSeeked: _events?.seeked,
+      onSeeked: (Duration from, Duration to) {
+        _events?.seeked(from, to);
+        // A seek by the viewer ends a skip: back in the intro, the button
+        // shows again.
+        _signals.seeked(to);
+      },
       onAudioTrackChanged: _events?.audioTrackChanged,
       onSubtitleTrackChanged: _events?.subtitleTrackChanged,
     );

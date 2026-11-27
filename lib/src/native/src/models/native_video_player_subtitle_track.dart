@@ -18,6 +18,7 @@ class NativeVideoPlayerSubtitleTrack {
     required this.displayName,
     this.isSelected = false,
     this.source = SubtitleTrackSource.embedded,
+    this.isForced = false,
   });
 
   factory NativeVideoPlayerSubtitleTrack.fromMap(Map<dynamic, dynamic> map) {
@@ -26,6 +27,7 @@ class NativeVideoPlayerSubtitleTrack {
       language: map['language'] as String,
       displayName: map['displayName'] as String,
       isSelected: map['isSelected'] as bool? ?? false,
+      isForced: map['isForced'] as bool? ?? false,
     );
   }
 
@@ -54,6 +56,10 @@ class NativeVideoPlayerSubtitleTrack {
   /// (defaults to embedded for backward compatibility).
   final SubtitleTrackSource source;
 
+  /// A forced track (HLS `FORCED=YES`): only the lines in another language
+  /// than the audio, such as signs or a foreign scene. Not full subtitles.
+  final bool isForced;
+
   /// Whether this is the "Off" option
   bool get isOff => index == -1 && source == SubtitleTrackSource.embedded;
 
@@ -62,6 +68,7 @@ class NativeVideoPlayerSubtitleTrack {
     'language': language,
     'displayName': displayName,
     'isSelected': isSelected,
+    'isForced': isForced,
   };
 
   NativeVideoPlayerSubtitleTrack copyWith({
@@ -70,6 +77,7 @@ class NativeVideoPlayerSubtitleTrack {
     String? displayName,
     bool? isSelected,
     SubtitleTrackSource? source,
+    bool? isForced,
   }) {
     return NativeVideoPlayerSubtitleTrack(
       index: index ?? this.index,
@@ -77,12 +85,13 @@ class NativeVideoPlayerSubtitleTrack {
       displayName: displayName ?? this.displayName,
       isSelected: isSelected ?? this.isSelected,
       source: source ?? this.source,
+      isForced: isForced ?? this.isForced,
     );
   }
 
   @override
   String toString() =>
-      'NativeVideoPlayerSubtitleTrack(index: $index, language: $language, displayName: $displayName, isSelected: $isSelected, source: ${source.name})';
+      'NativeVideoPlayerSubtitleTrack(index: $index, language: $language, displayName: $displayName, isSelected: $isSelected, source: ${source.name}, isForced: $isForced)';
 
   @override
   bool operator ==(Object other) =>
@@ -93,9 +102,10 @@ class NativeVideoPlayerSubtitleTrack {
           language == other.language &&
           displayName == other.displayName &&
           isSelected == other.isSelected &&
-          source == other.source;
+          source == other.source &&
+          isForced == other.isForced;
 
   @override
   int get hashCode =>
-      Object.hash(index, language, displayName, isSelected, source);
+      Object.hash(index, language, displayName, isSelected, source, isForced);
 }

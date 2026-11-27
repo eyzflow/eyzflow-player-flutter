@@ -191,12 +191,15 @@ class VideoPlayerMethodChannel {
     }
   }
 
-  /// Seeks to a specific position
-  Future<void> seekTo(Duration position) async {
+  /// Seeks to a specific position. With [notBefore], never before it: on
+  /// Android the seek lands on that exact time instead of the nearest
+  /// keyframe, which can be earlier. iOS never lands before it anyway.
+  Future<void> seekTo(Duration position, {bool notBefore = false}) async {
     try {
       await _methodChannel.invokeMethod<void>('seekTo', <String, Object>{
         'viewId': primaryPlatformViewId,
         'milliseconds': position.inMilliseconds,
+        if (notBefore) 'notBefore': true,
       });
     } catch (e) {
       debugPrint('Error calling seekTo: $e');
@@ -236,11 +239,10 @@ class VideoPlayerMethodChannel {
 
   Future<void> setEmbeddedTextScale(double scale) async {
     try {
-      await _methodChannel
-          .invokeMethod<void>('setEmbeddedTextScale', <String, Object>{
-        'viewId': primaryPlatformViewId,
-        'scale': scale,
-      });
+      await _methodChannel.invokeMethod<void>(
+        'setEmbeddedTextScale',
+        <String, Object>{'viewId': primaryPlatformViewId, 'scale': scale},
+      );
     } catch (e) {
       debugPrint('Error calling setEmbeddedTextScale: $e');
     }

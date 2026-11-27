@@ -225,6 +225,12 @@ class PlayerControlsBloc
       return;
     }
     int? selectedText = _tracks.selectedTextTrackId;
+    // A track left out of the menu (a forced one) is not a selection.
+    if (!event.textTracks.any(
+      (PlayerTextTrack t) => t.trackId == selectedText,
+    )) {
+      selectedText = null;
+    }
 
     final SubtitlePreferenceStore? store = _subtitlePreferenceStore;
     if (store != null && store.hasPreference) {
